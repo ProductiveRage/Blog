@@ -1,0 +1,91 @@
+## Never typing an Argument Null Exception again!
+
+Ever since my first post ([I love Immutable Data](Post1)) I've recognised the overhead of the additional (and repetitive!) typing of the validation that goes with it. But for some reason, I've never actively sought out a way to try to ease this burden. I've seen some people use ReSharper templates but not extensively (and I've not given ReSharper a go yet - despite many recommendations - so until I make the time to, I can't comment on how useful it may or may not be for this).
+
+And then I came across a reference to something called "Code Snippets" in Visual Studio - a way to quickly insert common structures. Something that has apparently been available since VS 2005! I'm a little ashamed that this was the first time I encountered them! (I consoled myself with the fact that, from talking to some other devs, this doesn't seem to be one of the most well-known VS features.. but still).
+
+eg. instead of repeatedly typing something like
+
+    if (role == null)
+      throw new ArgumentNullException("role");
+
+I can configure it to allow me to type "tna" and have it translated into
+
+    if (value == null)
+      throw new ArgumentNullException("value");
+
+but with the first instance of "value" highlighted such that I can insert the actual parameter name (starting to type this will also use intellisense to try to match what I'm typing to something in the current scope). After I hit Enter, it will automatically populate the second instance of "value". Amazing; instant time saver!
+
+The easiest way to get this up and running is to copy the following content into a file somewhere called "ThrowArgumentNullException.snippet" (the filename doesn't matter other than the ".snippet" extension):
+
+    <?xml version="1.0" encoding="utf-8" ?>
+    <CodeSnippets  xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+          <CodeSnippet Format="1.0.0">
+        <Header>
+          <Title>Throw ArgumentNullException</Title>
+          <Description>Throw ArgumentNullException</Description>
+          <Shortcut>tna</Shortcut>
+          <SnippetTypes>
+            <SnippetType>Expansion</SnippetType>
+            <SnippetType>SurroundsWith</SnippetType>
+          </SnippetTypes>
+        </Header>
+        <Snippet>
+          <Declarations>
+            <Literal>
+              <ID>arg</ID>
+              <Default>value</Default>
+            </Literal>
+          </Declarations>
+          <Code Language="csharp"><![CDATA[if ($arg$ == null)
+    throw new ArgumentNullException("$arg$");
+        $end$]]>
+          </Code>
+        </Snippet>
+      </CodeSnippet>
+    </CodeSnippets>
+
+Then import it into Visual Studio by going to Tools / Code Snippets Manager, selecting "Visual C#" as the language and clicking Import. Once you import the file, it will ask you where you want to import it into. There should be a "My Code Snippets" location which will do fine.
+
+When the Code Snippets Manager is closed, the snippet should become immediately available in the editor (no restarting VS, or anything crazy like that).
+
+So within a function with arguments, type "tna" (this string is specified by the "Shortcut" node in the snippet xml) and hit Tab twice (once for intellisense to match the "tna" string to the snippet and the second time to actually insert the snippet content). Then type in the parameter name and press Enter twice (again, it seems to be once to match what you've entered using intellisense - or not, if it doesn't match anything in scope - and the second time to end the snippet insertion and move on). It seems a bit weird to have to hit Tab and Enter twice each, but I can live with it!
+
+Another similar, but also common, snippet I use is to check a string argument against string.IsNullorWhiteSpace:
+
+    <?xml version="1.0" encoding="utf-8" ?>
+    <CodeSnippets  xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+      <CodeSnippet Format="1.0.0">
+        <Header>
+          <Title>If IsNullOrWhiteSpace Throw ArgumentException</Title>
+          <Description>
+            Throw ArgumentException if arg reports string.IsNullOrWhiteSpace
+          </Description>
+          <Shortcut>tnw</Shortcut>
+          <SnippetTypes>
+            <SnippetType>Expansion</SnippetType>
+            <SnippetType>SurroundsWith</SnippetType>
+          </SnippetTypes>
+        </Header>
+        <Snippet>
+          <Declarations>
+            <Literal>
+              <ID>arg</ID>
+              <Default>value</Default>
+            </Literal>
+          </Declarations>
+          <Code Language="csharp"><![CDATA[if (string.IsNullOrWhiteSpace($arg$))
+    throw new ArgumentNullException("Null/blank $arg$ specified");
+        $end$]]>
+          </Code>
+        </Snippet>
+      </CodeSnippet>
+    </CodeSnippets>
+
+This is really only scratching the surface of what's possible and I suspect I'll end up adding more to my arsenal over time. More information can be found at [Creating and Using IntelliSense Code Snippets](http://msdn.microsoft.com/en-us/library/ms165392(v=vs.80).aspx) on the MSDN site.
+
+While looking into this, I found that Visual Studio has a few useful snippets available out of the box. For example "propg" will expand to
+
+    public int MyProperty { get; private set; }
+
+where "int" and "MyProperty" are insertion values; these are the defaults but after "propg" is expanded, "int" is highlighted which may be replaced with new content and then "MyProperty" moved to by hitting Tab. Handy!

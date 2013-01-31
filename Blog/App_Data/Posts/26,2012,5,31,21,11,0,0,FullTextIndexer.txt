@@ -1,0 +1,230 @@
+## An English-language Plurality-handling String Normaliser
+
+As part of my mental masturbation investigation into putting together a Full Text Indexer (which inspired [The .Net Dictionary is FAST!](Post26)) I wanted to implement a string normaliser that would handle retrieval of strings that stem from the same origin but which are the plural version of the singular, or enable matching of the singular version when searching on the plural version. In other words, if I search for "cat" then I want results that include the word "cats" too!
+
+I had a fairly good idea how I wanted to do it; just look for particular endings on words and exchange it with all combinations of suffixes for singular or plural versions of the word. So I want "cat" and "cats" to be normalised to "cat[s]". But then some words have "es" as the plural like "fox" / "foxes". Somes words have multiple variations like "index" / "indices" / "indexes" (I'm not sure if the last version is for specialised uses - I've seen it used when talking about the multiple of a database index or a stock index??). Some words don't even have variations, like "sheep"!
+
+A visit to [Wikipedia's English Plural](http://en.wikipedia.org/wiki/English_plural) page seemed like a natural starting point..
+
+It turns out that there are a lot of irregular plurals in the English language! Not a surprise as such, just something I need to be aware of. But I'm not planning on a normaliser that is absolutely perfect - I want any avoid any false negatives (so I want to makes sure that "index" and "indices" are found to match) but I'm not concerned if some false *positives* are present (I won't care that it doesn't realise that "sheeps" isn't a real word and I'm not going to lose any sleep if it thinks that "as" is the plural of "a").
+
+And, without further ado, this brings us to the first proper go at it I've made!
+
+    /// <summary>
+    /// This will match common strings where one is the plural and the other the singular version
+    /// of the same word. It not intended to be perfect and may match a few false positives, but
+    /// it should catch most of the most common cases.
+    /// </summary>
+    [Serializable]
+    public class EnglishPluarityStringNormaliser : IStringNormaliser
+    {
+        /// <summary>
+        /// This will never return null. If it returns an empty string then the string should
+        /// not be considered elligible as a key. It will throw an exception for a null value.
+        /// </summary>
+        public string GetNormalisedString(string value)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+
+            value = value.Trim();
+            if (value == "")
+                return "";
+
+            // Need to lower case the value since the suffix comparisons are all to lower case
+            // characters
+            value = value.ToLower();
+            foreach (var matcher in Matchers)
+            {
+                string valueTransformed;
+                if (matcher.TryToTransform(value, out valueTransformed))
+                    return valueTransformed;
+            }
+
+            // If no irregulare suffixes match then append all of "ses", "es" and "s" to catch
+            // other common cases (and ensure that we match anything that ends in "s" due to
+            // the suffix set "ses", "es", "s" above - we need to ensure that "cat" is
+            // transformed to "cat[ses][es][s]" in order to match "cats" which will get that
+            // form applied above).
+            return value + "[ses][es][s]";
+        }
+
+        public bool Equals(string x, string y)
+        {
+            if (x == null)
+                throw new ArgumentNullException("x");
+            if (y == null)
+                throw new ArgumentNullException("y");
+
+            return GetNormalisedString(x) == GetNormalisedString(y);
+        }
+
+        public int GetHashCode(string obj)
+        {
+            if (obj == null)
+                throw new ArgumentNullException("obj");
+
+            return GetNormalisedString(obj).GetHashCode();
+        }
+
+        private readonly static PluralEntry[] Matchers = new[]
+        {
+            // eg. index / indexes / indices
+            new PluralEntry(new[] { "ex", "exes", "ices" }, MatchTypeOptions.SuffixOnly),
+            
+            // eg. formula / formulae / formulas
+            new PluralEntry(new[] { "ula", "ulae", "ulas" }, MatchTypeOptions.SuffixOnly),
+            
+            // eg. category / categories
+            new PluralEntry(new[] { "y", "ies" }, MatchTypeOptions.SuffixOnly),
+            
+            // eg. cactus / cactii
+            new PluralEntry(new[] { "us", "ii" }, MatchTypeOptions.SuffixOnly),
+            
+            // eg. child / children
+            new PluralEntry(new[] { "ld", "ldren" }, MatchTypeOptions.SuffixOnly),
+            
+            // eg. medium / media
+            new PluralEntry(new[] { "ium", "ia" }, MatchTypeOptions.SuffixOnly),
+            
+            // eg. abacuses, matching "s" here means we must use "ses", "es" AND "s" as fallbacks
+            // below
+            new PluralEntry(new[] { "ses", "es", "s" }, MatchTypeOptions.SuffixOnly),
+            
+            // Common special cases
+            new PluralEntry(new[] { "datum", "data" }, MatchTypeOptions.WholeWord),
+            new PluralEntry(new[] { "man", "men" }, MatchTypeOptions.WholeWord),
+            new PluralEntry(new[] { "woman", "women" }, MatchTypeOptions.WholeWord)
+        };
+
+        [Serializable]
+        private class PluralEntry
+        {
+            private HashSet<string> _values;
+            private string _combinedValues;
+            private MatchTypeOptions _matchType;
+            public PluralEntry(IEnumerable<string> values, MatchTypeOptions matchType)
+            {
+                if (values == null)
+                    throw new ArgumentNullException("values");
+                if (!Enum.IsDefined(typeof(MatchTypeOptions), matchType))
+                    throw new ArgumentOutOfRangeException("matchType");
+
+                var valuesTidied = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+                foreach (var value in values)
+                {
+                    var valueTrimmed = (value ?? "").Trim();
+                    if (valueTrimmed == "")
+                        throw new ArgumentException("Null/blank entry encountered in values");
+
+                    if (!valuesTidied.Contains(valueTrimmed))
+                        valuesTidied.Add(valueTrimmed);
+                }
+
+                _values = valuesTidied;
+                _combinedValues = "[" + string.Join("][", valuesTidied) + "]";
+                _matchType = matchType;
+            }
+
+            public bool TryToTransform(string value, out string valueTransformed)
+            {
+                if (value == null)
+                    throw new ArgumentNullException("value");
+
+                if (_matchType == MatchTypeOptions.SuffixOnly)
+                {
+                    var matchedSuffix = _values.FirstOrDefault(
+                        suffix => (value.Length > suffix.Length) && value.EndsWith(suffix)
+                    );
+                    if (matchedSuffix != null)
+                    {
+                        valueTransformed =
+                            value.Substring(0, value.Length - matchedSuffix.Length)
+                            + _combinedValues;
+                        return true;
+                    }
+                }
+                else
+                {
+                    if (_values.Contains(value))
+                    {
+                        valueTransformed = _combinedValues;
+                        return true;
+                    }
+                }
+                valueTransformed = null;
+                return false;
+            }
+        }
+
+        [Serializable]
+        public enum MatchTypeOptions
+        {
+            SuffixOnly,
+            WholeWord
+        }
+    }
+
+    public interface IStringNormaliser : IEqualityComparer<string>
+    {
+        /// <summary>
+        /// This will never return null. If it returns an empty string then the string should
+        /// not be considered elligible as a key. It will throw an exception for a null value.
+        /// </summary>
+        string GetNormalisedString(string value);
+    }
+
+It's a simple implementation where the TryToTransform method is incredibly easy to follow and the "Matchers" set shows an obvious expansion point to add more edge cases for various other irregular plural suffixes or if the current values are too general and are resulting in false negatives that I want to avoid.
+
+If no match is found, then the word is assumed to be a singular term and the common suffix group "s", "es" and "ses" are all appended. The "es" and "s" values are to match words such as "fishes" and "cats" but the "ses" requirement is less obvious; in order to match "abacuses" and "abacus" we need a single form that matches them both such that "abacus" isn't thought to be the plural of "abacu" (not a real word!). This means that "cats" will be transformed to "cat[ses][es][s]" by this form and so we require all three suffixes in the fallback so that "cat" is *also* transformed to "cat[ses][es][s]". Looking through that english words list, other words that this is required for include "abuses", "abscesses", and "addresses" (and that's only the first few common words that I came across starting with A!).
+
+### Follow-up
+
+I've been playing around more with this and identified a few words that it doesn't handle correctly, starting with data from this [All English Words](http://www.sitopreferito.it/html/all_english_words.html) page. Warning: it's slow to load and doesn't look like the most professional site in the world so I'm not sure that the link will continue to work forever! :S
+
+One example that is broken with the above is that "accomplices" is matched with the "ex" / "exes" / "ices" suffix group which was intended for "index" / "indexes" / "indices" and so "accomplice" and "accomplices" are not found to match.
+
+Also "matrix" / "matrices" and "vertex" / "vertices" don't match and trying to handle them in the same manner as the "index" group would introduce problems with words such as "prices" (if a "rix" / "rices" suffix group was used) and "latex" (if a "tex" / "trices" group was used). So all of these troublesome words have been implemented as WholeWord matches instead of trying to deal with them as general form.
+
+So the entry
+
+    // eg. index / indexes / indices
+    new PluralEntry(new[] { "ex", "exes", "ices" }, MatchTypeOptions.SuffixOnly),
+
+is removed and more specific replacements used, the list now becomes:
+
+    // eg. formula / formulae / formulas
+    new PluralEntry(new[] { "ula", "ulae", "ulas" }, MatchTypeOptions.SuffixOnly),
+
+    // eg. category / categories
+    new PluralEntry(new[] { "y", "ies" }, MatchTypeOptions.SuffixOnly),
+
+    // eg. cactus / cactii
+    new PluralEntry(new[] { "us", "ii" }, MatchTypeOptions.SuffixOnly),
+
+    // eg. child / children
+    new PluralEntry(new[] { "ld", "ldren" }, MatchTypeOptions.SuffixOnly),
+
+    // eg. medium / media
+    new PluralEntry(new[] { "ium", "ia" }, MatchTypeOptions.SuffixOnly),
+
+    // Common special cases that have to come before the "ses", es", "s" form
+    new PluralEntry(new[] { "index", "indexes", "indices" }, MatchTypeOptions.WholeWord),
+    new PluralEntry(new[] { "matrix", "matrices" }, MatchTypeOptions.WholeWord),
+    new PluralEntry(new[] { "vertex", "vertices" }, MatchTypeOptions.WholeWord),
+
+    // eg. Abacuses, matching "s" here means we must use "ses", "es" AND "s" as fallbacks below
+    new PluralEntry(new[] { "ses", "es", "s" }, MatchTypeOptions.SuffixOnly),
+
+    // Other common special cases
+    new PluralEntry(new[] { "datum", "data" }, MatchTypeOptions.WholeWord),
+    new PluralEntry(new[] { "man", "men" }, MatchTypeOptions.WholeWord),
+    new PluralEntry(new[] { "woman", "women" }, MatchTypeOptions.WholeWord)
+
+The WholeWord matches are located at the bottom of the Matchers set since presumably they will match less cases than the general forms before them and so (theoretically) more comparisons will be able to exit the TryToTransform loop earlier that if the WholeWord matches were further up the list.
+
+### More plans
+
+There are other tweaks I'd still like to add to this - possibly passing in an optional "pre-processing" string normaliser which would operate before the TryToTransform calls could be beneficial - eg. something to remove punctuation from words so that "cat's" would be matched to "cat" and "cats" without any other changes. Possibly a way to specify the PluralEntry values and the fallback suffix group would be useful so that in special cases additional cases could be added.
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.

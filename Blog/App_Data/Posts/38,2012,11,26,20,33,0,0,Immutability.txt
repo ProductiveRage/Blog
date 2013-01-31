@@ -1,0 +1,506 @@
+﻿## Persistent Immutable Lists
+
+I've written before about immutable data structures (I'm all for them; see [I love Immutable Data](Post1) and [Problems in Immutability-land](Post2)) but watching a talk recently by Clojure-creator Rich Hickey made me think about one particular area again recently. In that first post I put up some example cost for an Immutable List that wrapped the .Net List&lt;T&gt; class - this was very simple to implement and understand, and in many cases I was using the immutable class as a return type or a method argument which meant that the instance would be built once and futher manipulations would be limited. This meant that I wasn't too concerned with internally creating a new list instance each time a new immutable instance was required and copying the references over.
+
+However, in this talk it was reiterated that all of the core data structures in Clojure were intended to be immutable and that considerable work was done to ensure that the performance of these structures was sufficient that it could compete with Java and C#. A persistent linked list structure was used so that operations could be performed without having to recreate the entire dataset.
+
+This is something that I didn't know a huge amount about but sounded like it could be an interesting avenue to explore!
+
+### A basic introduction into the singly-linked list
+
+The singly-linked list is a fairly basic structure built around nodes; each node has a value and a link to the next node, if there is one. We know we're at the end of the list when the current node has a null "next" node reference.
+
+An empty list would have a null "head" node.
+
+An int list with a single item would have a head node of the form
+
+    { 1, null }
+
+where the value of the item is 1 and there is no next node.
+
+An int list with two items could be illustrated as 
+
+    { 1, { 2, null } }
+
+And one with four values as
+
+    { 1, { 2, { 3, { 4, null } } } }
+
+Well, you get the idea!
+
+The interesting thing comes when we look at how the structure changes as items are added. Starting off with an empty list and adding items one at a time to the front of the list, the structure grows in this manner:
+
+    { 1, null }
+
+    { 2, { 1, null } }
+
+    { 3, { 2, { 1, null } } }
+
+    { 4, { 3, { 2, { 1, null } } } }
+
+Each time we take a list L0 and create a new instance L1 by adding a single item, the head node of L1 can be taken to be a new node that contains the new value and whose "next" reference points to the head node of L0. This is where the "persistent" part comes into play. (This is only possible if the nodes themselves are immutable as otherwise one instance of the list could affect the data in another instance if they shared node chain references where the nodes were *not* immutable).
+
+This means that creating a new list with a new item is a very simple and fast action! This operation is considerably faster than the doing the same on the original immutable list approach I was using, especially as the size of the list grows.
+
+Enumerating the list is also straight-forward; we start at the head node (if non-null) and then walk down the "next" references until we hit a null, indicating the end of the list.
+
+A basic implementation of this could be:
+
+    public class SimplePersistentImmutableList<T> : IEnumerable<T>
+    {
+        private readonly Node _head;
+        public SimplePersistentImmutableList() : this(null) { }
+        private SimplePersistentImmutableList(Node head)
+        {
+            _head = head;
+        }
+
+        public SimplePersistentImmutableList<T> InsertAtStart(T value)
+        {
+            return new SimplePersistentImmutableList<T>(
+                new Node(value, _head)
+            );
+        }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            return new SetEnumerator(_head);
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        private class Node
+        {
+            public Node(T value, Node next)
+            {
+                Value = value;
+                Next = next;
+            }
+
+            public T Value { get; private set; }
+
+            /// <summary>
+            /// This will be null if there is no next node
+            /// </summary>
+            public Node Next { get; private set; }
+        }
+
+        private class SetEnumerator : IEnumerator<T>
+        {
+            private readonly Node _topNode;
+            private Node _currentNode;
+            public SetEnumerator(Node topNode)
+            {
+                // The way that the enumeration operates is that it will call MoveNext before
+                // trying to retrieve the first value when processing a foreach loop to ensure
+                // that data is present. In order to deal with this, we need to wrap the Top
+                // Node in another node so that the first MoveNext call moves us to the start
+                // of the data.
+                _topNode = new Node(default(T), topNode);
+                _currentNode = _topNode;
+            }
+
+            public void Dispose() { }
+
+            public T Current
+            {
+                get
+                {
+                    if (_currentNode == null)
+                        throw new InvalidOperationException("No Current value");
+                    return _currentNode.Value;
+                }
+            }
+
+            object IEnumerator.Current
+            {
+                get { return Current; }
+            }
+
+            public bool MoveNext()
+            {
+                if ((_currentNode == null) || (_currentNode.Next == null))
+                    return false;
+                _currentNode = _currentNode.Next;
+                return true;
+            }
+
+            public void Reset()
+            {
+                _currentNode = _topNode;
+            }
+        }
+    }
+
+And most of that code is the implementation of IEnumerable!
+
+### Limitations
+
+This example *only* exposes an InsertAtStart method as a manner in which to alter the list. An obvious counterpart would be to add a RemoveFromStart method, since all that need do is create a new list whose head node is the "next" node of the head node of the current list (if the head node of the intial list was null then there are no items, and so RemoveFromStart would be invalid).
+
+    public SimplePersistentImmutableList<T> RemoveFirstItem()
+    {
+        if (_head == null)
+            throw new InvalidOperationException("The list is empty");
+            
+        return new SimplePersistentImmutableList<T>(
+            _head.Next
+        );
+    }
+
+At this point, we could very easily take this code and create an immutable stack by renaming "InsertAtStart" to "Push", "RemoveFromStart" to "Pop" and adding in a way to retrieve the current value, if any:
+
+    public T Peek()
+    {
+        if (_head == null)
+            throw new InvalidOperationException("The list is empty");
+
+        return _head.Value;
+    }
+
+    public bool IsEmpty
+    {
+        get
+        {
+            return (_head == null);
+        }
+    }
+
+However, to support the other actions that are expected from a list such as inserting-into and removing-from arbitrary locations we need to consider how to find the appropriate place in the node chain from which to snip out values or insert new ones. Unless these operations are to remove the first item(s) from a list or to add some to the start of the list, only *some* of the existing chain may be shared between the current and new instances.
+
+For example, to add the value 99 into index 2 of the list that is described by the following node chain
+
+    { 3, { 2, { 1, { 0, null } } } }
+
+then we'd need to end up with the chain
+
+    { 3, { 2, { 99, { 1, { 0, null } } } } }
+
+managing to re-use only the last two nodes of the existing chain.
+
+This brings me onto the issue that I have with the above implementation; it's my gut feeling that the majority of operations that I might perform on a list are generating an immutable list from a mutable set, adding items to the end of an existing list and enumerating through the values. Keeping a reference to the head node means that every time a new value is added to the end of the list, none of the chain may be persisted. So to optimise for this operation we can store a reference to the *tail* of the chain. Now the same logic from the InsertAtStart method becomes the Add method:
+
+    public SimplePersistentImmutableList<T> Add(T value)
+    {
+        return new SimplePersistentImmutableList<T>(
+            new Node(value, _tail)
+        );
+    }
+
+so long as the Node class is also altered to reflect this reversed nature:
+
+    private class Node
+    {
+        public Node(T value, Node previous)
+        {
+            Value = value;
+            Previous = previous;
+        }
+
+        public T Value { get; private set; }
+
+        /// <summary>
+        /// This will be null if there is no previous node
+        /// </summary>
+        public Node Previous { get; private set; }
+    }
+
+This does raise one thorny issue, though; we have to re-think enumeration of the list since we can only step *backwards* through the list as the "master" node reference we store is the tail. A simple approach would be as follows:
+
+    public IEnumerator<T> GetEnumerator()
+    {
+        var values = new List<T>();
+        var node = _tail;
+        while (_tail != null)
+        {
+            values.Insert(0, node.Value);
+            node = node.Previous;
+        }
+        return values.GetEnumerator();
+    }
+
+This makes enumeration potentially an expensive operation, especially if there are a large number of items in the set since a new List is built and populated for each enumeration. And if there are a lot of items to deal with then the list may have to resize its internal array multiple times (with a copy operation from one array to the next) since we don't know up front how large the list needs to be.
+
+To address this, I'm going to make two changes. Firstly, the Node class will be given a Count property which is always the Count of the previous Node plus one, unless the previous Node is null in which case the Count is one.
+
+    private class Node
+    {
+        public Node(T value, Node previous)
+        {
+            Value = value;
+            Previous = previous;
+            Count = (previous == null) ? 1 : (previous.Count + 1);
+        }
+
+        public T Value { get; private set; }
+
+        /// <summary>
+        /// This will be null if there is no previous node
+        /// the head)
+        /// </summary>
+        public Node Previous { get; private set; }
+
+        public int Count { get; private set; }
+    }
+
+Secondly, I'm going to introduce a class member array "\_allValues" which is only populated the first time that an enumeration is requested and that effectively caches the value set in an easily-enumerable format. This is only populated "on demand" to avoid any overhead where it is generated for a list that will never be enumerated over (if an instance L0 has a value added to it, resulting in L1, which then has a further value added to it, resulting in L2, we don't want to waste time generating the "\_allValues" array for L1 if the reference to L1 is dropped when L2 is created).
+
+    /// <summary>
+    /// For enumerating the values we need to walk through all of the nodes and then reverse the
+    /// set (since we start with the tail and work backwards). This can be relatively expensive
+    /// so the list is cached in the "_allValues" member array so that subsequent requests are
+    /// fast (mightn't be a big deal for a single enumeration of the contents but it could
+    /// be for multiple calls to the indexed property, for example).
+    /// </summary>
+    private void EnsureAllValuesDataIsPopulated()
+    {
+        if (_allValues != null)
+            return;
+
+        // Since we start at the tail and work backwards, we need to reverse the order of the
+        // items in values array that is populated here
+        var numberOfValues = Count;
+        var values = new T[numberOfValues];
+        var node = _tail;
+        for (var index = 0; index < numberOfValues; index++)
+        {
+            values[(numberOfValues - 1) - index] = node.Value;
+            node = node.Previous;
+        }
+        _allValues = values;
+    }
+
+The Count property of the node allows an array to be initialised of the required size since now we *know* the required size. The "\_allValues" array is set to null in the constructor and this EnsureAllValuesDataIsPopulated method must be called before anything references it (eg. the GetEnumerator method).
+
+There's something potentially a bit hairy in this, though, as the internals of the class are no longer immutable and so could we be open to crazy things happening in multi-threaded scenarios? [Joseph Albahari's Advanced Threading article](http://www.albahari.com/threading/part4.aspx) shows a scary first example and Jon Skeet's [Implementing the Singleton Pattern in C#](http://csharpindepth.com/Articles/General/Singleton.aspx) has an example with code that looks very similar to what we're doing here, and that's clearly marked as not thread-safe. The first example illustrates how issues may arise as the *"compiler, CLR or CPU may _reorder_ your program's instructions to improve efficiency"* but *"C# and the runtime are very careful to ensure that such optimizations don’t break ordinary single-threaded code"* so in this case we needn't worry as there is only one "\_allValues" reference being compared to null and then set and no significant rearrangement could be made that wouldn't affect single-threaded processing. In the Singleton example, the issue is that the work could potentially be performed multiple times if multiple threads checked for null before any thread had completed the work and set the "\_allValues" reference. For the lock-free reading that be possible result when "\_allValues" *has* been set, I'm happy with the trade-off in this case. (If multiple threads have to do the work of generating the array while they're all clamouring for the "\_allValues" data at the same time that's fine since once they finish, subsequent requests will be able to access the pre-generated array with no locking or other complications). If I wasn't happy with it then I'd probably use the .Net 4.0 Lazy&lt;T&gt; construct I've talked about before (see [Check, check it out](Post6)) but this could potentially add some overhead for each new instance of the immutable list, which I wanted to avoid for instances that will never be enumerated over.
+
+    public class PersistentImmutableList<T> : IEnumerable<T>
+    {
+        private readonly Node _tail;
+        private T[] _allValues;
+
+        public PersistentImmutableList() : this((Node)null) { }
+        public PersistentImmutableList(IEnumerable<T> values)
+        {
+            if (values == null)
+                throw new ArgumentNullException("values");
+
+            Node node = null;
+            foreach (var value in values)
+            {
+                if (node == null)
+                    node = new Node(value, null);
+                else
+                    node = new Node(value, node);
+            }
+            _tail = node;
+        }
+        private PersistentImmutableList(Node tail)
+        {
+            _tail = tail;
+        }
+
+        public int Count
+        {
+            get { return (_tail == null) ? 0 : _tail.Count; }
+        }
+
+        public PersistentImmutableList<T> Add(T value)
+        {
+            return AddRange(new[] { value });
+        }
+
+        public PersistentImmutableList<T> AddRange(IEnumerable<T> values)
+        {
+            if (values == null)
+                throw new ArgumentNullException("values");
+
+            var node = _tail;
+            foreach (var value in values)
+                node = new Node(value, _tail);
+            return new PersistentImmutableList<T>(node);
+        }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            // As documented at http://msdn.microsoft.com/en-us/library/system.array.aspx, from
+            // .Net 2.0 onward, the Array class implements IEnumerable<T> but this is only
+            // provided at runtime so we have to explicitly cast access its generic
+            // GetEnumerator method
+            EnsureAllValuesDataIsPopulated();
+            return ((IEnumerable<T>)_allValues).GetEnumerator();
+        }
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        /// <summary>
+        /// For enumerating the values we need to walk through all of the nodes and then reverse
+        /// the set (since we start with the tail and work backwards). This can be relatively
+        /// expensive so the list is cached in the "_allValues" member array so that subsequent
+        /// requests are fast (mightn't be a big deal for a single enumeration of the contents
+        /// but it could be for multiple calls to the indexed property).
+        /// </summary>
+        private void EnsureAllValuesDataIsPopulated()
+        {
+            if (_allValues != null)
+                return;
+
+            // Since we start at the tail and work backwards, we need to reverse the order of
+            // the items in values array that is populated here
+            var numberOfValues = Count;
+            var values = new T[numberOfValues];
+            var node = _tail;
+            for (var index = 0; index < numberOfValues; index++)
+            {
+                values[(numberOfValues - 1) - index] = node.Value;
+                node = node.Previous;
+            }
+            _allValues = values;
+        }
+
+        private class Node
+        {
+            public Node(T value, Node previous)
+            {
+                Value = value;
+                Previous = previous;
+                Count = (previous == null) ? 1 : (previous.Count + 1);
+            }
+
+            public T Value { get; private set; }
+
+            /// <summary>
+            /// This will be null if there is no previous node
+            /// the head)
+            /// </summary>
+            public Node Previous { get; private set; }
+
+            public int Count { get; private set; }
+        }
+    }
+
+Having a Count property on the Node enables the immutable list to expose a Count property without having to recursively loop through the nodes.
+
+### Rounding it out
+
+Since we have a "\_tail" Node reference and each Node has a Previous property, this Count on the Node represents the number of items in the list up to and including the current Node. So the tail Node's Count is the number of items in the entire list, the Count property on the node before the tail (if any) would have a Count value of one less - indicating the number of Nodes there are one place before the tail Node. I mention this is because I hope it makes the following methods easier to follow!
+
+    public PersistentImmutableList<T> InsertAt(T value, int insertAtIndex)
+    {
+        return InsertAt(new[] { value }, insertAtIndex);
+    }
+
+    public PersistentImmutableList<T> InsertAt(IEnumerable<T> values, int insertAtIndex)
+    {
+        if (values == null)
+            throw new ArgumentNullException("values");
+        if (!values.Any())
+            return this;
+        if ((insertAtIndex < 0) || (insertAtIndex > Count))
+            throw new ArgumentOutOfRangeException("insertAtIndex");
+
+        // If the insertion is at the end of the list then we can use AddRange and avoid any
+        // messing about
+        if (insertAtIndex == Count)
+            return AddRange(values);
+
+        // Starting with the tail, walk back to the insertion point, recording the values we
+        // pass over
+        var node = _tail;
+        var valuesBeforeInsertionPoint = new T[Count - insertAtIndex];
+        for (var index = 0; index < valuesBeforeInsertionPoint.Length; index++)
+        {
+            valuesBeforeInsertionPoint[index] = node.Value;
+            node = node.Previous;
+        }
+
+        // Any existing node chain before the insertion point can be persisted and the new
+        // value(s) appended
+        foreach (var value in values)
+            node = new Node(value, node);
+
+        // Finally, add back the values we walked through before to complete the chain
+        for (var index = valuesBeforeInsertionPoint.Length - 1; index >= 0; index--)
+            node = new Node(valuesBeforeInsertionPoint[index], node);
+        return new PersistentImmutableList<T>(node);
+    }
+
+To insert into an arbitrary location in the list, we need to walk backwards from the tail to the insertion point and then insert the new value(s) by persisting the rest of the node chain (from the insertion point up to the head) and appending the new values and then the values which we have to walk through to get to the insertion point. The nodes from the tail to the insertion point can not be maintained as their "Previous" chain will not include the new values!
+
+A very similar approach may be taken to removals:
+
+    public PersistentImmutableList<T> RemoveAt(int removeAtIndex)
+    {
+        return RemoveRange(removeAtIndex, 1);
+    }
+
+    public PersistentImmutableList<T> RemoveRange(int removeAtIndex, int count)
+    {
+        if (removeAtIndex < 0)
+            throw new ArgumentOutOfRangeException(
+                "removeAtIndex",
+                "must be greater than or equal zero"
+            );
+        if (count <= 0)
+            throw new ArgumentOutOfRangeException("count", "must be greater than zero");
+        if ((removeAtIndex + count) > Count)
+            throw new ArgumentException("removeAtIndex + count must not exceed Count");
+
+        // Starting with the tail, walk back to the end of the removal range, recording the
+        // values we passed over
+        var node = _tail;
+        var valuesBeforeRemovalRange = new T[Count - (removeAtIndex + count)];
+        for (var index = 0; index < valuesBeforeRemovalRange.Length; index++)
+        {
+            valuesBeforeRemovalRange[index] = node.Value;
+            node = node.Previous;
+        }
+
+        // Move past the values in the removal range
+        for (var index = 0; index < count; index++)
+            node = node.Previous;
+
+        // Now add back the values we walked through above to the part of the chain that can be
+        // persisted
+        for (var index = valuesBeforeRemovalRange.Length - 1; index >= 0; index--)
+            node = new Node(valuesBeforeRemovalRange[index], node);
+        return new PersistentImmutableList<T>(node);
+    }
+
+And really, that's most of the complication out of the way! We can still flesh out a few more properties like an index property:
+
+    public T this[int index]
+    {
+        get
+        {
+            if ((index < 0) || (index >= Count))
+                throw new ArgumentNullException("index");
+
+            EnsureAllValuesDataIsPopulated();
+            return _allValues[index];
+        }
+    }
+
+and a sort method:
+
+    public PersistentImmutableList<T> Sort(IComparer<T> comparison)
+    {
+        if (comparison == null)
+            throw new ArgumentNullException("comparison");
+
+        EnsureAllValuesDataIsPopulated();
+        return new PersistentImmutableList<T>(
+            _allValues.OrderBy(x => x, comparison)
+        );
+    }
+
+but we're getting down to icing-on-the-cake now.
+
+### Conclusion
+
+I've enjoyed this little foray and intend to replace that old simple (effective but slow) immutable list I was using before with a version of this code! In existing code that used the previous implementation, there was a measurable performance hit in some loops where lists were being built up in a method before being returned - I rewrote these to use a mutable list internally and return an immutable representation when the work was complete (because of this performance hit). But now I think I could probably get away with using this new immutable list throughout method internals as well! I need to do some profiling of previously-seen trouble areas to be sure, but I get the sneaky feeling that in some of the larger data sets where performance was seen to be taking a hit, this new immutable list variation may work even better than the built-in *mutable* list. And that, I'm very happy with! :)

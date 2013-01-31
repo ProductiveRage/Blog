@@ -1,0 +1,11 @@
+## Mercurial on Windows - Changing filename case
+
+At work today, in a fit of madness, I decided to rename a file in a BitBucket (ie. Mercurial) repository from RSSController.cs to RssController.cs for consistency with the casing in other files. At the time I wondered if this rename was a good idea, but everything seemed to go well.
+
+When I got home and tried to update my repository there, _seemed_ became the operative word. I was greeted with a "case folding collision" error and the start of 90 minutes of my life that feel wasted and aren't ever going to come back.
+
+I'm not sure if there's a good way to do this and a lot of information out there about resolving this sort of mess starts with "On the Linux/FreeBSD machine.." or "On a case sensitive OS.." which is not very useful when all my computers run Windows!
+
+Long story short; this page helped me out a lot - [http://mercurial.selenic.com/wiki/FixingCaseCollisions](http://mercurial.selenic.com/wiki/FixingCaseCollisions). I haven't tried the CaseFoldExtension but following the instructions in there sorted me out. The only issue I encountered was one of the commands complained that it didn't have a username, including an additional -u"user@whereever.com" sorted that out.
+
+This has tired me out! :S

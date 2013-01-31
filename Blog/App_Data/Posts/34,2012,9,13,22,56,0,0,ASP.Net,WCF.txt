@@ -1,0 +1,119 @@
+﻿## Ramping up WCF Web Service Request Handling.. on IIS 6 with .Net 4.0
+
+It's got to the point with a Web Service I'm developing at work to run it through some stress tests and try to work out what kind of load we can handle with the hardware we have in mind for its hosting environment. We also have an arbitrary concept of the load we'd *like* it to be able to handle, so we need to see if the hardware solution we have in mind is even in the right ballpark.
+
+It's a WCF Web Service running against .Net 4.0 but it's going to be hosted in IIS 6; the Web Servers our Infrastructure Team provide us with are all Server 2003 and although there are mid-term plans to start upgrading to 2008 and IIS 7 this isn't going to happen before this service needs to be live.
+
+The Web Service effectively backs on to a Data Service we already have for our own private use that handles querying and caching of data and metadata, so this Web Service's primary job is to expose this data in a saner manner than the internal interface (which was built some years back and has a lot of legacy features, exposes too much craziness from the backing database which evolved over the best part of a decade and the internal service is communicates over .Net Remoting as it was originally written against .Net 2.0!). So all we're really doing is translating requests from the Web Service model into the internal format and then performing a similar act on the responses, there won't be too many caching concerns, any direct db access or much file IO; the bulk of its time I expect will be waiting on the internal service.
+
+### Gotcha Number One
+
+To kick things off, I wanted to get an idea of how much load the internal service could handle on a single server and then see how things changed when I put a Web Server in front of it, hosting the new Service. To cut a long story short, I was able to reproduce requests to the internal service from the busiest few hours the night before and serialise them all to disk so that they could be replayed at any time against the stress-testing environment. The optimistic plan being to ramp up the speed at which the requests are replayed and see where the bottlenecks start appearing and at what sort of loads!
+
+The first problem I encountered was when replaying these from a test app on my computer to the data service in the load test environment. As the Web Service requests were ramping up the request times were getting longer and longer. I looked on the Web Server and found that it was doing *very* little; CPU and memory use was low and looking at the "Web Service"* performance counters it was not only dealing with very few requests but there weren't any queuing up which had been my initial thought.
+
+\* (The "Web Service" in this context relates to the service in IIS, it's not a Web Service in the context of an ASP.Net Web Service, for example).
+
+Some googling revealed that outgoing http requests are limited by default in .Net applications, so the requests were getting queued up locally and weren't even getting to the server! It seemed like only two concurrent requests were being handled though I'm sure documentation suggested that it should have been 16. Not that it matters, really, that would have way been too low as well!
+
+Adding this to the app.config sorted it out:
+
+    <system.net>
+        <connectionManagement>
+            <add address="*" maxconnection="65535" />
+        </connectionManagement>
+    </system.net>
+
+The "*" means that this will be applied to any endpoint. The 65535 was what I found in the example and I've been struggling to find a definitive answer as to whether this is the maximum value that it can be or not! :S
+
+### Server Settings: Thread Counts
+
+So now I was able to overload the server with more concurrents requests than it could handle at once and they were getting queued up. The performance counters are just invaluable here; there are some available for the "Web Service" - which tells us about what's happening at the IIS level - and for "ASP.Net" - which tells us about what's getting into .Net framework. So there could theoretically be limits in IIS that need to be overcome and/or limits in ASP.Net, keeping an eye on these counters gives an insight into where the bottlenecks might be.
+
+I ramped up the request replay rate and it seemed like the maximum concurrent connections that I could achieve was around 250. The CPU load was low, around 15%, and the memory usage was fairly meagre. Most of the time in the requests was waiting for the data service to respond, so threads were just hanging around. Not enough threads for my liking! I wanted to use more of the resources on the box and be able to deal with more requests.
+
+I spent *aaaages* trying to find information about whether this 250 was a limit set in IIS somewhere or if it was somehow related to the default maximum of 250 threads per CPU in a .Net ThreadPool or just where to find the knob in IIS that I can turn up to eleven! And my conclusion is that it's *very* difficult to find a definitive resource; so much of the information is for different versions of IIS (5 or 7, usually) and they usually do *not* make clear which settings are applicable to which versions and which changes I could expect to help me.
+
+So I'm just going to cut to the chase here. For IIS 6 (six!) I needed to do two things.
+
+Firstly, edit the machine.config for applicable ASP.Net version (I'm running against 4.0 and IIS is currently set up to run as 32-bit since to enable 64-bit I believe that *all* of the applications must be 64-bit and where we're going to host this Web Service I can't be sure that this will be the case):
+
+    <system.web>
+        <processModel maxWorkerThreads="100" maxIoThreads="100" minWorkerThreads="50"/>
+
+"100" is the maximum value that maxWorkerThreads and maxIoThreads can take. "50" was the value I found in the examples I encountered, presumably this lower bound is set so t hat bursty behaviour is more easily handled as a base number of threads are always spun up (starting up a load of threads is expensive and if a patch of high traffic hits the service then having to do this can result in requests being queued). These were the settings for which there is so much apparently contradictory information out there; some people will tell you the default values are 50 or 12 x the number of CPUs or 5000 depending upon the version of IIS (but infrequently saying which version they were talking about) or the version of ASP.Net (but infrequently saying which version they were talking about!) or.. I don't know.. what day of the week it is!
+
+The second was to increase the number of processes that were used by the Web Service's App Pool. This is done by going into the Performance tab on the App Pool's properties page and increasing the "Maximum number of worker processes" upwards from 1.
+
+There are considerations to bear in mind with increasing the number of worker processes; the first that often jumps out in documentation is issues with Session - any Session data must be maintained in a manner such that multiple processes can access it, since requests from the same Client may not always be handled by the same process, and so an in-process Session would be no good. The Service I was working with had no need for maintaining Session data, so I could happily ignore this entirely.
+
+With these changes, I was able to ramp up the requests until I was max'ing out the CPU in a variety of circumstances; I set up different tests ranging from requests that could be completed very quickly (within, say 20ms) to requests that would artificially delay the response to see how concurrent requests would build up. Without trying too hard I was able to get around 500 requests / second with the quick responses and handle 4000 concurrent requests happily enough with the long-running ones.
+
+This is hardly crazy internet-scale traffic, but it's well in excess of the targets that I was originally trying to see if I could handle. And since the "hardware" is a virtualised box with two cores I'm fairly happy with how it's working out!
+
+### Server Settings: Bandwidth considerations
+
+Something we have to consider in exposing this data to external Clients is just how *much* data we may be passing around. The internal Data Service that is essentially be wrapped is just that; internal. This means that not only will all the data be passed around internal network connections to the requesting Web Server (that will use that data in rendering the site) but also that we can format that data however we like (ie. binary rather than xml) and take all sorts of crazy shortcuts and liberties if we need to as we have to understand the data implicitly to work efficiently with it. For the Web Service, the data's going to be broadcast as xml and we want to make the compromise of exposing a consistent and predictable data model with a simple API. This means that we'll be dealing with much larger quantities of data and we have to pass them out of our private network, out into the real world *where we have to pay for transfers*.
+
+This really struck home when, during the load tests, I was max'ing out the network utilisation of my connection to the server. My connection to the office network runs at 100Mbps (100 mega*bits*, not bytes) - other people get 1Gb but I get 100 meg, cos I'm really lucky :) This was in tests where a large response was being returned with a high rate of handled requests. To try to push these tests closer to the limits I had to borrow some other workstations and run requests through wcat ([http://www.iis.net/downloads/community/2007/05/wcat-63-(x86)](http://www.iis.net/downloads/community/2007/05/wcat-63-(x86))).
+
+So I figured the obvious first step was to look into whether the response were being compressed and, if not, make them.
+
+### WCF Compression with IIS 6 and .Net 4.0
+
+I examined a request in Fiddler. No "Accept-Encoding: gzip" to be found. A flash of recollection from the past reminded me of the EnableDecompression property available on the Client proxy generated by Web References. I set it to true before making the request and looked at the request in Fiddler.
+
+Success! The http header for gzip support was passed.
+
+But fail! It didn't make the slightest bit of difference to the response content.
+
+Further googling implied that I was going to be in for some hurt configuring this on IIS 6. The good news is that WCF with .Net 4.0 *would* support compression of the data natively unlike 3.5 and earlier which required workarounds (I got as far as looking at this [Stack Overflow question](http://stackoverflow.com/questions/1741768/wcf-gzip-compression-request-response-processing) before being glad I didn't have to worry about it).
+
+This blog post was a lifesaver: [IIS Compression in IIS6.0](http://weblogs.asp.net/owscott/archive/2004/01/12/57916.aspx).
+
+To summarise:
+
+1. In the IIS Admin tool you need to right-click on "Web Sites", click "Service" and click "Compress application files" (we don't care about static content for this particular change, and the temporary disk location is only required for static content - "application files" are always compressed on the fly). 
+1. Open the IIS MetaBase file in notepad (C:\WINDOWS\system32\inetsrv\MetaBase.xml, take a backup first - getting this wrong is going to cause problems!) and search for the string "IIsCompressionScheme"; include the "svc" extension into the "HcScriptFileExtensions" section (being careful to maintain the same formatting when inserting the new extension) and then setting "HcDynamicCompressionLevel" to "9" (see that blog post for more information)
+1. Ensure that any software on the server that may try to process the requests is disabled for the "svc" extension (we have something call "IISXpress" on our Web Servers which is supposed to help with compression but which I couldn't get to work!)
+1. Restart IIS
+
+After this, the response were being successfully compressed! As it's xml content it's fairly well compressible and I was getting the data trimmed down to approximately an 8th of the previous size. Another result!
+
+Of course, there's always a compromise. And here it's the additional load on the CPU. For the sort of traffic we were looking to support, it seemed like it would be a good trade off; this CPU load overhead in exchange for the reduction in the size of the transmitted data.
+
+Incidentally, Hanselman has a post here [Enabling dynamic compression (gzip, deflate) for WCF Data Feeds, OData and other custom services in IIS7](http://www.hanselman.com/blog/EnablingDynamicCompressionGzipDeflateForWCFDataFeedsODataAndOtherCustomServicesInIIS7.aspx) illustrating just how much easier it is in IIS 7. If you've got a server hosted by that, good times! :)
+
+### Checking for gzip support
+
+I'm actually contemplating *requiring* gzip support for all requests made to the service to ensure we keep public traffic bandwidth in check. Since it's just an http header that specifies that the Client supports it, we can check for it from the Service code:
+
+    var acceptsGzip =
+        (WebOperationContext.Current.IncomingRequest.Headers["Accept-Encoding"] ?? "")
+            .Split(',')
+            .Select(v => v.Trim())
+            .Contains("gzip", StringComparer.InvariantCultureIgnoreCase);
+
+And if we decide that Client gzip support *is* required then an error response indicating an invalid request can be returned if this header is not present.
+
+### Bonus note on handling concurrent requests
+
+This is probably going to sound really obvious but it caught me out when I did some testing with high numbers of concurrent requests; be careful how you deal with file locking when you have to read anything in!
+
+I have a config file for the Service which has various settings for different API Keys. The data in this file is cached, the cache entry being invalidated when the file changes. So for the vast majority of requests, the cached data is returned. But when it's contents are changed (or the Service is restarted), the file's contents are read fresh from disk and if there are a multiple requests arriving at the same time there may well be simultaneous requests to that file.
+
+I had previously been using the following approach to retrieve the file's content:
+
+    using (var stream = File.Open(filename, FileMode.Open, FileAccess.Read))
+    {
+        // Do stuff
+    }
+
+but the default behaviour is to lock the file while it's being read, so if concurrent read requests are to be supported, the following form should be used:
+
+    using (var stream = File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Read))
+    {
+        // Do stuff
+    }
+
+This way, the file can be opened simultaneously by multiple threads or processes. Hooray! :)

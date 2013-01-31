@@ -1,0 +1,460 @@
+## The .Net Dictionary is FAST!
+
+I've been playing around with writing a Full Text Indexer - not for any practical reason, more because I was having an argument with an integration of Lucene (.Net) at work and that phrase crossed my mind; "how hard could it be?!" Yeah.. generally that should be a warning sign :)
+
+I was working under no false illusions - even if the basic concept was easy our integration has all sorts of issues dealing with indexing across different languages, filtering shared content for use in different websites, all sorts.. but I thought it might be a way to learn something new so why not!
+
+At its core, once all of the source content has been parsed and analysed, there's a mapping of string matches back to results with appropriate weightings for the mappings. I initially used a Dictionary&lt;string, WeightedEntry&lt;TKey&gt;&gt; where WeightedEntry&lt;TKey&gt; is a key / weight pair. It struck me that the built-in class is a very general purpose implementation and surely it should be possible to write something that would perform better for more specific circumstances. For instance, I'll consider dropping mutability and only accept strings for keys if these can somehow be traded for performance.
+
+### The naive approach
+
+The first pass was very simple - if the built-in dictionary was really just a list of KeyValuePairs then key lookups would have to compare the requested key against every key already in the data. So if I had a lookup class that pre-hashed the keys then on a key lookup I could take the requested key's hash and then only compare it to other keys that I already know have the same hash value. Simples!
+
+Too simple of course.. the .Net Dictionary outperformed this easily. I suspected that, being such a commonly-used class, the framework developers would most likely have put some optimisation work into it - but it's always worth a go!
+
+### A still-pretty-naive approach
+
+I remembered seeing some code somewhere deep in the past that had to deal with large numbers of entries in a lookup and the one optimisation it used was to "bucket" the data. So we could take the pre-hashed values and take the modulus of the integer value for some arbitrary number of buckets. Then there would be less comparisons again for a fairly simple one-off up-front calculation. Awesome!
+
+Turns out that after running some tests that the built-in Dictionary was still a way ahead of me. Sigh.
+
+### .Net Framework Source
+
+At some point I remembered reading that Microsoft made available the source for the .Net Framework so why not have a bit of a peek - maybe I'll learn something! I've also poked around in source with [dotPeek](http://www.jetbrains.com/decompiler/) in the past and I believe that will hook into source servers these days.
+
+After a quick shufty it seems like it's using a bucketed approach and basing the number of buckets on a prime number related to the capacity of the dictionary.... er, what?! I presume this is based on a well researched and performant algorithm thought up by clever people and implemented in .Net as a speedy generic implementation. Looks like improving on this will be more difficult that I first imagined (granted, I didn't think my original naive thoughts were particularly realistic!).
+
+### One more try!
+
+The night I came to this point I went to bed and was bothered by what I'd found and ended up keeping myself half awake with ideas about data splitting and bucketing and lots of things that probably made no sense. It was like the opposite of the clarity of a ["shower moment"](http://online.wsj.com/article/SB124535297048828601.html) when a solution pops unbidden into your mind, I was just thinking round and round in circles. 
+
+But I came out it wondering - if bucketing the values to reduce the number of comparisons (even if these comparisons are only of hashed values) yields such improved performance, and since computers love simple binary operations the best, then wouldn't have nested buckets which we fall through by repeatedly diving the hash value by two until we get to the value (if present) be faster again?? All I'd be doing would be bit-shifting the hash and AND'ing the last bit to determine whether to go one way or the other as we go through the layers. I could even represent the set of "buckets" with structs and push them all into one array - that should make accessing the data that much faster as the memory access if more predictable? Right?? Maybe I could experiment with optimising the cases of key requests for keys that are not present in the data - perhaps it would be quicker to have a "key-not-found" bucket which loops back on itself instead of having to check at each division whether the next bucket exists, surely it would be quicker for the cases where the key _is_ found since there would be less work performed each step!
+
+Well.. I'll not ramble on too much more about this - the .Net Dictionary still beat me!
+
+(Just in case you have a morbid curiousity to the myriad ways in which I failed - and in which I succeeded - there will be a link to a Bitbucket repository further down with example code).
+
+### Some algorithm research!
+
+I had a little break from it all (to wallow in the disappointment) before realising I'd basically missed a trick. How often is it that Google doesn't have the answer one way or the other?! More specifically, I'm thinking there must have been many many people who have tried to solve similar problems before.. Maybe I should have thought of this when I looked at the Framework source. Maybe I should have thought of it in the first place! But then I would have missed out on the fun of poking about with the existing Dictionary and tinkering about with all of the above!
+
+So it's proper research time!
+
+I must admit that my knowledge of lower level algorithms and structures is a bit lacking. I have a Maths degree so never covered all those courses from Computer Science, I'm mostly self-taught. Well I've _heard_ about these mysterious red/black trees, binary search trees, self-adjusting balancing search trees, tries - it's just that I don't know what they all are! Maybe one them can help. I mean, if these have been tested and applied to similar specialised scenarios then I can use someone else's genius to make my own code faster - good times!
+
+### The Ternary Search Tree
+
+Having spent a little while trying to get a basic ground in some of the more common structures and investigating which may be appropriate to the matter in hand, I settled on trying out a Ternary Search Tree - partly because the performance characteristics seems to indicate that it could offer an improvement and because it seemed like it would easy to implement (and so not frustrate me too much if it got me nowhere!).
+
+Reading the following articles was enough to get to grips with the structure and write a C# class to implement it:
+
+[http://en.wikipedia.org/wiki/Ternary\_search\_tree](http://en.wikipedia.org/wiki/Ternary_search_tree)
+
+[http://www.drdobbs.com/database/184410528](http://www.drdobbs.com/database/184410528)
+
+Although the partial string matching and "nearest-neighbour" possibilities seemed interesting I didn't investigate them too far since I don't think they offer too much for the problem domain I've got in mind. This is in context of a full text indexer and the the partial string matching will only match a "template" string - the strings must be the same length and specific characters can be considered flexible. Nearest-neighbour also relies on making comparisons between strings of the same length. Both methods would allow only minor flexibility in incorrect spellings, for example. And the partial matching only taking single character wildcards means that a search-for-substring-within-a-key facility couldn't be created in that manner.
+
+The constructor takes a list of KeyValuePairs where the key must be a string while the value is a generic typeparam. It also takes a "keyNormaliser" which will enable a transformation to be applied to all keys before insertion into the tree and the same transformation applied to all keys passed to the retrieval method. This would enable a case-insensitive search tree to be specified. Or it could enable a transformation which replaces all accented characters with latin alternatives. Or enable basic plurality handling by appending an "s" to the end of keys unless the key ends in certain letters (so "s" can safely be appended to "chair" to make "chair[s]" whilst "category" would become "categor[y][ies]" and "cactus" "cact[us][ii]" - the approach would have to map both ways, so would map both "chair" _and_ "chairs" to "chair[s]", it would be language-specific and probably not perfect but it opens up an interesting avenue of investigation).
+
+**Update (31st May 2012):** To illustrate, an example English-language plurality-handling normaliser can be seen in [this post](Post26).
+
+### Test  data
+
+When testing some early forays into this full text indexer problem I pulled some data from the [New York Times Article Search API](http://developer.nytimes.com/docs/read/article_search_api) which I only discovered while trying to find a good source of data. I just did a search for "test" and pulled as many articles as I could in the number of API call you're allowed for a day. Then processed the content, leaving me essentially with a dictionary of data with string keys (each key being a word in an article, title or other field in their data).
+
+The API is really simple to communicate with, below is the code I used to perform the retrieval (the comments were stripped out for brevity):
+
+    using System;
+    using System.Collections.Generic;
+    using System.Collections.ObjectModel;
+    using System.IO;
+    using System.Linq;
+    using System.Net;
+    using System.Web;
+    using System.Web.Script.Serialization;
+
+    namespace NewYorkTimesDataRetriever
+    {
+        public class NewYorkTimesArticleRetriever : IArticleRetriever
+        {
+            private Uri _serviceUrl;
+            private string _apiKey;
+            public NewYorkTimesArticleRetriever(Uri serviceUrl, string apiKey)
+            {
+                if (serviceUrl == null)
+                    throw new ArgumentNullException("serviceUrl");
+                if (!serviceUrl.IsAbsoluteUri)
+                    throw new ArgumentException("serviceUrl must be an absolute Uri");
+                if (!string.IsNullOrWhiteSpace(serviceUrl.Query))
+                    throw new ArgumentException("serviceUrl may not have any query content");
+                if (string.IsNullOrWhiteSpace(apiKey))
+                    throw new ArgumentException("Null/empty apiKey specified");
+
+                _serviceUrl = serviceUrl;
+                _apiKey = apiKey.Trim();
+            }
+
+            public ArticleSet GetArticles(string searchTerm, int pageIndex)
+            {
+                if (string.IsNullOrWhiteSpace(searchTerm))
+                    throw new ArgumentException("Null/empty searchTerm specified");
+                if (pageIndex < 0)
+                    throw new ArgumentOutOfRangeException("pageIndex", "must be zero or greater");
+
+                var request = WebRequest.Create(string.Format(
+                    "{0}?query={1}&api-key={2}&fields=column_facet,body,title,byline&offset={3}",
+                    _serviceUrl.ToString(),
+                    HttpUtility.UrlEncode(searchTerm.Trim()),
+                    HttpUtility.UrlEncode(_apiKey.Trim()),
+                    pageIndex
+                ));
+
+                string jsonData;
+                using (var stream = request.GetResponse().GetResponseStream())
+                {
+                    using (var reader = new StreamReader(stream))
+                    {
+                        jsonData = reader.ReadToEnd();
+                    }
+                }
+                var results = new JavaScriptSerializer().Deserialize<Resultset>(jsonData);
+                var translatedArticles = new List<Article>();
+                for (var index = 0; index < results.Results.Count; index++)
+                {
+                    var article = results.Results[index];
+                    if (string.IsNullOrWhiteSpace(article.Title)
+                    || string.IsNullOrWhiteSpace(article.Body))
+                        continue;
+                    translatedArticles.Add(new Article(
+                        (pageIndex * PageSize) + index,
+                        article.Title,
+                        article.ByLine,
+                        article.Column_Facet,
+                        article.Body
+                    ));
+                }
+                return new ArticleSet(results.Total, pageIndex, translatedArticles);
+            }
+
+            public int PageSize { get { return 10; } }
+
+            private class Resultset
+            {
+                public Resultset()
+                {
+                    Results = new List<Result>();
+                }
+                public int Offset { get; set; }
+                public int Total { get; set; }
+                public string[] Tokens { get; set; }
+                public List<Result> Results { get; set; }
+
+                public class Result
+                {
+                    public string Title { get; set; }
+                    public string ByLine { get; set; }
+                    public string Column_Facet { get; set; }
+                    public string Body { get; set; }
+                }
+            }
+        }
+
+        public interface IArticleRetriever
+        {
+            ArticleSet GetArticles(string searchTerm, int pageIndex);
+            int PageSize { get; }
+        }
+
+        public class ArticleSet
+        {
+            private ReadOnlyCollection<Article> _articles;
+            public ArticleSet(int totalResultCount, int pageIndex, IEnumerable<Article> articles)
+            {
+                if (totalResultCount < 0)
+                    throw new ArgumentOutOfRangeException(
+                        "totalResultCount",
+                        "must be zero or greater"
+                    );
+                if (pageIndex < 0)
+                    throw new ArgumentOutOfRangeException(
+                        "pageIndex",
+                        "must be zero or greater"
+                    );
+                if (articles == null)
+                    throw new ArgumentNullException("articles");
+
+                var articlesTidied = new List<Article>();
+                foreach (var article in articles)
+                {
+                    if (article == null)
+                        throw new ArgumentException("Null entry encountered in articles");
+                    articlesTidied.Add(article);
+                }
+                if ((totalResultCount == 0) && articlesTidied.Any())
+                    throw new ArgumentException("Article set must be empty if total count is 0");
+
+                TotalResultCount = totalResultCount;
+                PageIndex = pageIndex;
+                _articles = articlesTidied.AsReadOnly();
+            }
+
+            public int TotalResultCount { get; private set; }
+            public int PageIndex { get; private set; }
+            public ReadOnlyCollection<Article> Articles { get { return _articles; } }
+        }
+
+        public class Article
+        {
+            public Article(int key, string title, string byLine, string keywords, string body)
+            {
+                if (string.IsNullOrWhiteSpace(title))
+                    throw new ArgumentNullException("Null/empty title specified");
+                if (string.IsNullOrWhiteSpace(body))
+                    throw new ArgumentNullException("Null/empty body specified");
+
+                Key = key;
+                Title = title.Trim();
+                ByLine = (byLine ?? "").Trim();
+                Keywords = (keywords ?? "").Trim();
+                Body = body.Trim();
+            }
+
+            public int Key { get; private set; }
+            public string Title { get; private set; }
+            public string ByLine { get; private set; }
+            public string Keywords { get; private set; }
+            public string Body { get; private set; }
+        }
+    }
+
+### Celebrate good times!
+
+With this data (over 86,000 keys) I set up some initial test runs - comparing the performance of the .Net Dictionary against my Ternary Search Tree implementation by taking 1000 keys at random from the source data and requesting them all from the .Net Dictionary and then the TST. The retrieval was performed 1000 times successively against each dictionary and then entire process was looped 5 times. Perhaps not the ultimate in the application of the scientific method, but good enough to get an idea.
+
+Running the test app I saw a performance improvement over the .Net Dictionary by the TST with it doing the work over 2.7 times as fast. Amazing! (This was in a release build, debug builds still showed impressive improvement but not _as_ great; around 2x the speed). This was a real result and clearly a marked improvement over my meagre efforts! :)
+
+However.. due to the manner in which the TST performs its lookups, this is really the ideal case for it and so further investigation is required before it can be considered a complete success.
+
+So to look further into it I took the same randomly-selected keys and reversed half of them so that only have of them should match (there will be a few single character keys and some pallindromes - I ran a quick a quick check and there were 275 in the set 86,728 keys so they're fairly negligible). This time the TST was over 1.9 times as fast as the .Net Dictionary - still definitely an improvement but not as dramatic. If I reverse _all_ of the keys then it turns out the TST is _just_ slower than the .Net Dictionary (over 97% the speed, but not quite as fast nonetheless).
+
+Before I go too far down this path, though, there's something else that's bugging me. The order in which the keys are inserted while the tree is being constructed is going to alter the internal structure of the completed tree. It seems very unlikely that every order will have identical retrieval performance. Which brings on to thinking hard about..
+
+### Insertion Order
+
+The Dobbs article makes a mention about varying performance due to key insertion order:
+
+> If you insert the nodes in sorted order, the result is a long skinny tree that is very costly to build and search. Fortunately, if you insert the nodes in random order, a binary search tree is usually close to balanced.
+
+and
+
+> You can build a completely balanced tree by inserting the median element of the input set, then recursively inserting all lesser elements and greater elements.
+
+To test it out I tried a few orderings on inserted items; as they appeared in the source data, applying a random sort, alphabetical and the median-item method recommended above.
+
+I re-ran the earlier tests, reversing none of the keys, half of the keys and then all of the keys to get a rough idea of how that might affect the results. Each time the median-item sorting approach was fastest. *But*.. in the best cases it wasn't much over 2% faster than the random-ordered insertions and less than 2% faster than the unordered data. It was about 8.5% faster than the alphabetical-sorted keys so (as expected from the above) that was considerably worse. When _all_ keys were reversed the improvements were in the region of 0.5%, 0.2% and 3.7% (for random, unordered and alphabetical). So there's definitely an improvement to be had but it's much smaller between randomly sorted keys and "ideally" sorted keys (a well-balanced tree) than between the .Net Dictionary and the TST.
+
+If the data was to infrequently updated and heavily read then ensuring the tree is well-balanced is most likely worth it, but in other scenarios it would be a toss-up as to whether re-sorting the data at each update is worth the initial hit.
+
+### Measure of balance
+
+If there was a standard way to measure how well balanced the tree is then it might be feasible to apply a threshold that, once crossed, triggers a re-build of the tree. Oddly, though, I had a quick scour of the internet and couldn't find a standard metric! The gist is that the less "deep" a tree is, the better - which makes sense as the seek operations can be envisaged as travelling down the branches of the tree and if a tree is wider than it is deep then retrievals can generally be expected to require less operations.
+
+So I considered trying to measure the width and depth of the tree, then the range of tree lengths (then a few other things)... and finally settled on calculating the average depth-to-key-length ratio. This will always be greater than one (unless there are no items, in which case it should be considered undefined) since no key can be contained in less elements than there are characters in the key (after any manipulations by the keyNormaliser). For the data I was using, I got "balance factors" (for want of a better name!) of 2.17, 2.13, 6.65 and 1.96 for the randomly-sorted keys, the unsorted keys, the alphabetically-sorted keys and the median-item-sorted keys, each of which tie in roughly with the differences in seek times I described above.
+
+### Final results
+
+Taking a well-balanced tree with my sample data, I ran it through the same batch of tests (with varying proportions of key flipped) to see how good we could get it:
+
+No keys reversed (so _all_ keys requested present in data): Over 2.8x the retrieval performance of the .Net Dictionary.
+
+75% of the keys reversed: Over 1.4x
+
+50%: Over 1.2x
+
+97%: Almost 1.1x
+
+98%: Between 1.0x and 1.1x
+
+99%: Slightly slower, about 99% the speed of the .Net Dictionary
+
+All keys reversed: Slower again, about 97% the performance
+
+All in all, pretty impressive! So long as at least 99% of requests are for keys that are present then the TST will offer an improvement, and a drastic one when _most_ requests are for valid keys.
+
+It's been a fun venture and left me think I should fill in my algorithm knowledge a little more - it's not every day that I'm going to obsess over a particular structure, but it's always good to increase my awareness of what's out there. 
+
+The code can be found in the repository [https://bitbucket.org/DanRoberts/dictionaryspeedtests](https://bitbucket.org/DanRoberts/dictionaryspeedtests) - along with a few tests I ran and some of the approaches I tried out that I talked about at the top of the post - but the TST class is basically the following (again, slightly trimmed for brevity). As my original premise was to consider an immutable store I haven't implemented any add / delete / update methods but now that I'm happy with the performance boost I may well do - but then I'll have to make more decisions into whether I should try to build in a re-balancing threshold mechanism and I think instead I might have a little rest! :)
+
+    using System;
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.Collections.ObjectModel;
+    using System.Linq;
+
+    namespace TSTExample
+    {
+        public class TernarySearchTreeDictionary<TValue>
+        {
+            private Node _root;
+            private IStringNormaliser _keyNormaliser;
+            private ReadOnlyCollection<string> _keys;
+
+            public TernarySearchTreeDictionary(
+                IEnumerable<KeyValuePair<string, TValue>> data,
+                IStringNormaliser keyNormaliser)
+            {
+                if (data == null)
+                    throw new ArgumentNullException("data");
+                if (keyNormaliser == null)
+                    throw new ArgumentNullException("keyNormaliser");
+
+                Node root = null;
+                var nodeCount = 0;
+                var keys = new HashSet<string>(keyNormaliser);
+                var depthToLengthRatio = new List<float>();
+                foreach (var entry in data)
+                {
+                    var key = entry.Key;
+                    if (key == null)
+                        throw new ArgumentException("Null key encountered in data");
+                    var normalisedKey = keyNormaliser.GetNormalisedString(key);
+                    if (normalisedKey == "")
+                        throw new ArgumentException("normalised key is blank: " + key);
+                    if (keys.Contains(normalisedKey))
+                        throw new ArgumentException("duplicate normalised key: " + key);
+                    keys.Add(key);
+
+                    if (root == null)
+                    {
+                        root = new Node() { Character = normalisedKey[0] };
+                        nodeCount++;
+                    }
+
+                    var node = root;
+                    var index = 0;
+                    var depth = 1;
+                    while (true)
+                    {
+                        if (node.Character == normalisedKey[index])
+                        {
+                            index++;
+                            if (index == normalisedKey.Length)
+                            {
+                                node.IsKey = true;
+                                node.Value = entry.Value;
+                                depthToLengthRatio.Add(depth / normalisedKey.Length);
+                                break;
+                            }
+                            if (node.MiddleChild == null)
+                            {
+                                node.MiddleChild = new Node() { Character = normalisedKey[index] };
+                                nodeCount++;
+                            }
+                            node = node.MiddleChild;
+                        }
+                        else if (normalisedKey[index] < node.Character)
+                        {
+                            if (node.LeftChild == null)
+                            {
+                                node.LeftChild = new Node() { Character = normalisedKey[index] };
+                                nodeCount++;
+                            }
+                            node = node.LeftChild;
+                        }
+                        else
+                        {
+                            if (node.RightChild == null)
+                            {
+                                node.RightChild = new Node() { Character = normalisedKey[index] };
+                                nodeCount++;
+                            }
+                            node = node.RightChild;
+                        }
+                        depth++;
+                    }
+                }
+
+                _root = root;
+                _keyNormaliser = keyNormaliser;
+                _keys = keys.ToList().AsReadOnly();
+                BalanceFactor = depthToLengthRatio.Any() ? depthToLengthRatio.Average() : 0;
+            }
+
+            private class Node
+            {
+                public char Character { get; set; }
+                public Node LeftChild { get; set; }
+                public Node MiddleChild { get; set; }
+                public Node RightChild { get; set; }
+                public bool IsKey { get; set; }
+                public TValue Value { get; set; }
+            }
+
+            public int Count
+            {
+                get { return _keys.Count; }
+            }
+
+            public IEnumerable<string> Keys
+            {
+                get { return _keys; }
+            }
+
+            public float BalanceFactor { get; private set; }
+
+            public bool TryGetValue(string key, out TValue value)
+            {
+                if (key == null)
+                    throw new ArgumentNullException("key");
+                var normalisedKey = _keyNormaliser.GetNormalisedString(key);
+                if (normalisedKey != "")
+                {
+                    var node = _root;
+                    var index = 0;
+                    while (true)
+                    {
+                        if (node.Character == normalisedKey[index])
+                        {
+                            index++;
+                            if (index == normalisedKey.Length)
+                            {
+                                if (node.IsKey)
+                                {
+                                    value = node.Value;
+                                    return true;
+                                }
+                                break;
+                            }
+                            node = node.MiddleChild;
+                        }
+                        else if (normalisedKey[index] < node.Character)
+                            node = node.LeftChild;
+                        else
+                            node = node.RightChild;
+                        if (node == null)
+                            break;
+                    }
+                }
+                value = default(TValue);
+                return false;
+            }
+
+            public TValue this[string key]
+            {
+                get
+                {
+                    TValue value;
+                    if (!TryGetValue(key, out value))
+                        throw new KeyNotFoundException();
+                    return value;
+                }
+            }
+        }
+
+        public interface IStringNormaliser : IEqualityComparer<string>
+        {
+            string GetNormalisedString(string value);
+        }
+    }
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.

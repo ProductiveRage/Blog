@@ -1,0 +1,36 @@
+## Being a dirty GitHub-to-BitBucket turncoat
+
+After having a bit of a run-in with GitHub a few weeks ago ([GitHub and I might be having a falling-out](Post22)) I was wondering if there was any easy migration route from GitHub over to BitBucket, which I'd been using to house a prototype project I've been doing related to work. We use Mercurial (with [Kiln](http://www.fogcreek.com/kiln/)) and after getting over the initial CVS-to-Mercurial teething problems I'm well into it (though being better than CVS isn't _that_ huge an undertaking! :)
+
+The last straw was when I wanted to rename a project within a Visual Studio solution. Using TortoiseHg this is easy; perform the rename, use some "right-click / TortoiseHg / Guess renames" action. (Command line options also available!) But with Git I was struggling to find the best way to do it - I read a load of articles and a handful of StackOverflow posts. It _seems_ like renaming files without changing their contents and _then_ changing their contents will ensure the history is maintained. Usually. Except some times. Or during a full moon.
+
+Ok, I admit, I didn't actually bother trying! And at this point I think I'm glad I didn't, since moving over to BitBucket turned out to be really easy with built-in tools.
+
+### A false start
+
+After doing some initial reading around I found out about the BitBucket "Import Repository" functionality. Amazing! Point it at my GitHub repositories and import them into new BitBucket Mercurial repos - ideal! So I select "Git/GitHub" as the source and it set "Git" as the "Repository type", fair enough - it's realised that it has to import from Git! Selected Language as "C#" and hit "Import" and.. it all looked rosey!
+
+I set up Username Aliases to my BitBucket user and had a poke around the history and found it all looked good. It even imported the tags from GitHub which I'd been concerned about since one of the articles I'd read had put some doubt in my mind regarding those.
+
+Then I tried to clone the repository onto my computer. HTTP 501 "Not Implemented". Hmmm.. oh well, it was late, maybe I was doing something dumb.
+
+So then I tried again the next day at work. Same issue. Not too reassuring :( I had a poke around the "My repositories" section and saw that the import repo was marked as being "Git". I tried cloning it and it worked. So imported yes, converted to Mercurial no. Back to the drawing board.
+
+### Hg Convert
+
+Thankfully the solution I've ended up with wasn't much more complicated and uses a standard Mercurial Extension ([Convert](http://mercurial.selenic.com/wiki/ConvertExtension)). The quick-fire version is to:
+
+1. Ensure the "convert" extension is enabled by going into Global Settings in TortoiseHg (or adding "convert=" to the "[extensions]" section of your mercurial.ini file manually if you're Tortoise-adverse)
+1. Open a command prompt
+1. Enter "hg convert c:\folder\name\of\git\repo" (quoting the location if there are any spaces)
+1. This will create a new folder in the command prompt's current location, taking the Git repo's name and suffixing with "-hg" (so "repo-hg" in this example)
+1. Move into folder and enter "hg update" to pull in the files
+1. Profit! :)
+
+I created a new (Mercurial!) repository in BitBucket and pushed from the local repo up to it. Easy!
+
+The repository I was playing with here had various commits by me under different usernames. I set up aliases to my BitBucket account for these but the convert extension offers options to remap author names so that these aliases aren't required (see the [Convert docs](http://mercurial.selenic.com/wiki/ConvertExtension)).
+
+### Looking back
+
+I must admit that part of the reason I started up the GitHub account was to build up a portfolio of demo code for when the day comes that I decide I want to look for alternative employment. And for some reason having a GitHub account just sounds cooler than BitBucket! But maybe that's just been engrained into me by the many many references to a GitHub portfolio that I've heard made on [Hacker News](http://news.ycombinator.com) over the years. Plus I'm going to miss the GitHub cat logo - BitBucket just doesn't seem quite as friendly without it!

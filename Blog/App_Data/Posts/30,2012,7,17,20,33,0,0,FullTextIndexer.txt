@@ -1,0 +1,164 @@
+﻿## The Full Text Indexer
+
+I started out on a journey a few months ago being frustrated by the [Lucene.net](http://incubator.apache.org/lucene.net/) integration we had with one of our products at work (I'm not badmouthing the Lucene project, I'm wholeheartedly blaming the integration I inherited!) and wondering just how difficult it would be to write a Full Text Indexer which could analyse generic content and generate some form of structure which could look up strings and assign weights to the source material, offering the best matches.
+
+And now I've got it to the point that I've tried the resulting solution out in a variety of configurations and am using it to handle searches on this blog and incorporating an autocomplete functionality (that may or may not benefit from some more tweaking yet) to go with it. I'm quite proud of it!
+
+Before I say any more, this was written to deal with the search tasks I needed and as such is not a direct replacement for Lucene, it's just an alternative I wanted to explore (for example I know that Lucene makes big claims about the number of documents it can maintain, I'm in no position right now to make any sorts of boasts on that scale!).
+
+Here's a really basic example that would analyse data from:
+
+    public interface IArticle 
+    {
+        int Id { get; }
+        
+        /// <summary>
+        /// This will never be null or blank
+        /// </summary>
+        string Title { get; }
+
+        /// <summary>
+        /// This will never be null or blank
+        /// </summary>
+        string Content { get; }
+    }
+
+and generate an IIndexData&lt;int&gt; instance which has this method (among others, but this is all we need for this first example):
+
+    public interface IIndexData<TKey>
+    {
+        /// <summary>
+        /// This will throw an exception for null or blank input. It will never return null.
+        /// If there are no matches then an empty list will be returned.
+        /// </summary>
+        NonNullImmutableList<WeightedEntry<TKey>> GetMatches(string source);
+    }
+
+by defining **"Content Retrievers"** (which extract sections of keyed content; meaning content that is associated with a Key that represents each source data item), a **"Key Comparer"** (which defines which keyed content instances belong to the same data item in order to group results together), a **"Token Breaker"** (which reduces content strings into individual words), a **"String Normaliser"** (which compares individual words in order to group them together but will also be used to compare values passed to the GetMatches method shown above) and **"Weighted Entry Combiner"** (which describes how tokens that appear multiple times for the same data item should have their weights combined):
+
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using Common.Lists;
+    using Common.Logging;
+    using FullTextIndexer.Indexes;
+    using FullTextIndexer.Indexes.TernarySearchTree;
+    using FullTextIndexer.IndexGenerators;
+    using FullTextIndexer.TokenBreaking;
+
+    namespace FullTextIndexerDemo
+    {
+        public class Example
+        {
+            public IIndexData<int> GetIndex(NonNullImmutableList<IArticle> articles)
+            {
+                if (articles == null)
+                    throw new ArgumentNullException("articles");
+
+                return GetIndexGenerator().Generate(articles);
+            }
+
+            private IIndexGenerator<IArticle, int> GetIndexGenerator()
+            {
+                var contentRetrievers = new List<ContentRetriever<IArticle, int>>
+                {
+                    new ContentRetriever<IArticle, int>(
+                        article => new PreBrokenContent<int>(article.Id, article.Title),
+                        token => 5f
+                    ),
+                    new ContentRetriever<IArticle, int>(
+                        article => new PreBrokenContent<int>(article.Id, article.Content),
+                        token => 1f
+                    )
+                };
+
+                return new IndexGenerator<IArticle, int>(
+                    contentRetrievers.ToNonNullImmutableList(),
+                    new IntEqualityComparer(),
+                    new DefaultStringNormaliser(),
+                    new WhiteSpaceTokenBreaker(),
+                    weightedValues => weightedValues.Sum(),
+                    new NullLogger()
+                );
+            }
+        
+            private class IntEqualityComparer : IEqualityComparer<int>
+            {
+                public bool Equals(int x, int y) { return (x == y); }
+                public int GetHashCode(int obj) { return obj; }
+            }
+        }
+    }
+
+That was a lot of jargon that took more work to write than the code example! :)
+
+#### Content Retrievers
+
+These describe describe two simple things; a method to extract a particular content string from an item (along with a Key for that item) and a method to assign a weight to each token that is extracted from that content after it's been passed through a Token Breaker. In this example, more weight is given to "tokens" (for the time being we can take this to refer to a single word) matched in the Article Title than in the Article Content. Each Content Retriever can return null for a given Article if there is no content to retrieve for that instance - eg. if IArticle had an optional property for CategoryName for an instance then a Content Retriever might return null if the instance has no Category assigned to it.
+
+#### Key Comparer
+
+Here, the Key uniquely representing each Article is the Id value so the Key Comparer for this example is just an IEqualityComparer&lt;int&gt; implementation that compares integers - easy.
+
+#### Token Breakers
+
+This example uses a "WhiteSpaceTokenBreaker" which will take the string content from the Content Retrievers and break it into individual words by splitting on whitespace characters. Straight forward!
+
+#### String Normaliser
+
+The String Normaliser is essentially an IEqualityComparer&lt;string&gt; and will be used to generate a lookup of tokens and compare them against values passed into the GetMatches method. The DefaultStringNormaliser will remove all punctuation, exchange all non-latin characters for latin equivalents and lower-case them all. For the most basic lookups I had in mind, this does the hard work.
+
+#### Weighted Entry
+
+The Weighted Entry is a combination of a Key that identifies a data item and a numeric weight indicating the quality of the match; always positive and the higher the better.
+#### Weighted Entry Combiner
+
+This takes a set of match weights for a given token and must return a single value representing their combined total. In the example here I've just taken a sum of them, so if an Article has the word "giraffe" once in the Title and three times in the Content and "giraffe" was searched for, then match weights 5, 1, 1, 1 would be combined into 8 but it may be equally valid to take the maximum weight instead of considering Articles to be a better match if they have the same word more times (in which case "weightedValues => weightedValues.Max()" would be specified).
+
+#### The Logger
+
+While the index is being generated, status messages may be logged such as "Work completed: x%". This example ignores all log messages by passing a NullLogger to the index generator.
+
+### Customisation / Variations
+
+This is a very basic example but it can be extended easily to handle other requirements or data structures. In general the Content Retrievers and Key Comparer are altered to deal with different input data while the Token Breakers, String Normaliser and Weighted Entry Combiner are varied to process that extracted data in a different manner.
+
+The "[English Language Plurality String Normaliser (link to Bitbucket file)](https://bitbucket.org/DanRoberts/full-text-indexer/src/4d1c288cb7f7/FullTextIndexer/Indexes/TernarySearchTree/EnglishPluralityStringNormaliser.cs)" (which I've gone on about at considerable length in [previous posts](Post28)) could replace the DefaultStringNormaliser (or wrap it, since it will take an "optionalPreNormaliser" as a constructor argument) so that the token matching is more flexible; searching for "giraffes" would now match an Article that included the word "giraffe" in the Title and/or Content even if it didn't also include "giraffes".
+
+Likewise, the WhiteSpaceTokenBreaker could be replaced with an alternative implementation that also breaks on commas (for content that doesn't also follow commas with spaces) or on the various bracket characters (especially useful for breaking content that includes code samples; so that "List&lt;string&gt;" is broken down into "List" and "string"). This can be done with the "WhiteSpaceExtendingTokenBreaker" class which replaces a fixed (but customisable) set of characters with spaces and then passes off processing to another Token Breaker (usually a WhiteSpaceTokenBreaker) to handle the altered content.
+
+### Multi-word Matching
+
+With the above configuration, only single words would yield results when GetMatches is called on the index data since all of the content is broken into single words and so any multiple word "source" strings would fail to be matched without additional processing. For cases where the order of the words in a multiple word terms is not important there is an IIndexData&lt;TKey&gt; extension method:
+
+    /// <summary>
+    /// This will break a given source string and return results based upon the combination of
+    /// partial matches (so results that only match part of the source string may be included
+    /// in the returned data). The token breaker and the match combiner must be specified by the
+    /// caller - if the match combiner returns zero then the result will not be included in the
+    /// final data. To require that all tokens in the source content be present for any returned
+    /// results, the following matchCombiner could be specified:
+    /// 
+    ///  (tokenMatches, allTokens) =>
+    ///    (tokenMatches.Count < allTokens.Count)
+    ///      ? 0 : tokenMatches.SelectMany(m => m.Weights).Sum()
+    /// 
+    /// </summary>
+    public static NonNullImmutableList<WeightedEntry<TKey>> GetPartialMatches<TKey>(
+        this IIndexData<TKey> index,
+        string source,
+        ITokenBreaker tokenBreaker,
+        MatchCombiner matchCombiner
+    )
+
+If this is called with the same Token Breaker as used by the index generator then the multi-word search term can be split up in the same manner and each resulting token searched for in the index. Then a combined weight must be determined for each matched token, this calculation is handled by the specified MatchCombiner. I won't go into too much detail about it here, I may do another time or you can look at the code for the nitty gritty (there's a Bitbucket link at the bottom of this post). I think the most common case is that illustrated in the summary comment in the code above; where all tokens that result from breaking the search term must be matched in order for results to be considered valid, and where the combined weight of valid matches is taken by summing the weights of all of the component matches.
+
+### Still to come..
+
+This has still only touched on a simple use case. I'm hoping to cover in future posts how an index could handle multi-lingual content, how it could handle multi-word matching that increases the weight of the matching if tokens that are adjacent in the search term appear adjacent in the source data, how the index can be updated or have items added and removed, how the AutoComplete on this blog is generated and how the term highlighting on the search page works! Who knows, I may even go right off in the deep end and contemplate writing a search term parser that can perform searches on the index with quoted terms, boolean operators and who knows what! But that's all _definitely_ for another day :)
+
+### The Code!
+
+The code for this project is all available at Bitbucket: "[The Full Text Indexer](https://bitbucket.org/DanRoberts/full-text-indexer)".
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.

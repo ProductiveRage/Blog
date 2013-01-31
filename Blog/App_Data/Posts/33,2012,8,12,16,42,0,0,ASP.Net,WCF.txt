@@ -1,0 +1,181 @@
+﻿## Dependency Injection with a WCF Service
+
+Following recently discovering how easy it is to implement Dependency Injection into ASP.Net MVC Controllers by rolling my own ControllerFactory I wanted to see if the same sort of thing could be done for some Web Services I'm working on - I've never seen any production code that does it but seemed like the sort of thing that should be possible!
+
+"Discovering" in this case only meant googling for the extension points that I'd heard were built into MVC as standard; hardly the most earth-shattering of realisations! :) In case it saves anyone time, it's as simple as having an implementation of System.Web.Mvc.IControllerFactory and specifying this as the ControllerFactory to be used in the Application_Start method (in Global.asax) -
+
+    protected void Application_Start()
+    {
+        AreaRegistration.RegisterAllAreas();
+        RegisterRoutes(RouteTable.Routes);
+        ControllerBuilder.Current.SetControllerFactory(new ControllerFactory());
+    }
+
+The most basic implementation runs along the lines of:
+
+    using System;
+    using System.Web.Mvc;
+    using System.Web.Routing;
+    using System.Web.SessionState;
+
+    namepsace Demo
+    {
+        public class ControllerFactory : IControllerFactory
+        {
+            public IController CreateController(
+                RequestContext requestContext,
+                string controllerName)
+            {
+                // Return appropriate controller here, using whatever factory class or dependency
+                // injection method is appropriate to the solution..
+            }
+
+            public SessionStateBehavior GetControllerSessionBehavior(
+                RequestContext requestContext,
+                string controllerName)
+            {
+                return SessionStateBehavior.Default;
+            }
+
+            public void ReleaseController(IController controller) { }
+        }
+    }
+
+where requestContext exposes an HttpContext property so Cache, Request, Response and Server can be accessed.
+
+All very straight forward (which made me wish I'd gotten around to looking into this long ago!).
+
+### WCF Services
+
+I wasn't as confident that it would be as simple to construct an equivalent for a WCF Web Service as I think there was quite a culture shift from the Microsoft that created WCF for .Net 3.5 and that which wrote the MVC framework, that tried to make use of existing standards, that included jQuery with the framework and that released the framework code under an open source license! But it couldn't hurt to try!
+
+In the Service's ServiceHost declaration a Factory may be specified which will be used to instantiate the Service type instead of the default being taken, which is to try to find a public parameter-less constructor and to call that.
+
+    <%@ ServiceHost
+        Language="C#"
+        Debug="true"
+        Service="Demo.ExampleWebService"
+        Factory="Demo.ExampleWebServiceHostFactory"
+        CodeBehind="ExampleWebService.svc.cs"
+    %>
+
+The factory needs to inherit from the WebServiceHostFactory class. A given factory implementation may handle the instantiation of various Service types but for my purposes, and for the example here, I'm going to work on the basis that there is one factory per service (if different services are to be handled by a single factory then the "serviceType" argument passed around can be consulted to alter the behaviour as required).
+
+The instantiation process follows theses steps:
+
+1. The CreateServiceHost method on the factory specified in the Service declaration is called (this is a method of WebServiceHostFactory that must be overridden)
+1. This returns a class that inherits from ServiceHost which registers a "Instance Provider" that will be used to instantiate the actual Service type (this Instance Provider must implement IContractBehaviour, so that it may be added tohe Behaviours collection, and implement IInstanceProvider to mark it as being able to instantiate the target type)
+1. The GetInstance method (which is part of the IInstanceProvider interface) is called; this must return an instance of the Service class to handle the request
+
+Example code may make this clearer!
+
+    using System;
+    using System.ServiceModel;
+    using System.ServiceModel.Activation;
+    using System.ServiceModel.Channels;
+    using System.ServiceModel.Description;
+    using System.ServiceModel.Dispatcher;
+
+    namespace Demo
+    {
+        public class ExampleWebServiceHostFactory : WebServiceHostFactory
+        {
+            protected override ServiceHost CreateServiceHost(
+                Type serviceType,
+                Uri[] baseAddresses)
+            {
+                return new ExampleWebServiceHost(serviceType, baseAddresses);
+            }
+
+            private class ExampleWebServiceHost : ServiceHost
+            {
+                public ExampleWebServiceHost(
+                    Type serviceType,
+                    params Uri[] baseAddresses) : base(serviceType, baseAddresses)
+                {
+                    foreach (var cd in this.ImplementedContracts.Values)
+                    {
+                        cd.Behaviors.Add(new ExampleWebServiceProvider());
+                    }
+                }
+            }
+
+            private class ExampleWebServiceProvider : IInstanceProvider, IContractBehavior
+            {
+                public object GetInstance(InstanceContext instanceContext)
+                {
+                    // TODO: Return service instance here
+                }
+
+                public object GetInstance(InstanceContext instanceContext, Message message)
+                {
+                    return this.GetInstance(instanceContext);
+                }
+
+                public void ReleaseInstance(InstanceContext instanceContext, object instance) { }
+
+                public void AddBindingParameters(
+                    ContractDescription contractDescription,
+                    ServiceEndpoint endpoint,
+                    BindingParameterCollection bindingParameters) { }
+            
+                public void ApplyClientBehavior(
+                    ContractDescription contractDescription,
+                    ServiceEndpoint endpoint,
+                    ClientRuntime clientRuntime) { }
+
+                public void ApplyDispatchBehavior(
+                    ContractDescription contractDescription,
+                    ServiceEndpoint endpoint,
+                    DispatchRuntime dispatchRuntime)
+                {
+                    dispatchRuntime.InstanceProvider = this;
+                }
+
+                public void Validate(
+                    ContractDescription contractDescription,
+                    ServiceEndpoint endpoint) { }
+            }
+        }
+    }
+
+Ta-da! The only thing to fill in is the actual instantiation of the service type; this could be handled with a Ninject or other Dependency Injection Framework call or it could be a good old-fashioned factory class which pulls in all the various dependencies and returns a ready-to-rumble Service instance.
+
+### Some workarounds for removing ASP.Net dependencies
+
+When I've used WCF to build Web Services in the past, before using this method of dependency inversion, I've been happy enough using the ASP.Net Cache and Request references but now that I'm working with Dependency-Injected classes I've wanted to extract these dependencies so that the Service class can be tested outside of the ASP.Net environment.
+
+#### Cache
+
+The first thing to approach was that I wanted to pass a generic cache reference from the factory. The current thinking (for .Net 4.0 onwards at least) seems to favour the use of the MemoryCache found in System.Runtime.Caching ([this Code Project article](http://www.codeproject.com/Articles/290935/Using-MemoryCache-in-Net-4-0) is a reasonable introduction). So wrote an implementation of ICache (which is internal to my project) that makes use of the MemoryCache. Job done!
+
+#### Client IP Address
+
+Something else I struggled with initially was getting the IP Address of the client making the request (information that I include in the Request logging). This was easy when accessing the ASP.Net Request directly but proved more challenging without it. As usual, some Googling and experimentation yielded an answer. This method may be added to the ExampleWebServiceProvider from the above example:
+
+    /// <summary>
+    /// This may return an IPv4 or IPv6 format address. It will return null if unable to retrieve
+    /// this information.
+    /// </summary>
+    private string TryToGetClientIpAddress()
+    {
+        var currentOperationContext = OperationContext.Current;
+        if (currentOperationContext == null)
+            return null;
+        object nameMessagePropertyRaw;
+        if (!currentOperationContext.IncomingMessageProperties.TryGetValue(
+            RemoteEndpointMessageProperty.Name,
+            out nameMessagePropertyRaw)
+        )
+            return null;
+        var nameMessageProperty = nameMessagePropertyRaw as RemoteEndpointMessageProperty;
+        if (nameMessageProperty == null)
+            return null;
+        var ipAddress = nameMessageProperty.Address;
+        if (string.IsNullOrWhiteSpace(ipAddress))
+            return null;
+        return ipAddress.Trim();
+    }
+
+
+These are the two biggest things that struck me when moving over to the new Service instantiation approach, I'm sure there will be similar cases but it's reassuring to know that it seems like in most cases the .net Framework has us covered one way or another, it's just a case of finding a different place to look for the data!

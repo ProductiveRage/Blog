@@ -1,0 +1,21 @@
+﻿/* Unset the layout settings are not appropriate for print */
+body div.Header,
+body div.WrapperOuter,
+body div.Wrapper,
+body div.Main,
+body div.WrapperOuter div.Wrapper div.Main.HasSideBar
+{
+	width: 100%;
+	float: none;
+	left: 0;
+}
+
+/* Tweak some other layout issues */
+body div.Header { margin: 0 0 16px 0; }
+body div.Content { padding: 16px; }
+
+/* Don't need this at all for the print layout */
+div.SideBar { display: none; }
+
+/* Ensure this is shown even if it's been hidden for smaller viewports */
+div.Footer { display: block; }

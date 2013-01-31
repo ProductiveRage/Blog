@@ -1,0 +1,558 @@
+## Dynamically applying interfaces to objects - Part 3
+
+In this final part of this mini series there are two enhancements I want to add:
+
+1. For cases where the same interface may be applied to multiple objects, I want to replace the WrapObject method (which applies the interface to a single reference) with a GenerateInterfaceApplier method which returns an object that applies a specified interface to any given reference but only generating the IL once
+1. The ability to recursively wrap returned data - eg.
+
+be able to apply ITest to the ExampleObject reference:
+
+    public interface ITest
+    {
+        IEmployee Get(int id);
+    }
+
+    public interface IEmployee
+    {
+        int Id { get; }
+        string Name { get; }
+    }
+
+    public class ExampleObject
+    {
+        public object Get(int id)
+        {
+            if (id != 1)
+                throw new ArgumentException("Only id value 1 is supported");
+            return new Person(1, "Ted");
+        }
+
+        public class Person
+        {
+            public Person(int id, string name)
+            {
+                if (string.IsNullOrEmpty(name))
+                    throw new ArgumentException("Null/blank name specified");
+                Id = id;
+                Name = name.Trim();
+            }
+            public int Id { get; private set; }
+            public string Name { get; private set; }
+        }
+    }
+
+### Task 1: The IInterfaceApplier class
+
+The first part is fairly straight-forward so I'll jump straight in -
+
+    public class InterfaceApplierFactory : IInterfaceApplierFactory
+    {
+        private string _assemblyName;
+        private bool _createComVisibleClasses;
+        private Lazy<ModuleBuilder> _moduleBuilder;
+        public InterfaceApplierFactory(string assemblyName, ComVisibility comVisibilityOfClasses)
+        {
+            assemblyName = (assemblyName ?? "").Trim();
+            if (assemblyName == "")
+                throw new ArgumentException("Null or empty assemblyName specified");
+            if (!Enum.IsDefined(typeof(ComVisibility), comVisibilityOfClasses))
+                throw new ArgumentOutOfRangeException("comVisibilityOfClasses");
+            
+            _assemblyName = assemblyName;
+            _createComVisibleClasses = (comVisibilityOfClasses == ComVisibility.Visible);
+            _moduleBuilder = new Lazy<ModuleBuilder>(
+                () =>
+                {
+                    var assemblyBuilder = Thread.GetDomain().DefineDynamicAssembly(
+                        new AssemblyName(_assemblyName),
+                        AssemblyBuilderAccess.Run
+                    );
+                    return assemblyBuilder.DefineDynamicModule(
+                        assemblyBuilder.GetName().Name,
+                        false
+                    );
+                },
+                true // isThreadSafe
+            );
+        }
+
+        public enum ComVisibility
+        {
+            Visible,
+            NotVisible
+        }
+
+        public IInterfaceApplier<T> GenerateInterfaceApplier<T>()
+        {
+            if (!typeof(T).IsInterface)
+                throw new ArgumentException("typeparam must be an interface type");
+
+            var typeName = "InterfaceApplier" + Guid.NewGuid().ToString("N");
+            var typeBuilder = _moduleBuilder.Value.DefineType(
+                typeName,
+                TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.AutoClass |
+                TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit |
+                TypeAttributes.AutoLayout,
+                typeof(object),
+                new Type[] { typeof(T) }
+            );
+
+            // The content from the previous posts goes here (generating the constructor,
+            // properties and methods)..
+
+            return new InterfaceApplier<T>(
+                src => (T)Activator.CreateInstance(
+                    typeBuilder.CreateType(),
+                    src
+                )
+            );
+        }
+
+        public IInterfaceApplier GenerateInterfaceApplier(Type targetType)
+        {
+            var generate = this.GetType().GetMethod("GenerateInterfaceApplier", Type.EmptyTypes);
+            var generateGeneric = generate.MakeGenericMethod(targetType);
+            return (IInterfaceApplier)generateGeneric.Invoke(this, new object[0]);
+        }
+
+        private class InterfaceApplier<T> : IInterfaceApplier<T>
+        {
+            private Func<object, T> _conversion;
+            public InterfaceApplier(Func<object, T> conversion)
+            {
+                if (!typeof(T).IsInterface)
+                    throw new ArgumentException("Invalid typeparam - must be an interface");
+                if (conversion == null)
+                    throw new ArgumentNullException("conversion");
+                _conversion = conversion;
+            }
+
+            public Type TargetType
+            {
+                get { return typeof(T); }
+            }
+
+            public T Apply(object src)
+            {
+                return _conversion(src);
+            }
+
+            object IInterfaceApplier.Apply(object src)
+            {
+                return Apply(src);
+            }
+        }
+    }
+
+    public interface IInterfaceApplierFactory
+    {
+        IInterfaceApplier<T> GenerateInterfaceApplier<T>();
+        IInterfaceApplier GenerateInterfaceApplier(Type targetType);
+    }
+
+    public interface IInterfaceApplier<T> : IInterfaceApplier
+    {
+        new T Apply(object src);
+    }
+
+    public interface IInterfaceApplier
+    {
+        Type TargetType { get; }
+        object Apply(object src);
+    }
+
+Using this class means that we only need one instance of the ModuleBuilder no matter how many interfaces we're wrapping around objects and an "IInterfaceApplier" is returned instead of a reference to the interface-wrapped object. Note that I've used the .Net 4.0 Lazy class to instantiate the ModuleBuilder only the first time that it's required, but if you're using an earlier version of .Net then this could be replaced with the implementation (see my previous post about this [here](Post6)) or even by instantiating it directly from within the constructor.
+
+I've also supported an alternative method signature for GenerateInterfaceApplier such that the target interface can be specified as an argument rather than a typeparam to a generic method - this will become important in the next section and the only interesting things to note are how IInterfaceApplier&lt;T&gt; is returned from the generic method as opposed to the IInterfaceApplier returned from the typeparam-less signature and how the alternate method calls into the typeparam'd version using reflection.
+
+### Task 2: Recursively applying interfaces
+
+The approach I'm going to use here is to introduce a new interface that will be used when generating the interface appliers -
+
+    public interface IReadValueConverter
+    {
+        object Convert(PropertyInfo property, object value);
+        object Convert(MethodInfo method, object value);
+    }
+
+Values will be passed through this when returned by property getters or (non-void) methods and it wil be responsible for ensuring that the value returned from the Convert method matches the property.PropertyType / method.ReturnType.
+
+This will mean we'll change the method signature to:
+
+    public InterfaceApplier<T> GenerateInterfaceApplier<T>(IReadValueConverter readValueConverter)
+
+That we'll change the constructor on the generated type:
+
+    // Declare private fields
+    var srcField = typeBuilder.DefineField("_src", typeof(object), FieldAttributes.Private);
+    var readValueConverterField = typeBuilder.DefineField(
+        "_readValueConverter",
+        typeof(IReadValueConverter),
+        FieldAttributes.Private
+    );
+
+    // Generate: base.ctor()
+    var ctorBuilder = typeBuilder.DefineConstructor(
+        MethodAttributes.Public,
+        CallingConventions.Standard,
+        new[] { typeof(object) }
+    );
+    var ilCtor = ctorBuilder.GetILGenerator();
+    ilCtor.Emit(OpCodes.Ldarg_0);
+    ilCtor.Emit(OpCodes.Call, typeBuilder.BaseType.GetConstructor(Type.EmptyTypes));
+
+    // Generate: if (src != null), don't throw exception
+    var nonNullSrcArgumentLabel = ilCtor.DefineLabel();
+    ilCtor.Emit(OpCodes.Ldarg_1);
+    ilCtor.Emit(OpCodes.Brtrue, nonNullSrcArgumentLabel);
+    ilCtor.Emit(OpCodes.Ldstr, "src");
+    ilCtor.Emit(
+        OpCodes.Newobj,
+        typeof(ArgumentNullException).GetConstructor(new[] { typeof(string) })
+    );
+    ilCtor.Emit(OpCodes.Throw);
+    ilCtor.MarkLabel(nonNullSrcArgumentLabel);
+
+    // Generate: if (readValueConverter != null), don't throw exception
+    var nonNullReadValueConverterArgumentLabel = ilCtor.DefineLabel();
+    ilCtor.Emit(OpCodes.Ldarg_2);
+    ilCtor.Emit(OpCodes.Brtrue, nonNullReadValueConverterArgumentLabel);
+    ilCtor.Emit(OpCodes.Ldstr, "readValueConverter");
+    ilCtor.Emit(
+        OpCodes.Newobj,
+        typeof(ArgumentNullException).GetConstructor(new[] { typeof(string) })
+    );
+    ilCtor.Emit(OpCodes.Throw);
+    ilCtor.MarkLabel(nonNullReadValueConverterArgumentLabel);
+
+    // Generate: this._src = src
+    ilCtor.Emit(OpCodes.Ldarg_0);
+    ilCtor.Emit(OpCodes.Ldarg_1);
+    ilCtor.Emit(OpCodes.Stfld, srcField);
+
+    // Generate: this._readValueConverter = readValueConverter
+    ilCtor.Emit(OpCodes.Ldarg_0);
+    ilCtor.Emit(OpCodes.Ldarg_2);
+    ilCtor.Emit(OpCodes.Stfld, readValueConverterField);
+
+    // All done
+    ilCtor.Emit(OpCodes.Ret);
+
+That we'll change the reading of properties:
+
+    // Define get method, if required
+    if (property.CanRead)
+    {
+        var getFuncBuilder = typeBuilder.DefineMethod(
+            "get_" + property.Name,
+            MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.NewSlot |
+            MethodAttributes.SpecialName | MethodAttributes.Virtual | MethodAttributes.Final,
+            property.PropertyType,
+            Type.EmptyTypes
+        );
+
+        // Generate: return this._readValueConverter.Convert(
+        //  property.DeclaringType.GetProperty(property.Name)
+        //  _src.GetType().InvokeMember(property.Name, BindingFlags.GetProperty, null, _src, null)
+        // );
+        var ilGetFunc = getFuncBuilder.GetILGenerator();
+        ilGetFunc.Emit(OpCodes.Ldarg_0);
+        ilGetFunc.Emit(OpCodes.Ldfld, readValueConverterField);
+        ilGetFunc.Emit(OpCodes.Ldtoken, property.DeclaringType);
+        ilGetFunc.Emit(
+            OpCodes.Call,
+            typeof(Type).GetMethod("GetTypeFromHandle", new[] { typeof(RuntimeTypeHandle) })
+        );
+        ilGetFunc.Emit(OpCodes.Ldstr, property.Name);
+        ilGetFunc.Emit(
+            OpCodes.Call,
+            typeof(Type).GetMethod("GetProperty", new[] { typeof(string) })
+        );
+        ilGetFunc.Emit(OpCodes.Ldarg_0);
+        ilGetFunc.Emit(OpCodes.Ldfld, srcField);
+        ilGetFunc.Emit(OpCodes.Callvirt, typeof(Type).GetMethod("GetType", Type.EmptyTypes));
+        ilGetFunc.Emit(OpCodes.Ldstr, property.Name);
+        ilGetFunc.Emit(OpCodes.Ldc_I4, (int)BindingFlags.GetProperty);
+        ilGetFunc.Emit(OpCodes.Ldnull);
+        ilGetFunc.Emit(OpCodes.Ldarg_0);
+        ilGetFunc.Emit(OpCodes.Ldfld, srcField);
+        ilGetFunc.Emit(OpCodes.Ldnull);
+        ilGetFunc.Emit(OpCodes.Callvirt, methodInfoInvokeMember);
+        ilGetFunc.Emit(
+            OpCodes.Callvirt,
+            typeof(IReadValueConverter).GetMethod(
+                "Convert",
+                new[] { typeof(PropertyInfo), typeof(object) }
+            )
+        );
+        if (property.PropertyType.IsValueType)
+            ilGetFunc.Emit(OpCodes.Unbox_Any, property.PropertyType);
+        ilGetFunc.Emit(OpCodes.Ret);
+        propBuilder.SetGetMethod(getFuncBuilder);
+    }
+
+And that we'll change the calling of methods:
+
+    // .. skipped out the first half of the method-generating code
+    // - see http://www.productiverage.com/Read/15
+
+    // Generate either:
+    //  _src.GetType().InvokeMember(method.Name, BindingFlags.InvokeMethod, null, _src, args);
+    // or
+    //  return this._readValueConverter.Convert(
+    //   method.DeclaringType.GetMethod(method.Name, {MethodArgTypes})
+    //   this._src.GetType().InvokeMember(
+    //    property.Name,
+    //    BindingFlags.InvokeMethod,
+    //    null,
+    //    _src,
+    //    null
+    //   )
+    //  );
+    if (!method.ReturnType.Equals(typeof(void)))
+    {
+        // We only need to use the readValueConverter if returning a value
+
+        // Generate: Type[] argTypes
+        var argTypes = ilFunc.DeclareLocal(typeof(Type[]));
+
+        // Generate: argTypes = new Type[x]
+        ilFunc.Emit(OpCodes.Ldc_I4, parameters.Length);
+        ilFunc.Emit(OpCodes.Newarr, typeof(Type));
+        ilFunc.Emit(OpCodes.Stloc_1);
+        for (var index = 0; index < parameters.Length; index++)
+        {
+            // Generate: argTypes[n] = ..;
+            var parameter = parameters[index];
+            ilFunc.Emit(OpCodes.Ldloc_1);
+            ilFunc.Emit(OpCodes.Ldc_I4, index);
+            ilFunc.Emit(OpCodes.Ldtoken, parameters[index].ParameterType);
+            ilFunc.Emit(OpCodes.Stelem_Ref);
+        }
+
+        // Will call readValueConverter.Convert, passing MethodInfo reference before value
+        ilFunc.Emit(OpCodes.Ldarg_0);
+        ilFunc.Emit(OpCodes.Ldfld, readValueConverterField);
+        ilFunc.Emit(OpCodes.Ldtoken, method.DeclaringType);
+        ilFunc.Emit(
+            OpCodes.Call,
+            typeof(Type).GetMethod("GetTypeFromHandle", new[] { typeof(RuntimeTypeHandle) })
+        );
+        ilFunc.Emit(OpCodes.Ldstr, method.Name);
+        ilFunc.Emit(OpCodes.Ldloc_1);
+        ilFunc.Emit(
+            OpCodes.Call,
+            typeof(Type).GetMethod("GetMethod", new[] { typeof(string), typeof(Type[]) })
+        );
+    }
+    ilFunc.Emit(OpCodes.Ldarg_0);
+    ilFunc.Emit(OpCodes.Ldfld, srcField);
+    ilFunc.Emit(OpCodes.Callvirt, typeof(Type).GetMethod("GetType", Type.EmptyTypes));
+    ilFunc.Emit(OpCodes.Ldstr, method.Name);
+    ilFunc.Emit(OpCodes.Ldc_I4, (int)BindingFlags.InvokeMethod);
+    ilFunc.Emit(OpCodes.Ldnull);
+    ilFunc.Emit(OpCodes.Ldarg_0);
+    ilFunc.Emit(OpCodes.Ldfld, srcField);
+    ilFunc.Emit(OpCodes.Ldloc_0);
+    ilFunc.Emit(OpCodes.Callvirt, methodInfoInvokeMember);
+
+    if (method.ReturnType.Equals(typeof(void)))
+        ilFunc.Emit(OpCodes.Pop);
+    else 
+    {
+        ilFunc.Emit(
+            OpCodes.Callvirt,
+            typeof(IReadValueConverter).GetMethod(
+                "Convert",
+                new[] { typeof(MethodInfo), typeof(object) }
+            )
+        );
+        if (method.ReturnType.IsValueType) 
+            ilFunc.Emit(OpCodes.Unbox_Any, method.ReturnType);
+    }
+
+    ilFunc.Emit(OpCodes.Ret);
+
+### Task 2.1: Implementing IReadValueConverter
+
+A naive implementation might be as follows:
+
+    public class SimpleReadValueConverter : IReadValueConverter
+    {
+        private IInterfaceApplierFactory _interfaceApplierFactory;
+        public SimpleReadValueConverter(IInterfaceApplierFactory interfaceApplierFactory)
+        {
+            if (interfaceApplierFactory == null)
+                throw new ArgumentNullException("interfaceApplierFactory");
+            _interfaceApplierFactory = interfaceApplierFactory;
+        }
+
+        public object Convert(PropertyInfo property, object value)
+        {
+            if (property == null)
+                throw new ArgumentNullException("property");
+            return tryToConvertValueIfRequired(property.PropertyType, value);
+        }
+
+        public object Convert(MethodInfo method, object value)
+        {
+            if (method == null)
+                throw new ArgumentNullException("method");
+            return tryToConvertValueIfRequired(method.ReturnType, value);
+        }
+
+        private object tryToConvertValueIfRequired(Type targetType, object value)
+        {
+            if (targetType == null)
+                throw new ArgumentNullException("targetType");
+
+            // If no conversion is required, no work to do
+            // - Note: We can only deal with applying interfaces to objects so if a conversion
+            //   is required where the target is not an interface then there's nothing we can do
+            //   here, we'll have to return the value unconverted (likewise, if the target type
+            //   is an int but the current value is null, although this is obviously incorrect
+            //   there's nothing we can do about it here)
+            if (!targetType.IsInterface || (value == null)
+            || (value.GetType().IsSubclassOf(targetType)))
+                return value;
+
+            return _interfaceApplierFactory.GenerateInterfaceApplier(targetType, this)
+                .Apply(value);
+        }
+    }
+
+This will do the job but it jumps out at me that if the same interface needs to be applied to multiple return values (ie. from different properties or methods) then the work done to generate that interface applier will be repeated for each request. It might be better (require less memory and cpu resources) to build up a list of interfaces that have already been handled and re-use the interface appliers where possible -
+
+    public class CachedReadValueConverter : IReadValueConverter
+    {
+        private IInterfaceApplierFactory _interfaceApplierFactory;
+        private NonNullImmutableList<IInterfaceApplier> _interfaceAppliers;
+        private object _writeLock;
+
+        public CachedReadValueConverter(IInterfaceApplierFactory interfaceApplierFactory)
+        {
+            if (interfaceApplierFactory == null)
+                throw new ArgumentNullException("interfaceApplierFactory");
+
+            _interfaceApplierFactory = interfaceApplierFactory;
+            _interfaceAppliers = new NonNullImmutableList<IInterfaceApplier>();
+            _writeLock = new object();
+        }
+
+        public object Convert(PropertyInfo property, object value)
+        {
+            if (property == null)
+                throw new ArgumentNullException("property");
+
+            return tryToConvertValueIfRequired(property.PropertyType, value);
+        }
+
+        public object Convert(MethodInfo method, object value)
+        {
+            if (method == null)
+                throw new ArgumentNullException("method");
+
+            return tryToConvertValueIfRequired(method.ReturnType, value);
+        }
+
+        private object tryToConvertValueIfRequired(Type targetType, object value)
+        {
+            if (targetType == null)
+                throw new ArgumentNullException("targetType");
+            
+            // If no conversion is required, no work to do
+            // - Note: We can only deal with applying interfaces to objects so if a conversion
+            //   is required where the target is not an interface then there's nothing we can
+            //   do here so we'll have to return the value unconverted (likewise, if the target
+            //   type is an int but the current value is null, although this is obviously
+            //   incorrect but there's nothing we can do about it here)
+            if (!targetType.IsInterface || (value == null)
+            || (value.GetType().IsSubclassOf(targetType)))
+                return value;
+
+            // Do we already have an interface applier available for this type?
+            var interfaceApplierExisting = _interfaceAppliers.FirstOrDefault(
+                i => i.TargetType.Equals(targetType)
+            );
+            if (interfaceApplierExisting != null)
+                return interfaceApplierExisting.Apply(value);
+                
+            // Try to generate new interface applier
+            var interfaceApplierNew = _interfaceApplierFactory.GenerateInterfaceApplier(
+                targetType,
+                this
+            );
+            lock (_writeLock)
+            {
+                if (!_interfaceAppliers.Any(i => i.TargetType.Equals(targetType)))
+                    _interfaceAppliers = _interfaceAppliers.Add(interfaceApplierNew);
+            }
+            return interfaceApplierNew.Apply(value);
+        }
+    }
+
+There will still be cases where there have to be multiple interface appliers for a given interface if there are interrelated references but this should limit how many duplicates are generated. For example:
+
+    using COMInteraction.InterfaceApplication;
+    using COMInteraction.InterfaceApplication.ReadValueConverters;
+
+    namespace Tester
+    {
+        class Program
+        {
+            static void Main(string[] args)
+            {
+                var n1 = new Node() { Name = "Node1" };
+                var n2 = new Node() { Name = "Node2" };
+                var n3 = new Node() { Name = "Node3" };
+                n1.Next = n2;
+                n2.Previous = n1;
+                n2.Next = n3;
+                n3.Previous = n2;
+
+                var interfaceApplierFactory = new InterfaceApplierFactory(
+                    "DynamicAssembly",
+                    InterfaceApplierFactory.ComVisibility.NotVisible
+                );
+                var interfaceApplier = interfaceApplierFactory.GenerateInterfaceApplier<INode>(
+                    new CachedReadValueConverter(interfaceApplierFactory)
+                );
+                var n2Wrapped = interfaceApplier.Apply(n2);
+
+            }
+
+            public class Node
+            {
+                public string Name { get; set; }
+                public Node Previous { get; set; }
+                public Node Next { get; set; }
+            }
+        }
+
+        public interface INode
+        {
+            string Name { get; set; }
+            INode Previous { get; set; }
+            INode Next { get; set; }
+        }
+    }
+
+Each unique interface applier has a specific class name (of the form "InterfaceApplier{0}" where {0} is a guid). Examining the properties on n2Wrapped you can see that the class for n2Wrapped is different to the class for its Next and Previous properties as the INode interface applier hadn't been completely generated against n2 before an INode interface applier was required for these properties. But after this, *all* further INode-wrapped instances will share the same interface applier as the Previous and Next properties received - so there will be one "wasted" generated class but that's still a better job than the SimpleReadValueConverter would have managed.
+
+### "Inaccessible Interface"
+
+In the above example, the INode interface has to be located outside of the Program class since it must be accessible by the InterfaceApplierFactory and the Program class is private. This isn't an issue for the Node class as the InterfaceApplierFactory doesn't need direct access to that, it just returns an IInterfaceApplier that we pass the n2 reference to as an argument. Alternatively, the Program class could be made public. This isn't exactly rocket science but if it slips your mind then you're presented with an error such as -
+
+> TypeLoadException: "Type 'InterfaceApplierdb2cb792e09d424a8dcecbeca6276dc8' from assembly 'DynamicAssembly, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' is attempting to implement an inaccessible interface."
+
+at the line
+
+    return new InterfaceApplier<T>(
+        src => (T)Activator.CreateInstance(
+            typeBuilder.CreateType(),
+            src,
+            readValueConverter
+        )
+    );
+
+in InterfaceApplierFactory, which isn't the friendliest of warnings!

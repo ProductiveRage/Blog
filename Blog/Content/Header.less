@@ -1,0 +1,39 @@
+body
+{
+	div.Header
+	{
+		div.HeaderContent
+		{
+			border: 3px solid #bf7c52;
+			.RounderBorders(8px);
+			
+			background: url("/Content/Images/Grouch.jpg") bottom right no-repeat white;
+			@media screen and (max-width: 35em) { background: white; }
+			
+			min-height: 150px;
+
+			> h1
+			{
+				font-size: 30px;
+				margin: 32px 0 6px 32px;
+				text-align: left;
+				font-family: "Lucida Console", "Lucida Grande", Verdana;
+				
+				> a
+				{
+					text-shadow: #666 1px 1px 1px;
+					text-decoration: none;
+					color: #ae0c0e;
+				}
+			}
+
+			span.Tagline
+			{
+				display: block;
+				text-align: left;
+				margin: 0 0 0 34px;
+				color: #121212;
+			}
+		}
+	}
+}

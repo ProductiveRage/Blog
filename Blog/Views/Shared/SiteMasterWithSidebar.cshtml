@@ -1,0 +1,36 @@
+﻿@model Blog.Models.ISideBarContentModel
+@using Blog.Helpers.Sidebar;
+@{
+	Layout = "~/Views/Shared/SiteMaster.cshtml";
+}
+			<div class="Main HasSideBar">
+				@RenderBody()
+				<div class="Footer">
+					Productive Rage @DateTime.Now.Year
+				</div>
+			</div>
+
+			<div class="SideBar">
+				<div class="About">
+					<h2>About</h2>
+					<p>Dan is a big geek who likes making stuff with computers! He can be quite outspoken so clearly needs a blog :)</p>
+					<p>In the last few minutes he seems to have taken to referring to himself in the third person. He's quite enjoying it.</p>
+					@{
+						//<%: Html.ActionLink("Read More", "About", "StaticContent") %>
+					}
+				</div>
+				<div class="Search">
+					@using (Html.BeginForm("Search", "Search", FormMethod.Get))
+					{
+						<div>
+							<input type="text" class="SiteSearch" name="term" value="@Html.Raw(((Model is Blog.Models.SearchResultsModel)
+																					? Html.AttributeEncode(  ((Blog.Models.SearchResultsModel)Model).SearchTerm )
+																					: ""))" />
+							<input type="submit" class="SiteSearchSubmit" value="Search" />
+						</div>
+					}
+				</div>
+				@Html.RenderPostStubList("Recent Posts", "Recent", Model.MostRecent, false)
+				@Html.RenderPostStubList("Highlights", "Featured", Model.Highlights, false)
+				@Html.RenderArchiveLinkList("Archives", "History", Model.ArchiveLinks, false)
+			</div>

@@ -1,0 +1,269 @@
+## AutoMapper-By-Constructor without AutoMapper.. and faster
+
+I've been wanting to see if I can improve the performance of the by-constructor type converter I wrote about ([here](Post5)). The plan is to implement Property Getters that can retrieve the property values - translated, if required - from a source object using LINQ Expressions. Then to push these through a ConstructorInfo call using more LINQ Expressions such that a single expression can be constructed that converts from source to destination types at the same speed that hand-rolled code would. In a lot of cases, this could be merely academic but if 1000s of instances are being converted together, then the overhead of AutoMapper could make a signficant difference.
+
+So I want to expand
+
+    public interface IPropertyGetter
+    {
+        Type SrcType { get; }
+        PropertyInfo Property { get; }
+        Type TargetType { get; }
+        object GetValue(object src);
+    }
+
+with
+
+    public interface ICompilablePropertyGetter : IPropertyGetter
+    {
+        Expression GetPropertyGetterExpression(Expression param);
+    }
+
+and to expand
+
+    public interface ITypeConverterByConstructor<TSource, TDest>
+    {
+        ConstructorInfo Constructor { get; }
+        TDest Convert(TSource src);
+    }
+
+with
+
+    public interface ICompilableTypeConverterByConstructor<TSource, TDest>
+        : ITypeConverterByConstructor<TSource, TDest>
+    {
+        Expression GetTypeConverterExpression(Expression param);
+    }
+
+### Compilable Property Getter
+
+Turns it out this was quite easy to implement if you know how.. but quite difficult to find examples out there if you don't! One of the things I like about LINQ Expressions code is that when you read it back it scans quite well and kinda makes sense. However, I'm still really not that experienced with it and when I want to try something new it takes me quite a while to get to grips with how I need to form the code.
+
+The first property getter I've got will retrieve the value of a property from a specified source type TSourceObject, where the property value is of type TPropertyAsRetrieved. TPropertyAsRetrieved in this case must be assignable-to from the type of the property on TSourceObject. So TPropertyAsRetrieved could be a string IEnumerable if the property on TSourceObject was a string array, for example (as IEnumerable&lt;string&gt; is assignable-to from string[]).
+
+    public class CompilableAssignableTypesPropertyGetter<TSourceObject, TPropertyAsRetrieved>
+        : AbstractGenericCompilablePropertyGetter<TSourceObject, TPropertyAsRetrieved>
+    {
+        private PropertyInfo _propertyInfo;
+        public CompilableAssignableTypesPropertyGetter(PropertyInfo propertyInfo)
+        {
+            if (propertyInfo == null)
+                throw new ArgumentNullException("propertyInfo");
+            if (!propertyInfo.DeclaringType.Equals(typeof(TSourceObject)))
+                throw new ArgumentException("Invalid propertyInfo - DeclaringType must match TSourceObject");
+
+            _propertyInfo = propertyInfo;
+        }
+
+        public override PropertyInfo Property
+        {
+            get { return _propertyInfo; }
+        }
+
+        public override Expression GetPropertyGetterExpression(Expression param)
+        {
+            if (param == null)
+                throw new ArgumentNullException("param");
+            if (!typeof(TSourceObject).IsAssignableFrom(param.Type))
+                throw new ArgumentException("param.Type must be assignable to typeparam TSourceObject");
+
+            // Prepare to grab the property value from the source object directly
+            Expression getter = Expression.Property(
+                param,
+                _propertyInfo
+            );
+
+            // Try to convert types if not directly assignable (eg. this covers some common enum type conversions)
+            var targetType = typeof(TPropertyAsRetrieved);
+            if (!targetType.IsAssignableFrom(_propertyInfo.PropertyType))
+                getter = Expression.Convert(getter, targetType);
+
+            // Perform boxing, if required (eg. when enum being handled and TargetType is object)
+            if (!targetType.IsValueType && _propertyInfo.PropertyType.IsValueType)
+                getter = Expression.TypeAs(getter, typeof(object));
+
+            return getter;
+        }
+    }
+
+In order to keep the interesting compilable getter code separate from the boring stuff which implements the rest of IPropertyGetter, I've used a base class AbstractGenericCompilablePropertyGetter -
+
+    public abstract class AbstractGenericCompilablePropertyGetter<TSourceObject, TPropertyAsRetrieved>
+        : ICompilablePropertyGetter
+    {
+        private Lazy<Func<TSourceObject, TPropertyAsRetrieved>> _getter;
+        public AbstractGenericCompilablePropertyGetter()
+        {
+            _getter = new Lazy<Func<TSourceObject, TPropertyAsRetrieved>>(generateGetter, true);
+        }
+
+        public Type SrcType
+        {
+            get { return typeof(TSourceObject); }
+        }
+
+        public abstract PropertyInfo Property { get; }
+
+        public Type TargetType
+        {
+            get { return typeof(TPropertyAsRetrieved); }
+        }
+
+        object IPropertyGetter.GetValue(object src)
+        {
+            if (src == null)
+                throw new ArgumentNullException("src");
+            if (!src.GetType().Equals(typeof(TSourceObject)))
+                throw new ArgumentException("The type of src must match typeparam TSourceObject");
+            return GetValue((TSourceObject)src);
+        }
+
+        public TPropertyAsRetrieved GetValue(TSourceObject src)
+        {
+            if (src == null)
+                throw new ArgumentNullException("src");
+            return _getter.Value(src);
+        }
+
+        public abstract Expression GetPropertyGetterExpression(Expression param);
+
+        private Func<TSourceObject, TPropertyAsRetrieved> generateGetter()
+        {
+            var param = Expression.Parameter(typeof(TSourceObject), "src");
+            return Expression.Lambda<Func<TSourceObject, TPropertyAsRetrieved>>(
+                GetPropertyGetterExpression(param),
+                param
+            ).Compile();
+        }
+    }
+
+### Compilable Type-Converter-By-Constructor
+
+The general concept for this is straight-forward; a CompilableTypeConverterByConstructor<TSource, TDest> class will take a set of compilable property getters and a ConstructorInfo reference (that is used to instantiates instances of TDest and that takes the same number of parameters are there are property getters specified). The compilable type converter generates a LINQ Expression to perform the translation from TSource to TDest, given a ParameterExpression for the source object -
+
+    public Expression GetTypeConverterExpression(Expression param)
+    {
+        if (param == null)
+            throw new ArgumentNullException("param");
+        if (!typeof(TSource).IsAssignableFrom(param.Type))
+            throw new ArgumentException("param.Type must be assignable to typeparam TSource");
+
+        // Instantiate expressions for each constructor parameter by using each of the
+        // property getters against the source value
+        var constructorParameterExpressions = new List<Expression>();
+        foreach (var constructorParameter in _constructor.GetParameters())
+        {
+            var index = constructorParameterExpressions.Count;
+            constructorParameterExpressions.Add(
+                _propertyGetters[index].GetPropertyGetterExpression(param)
+            );
+        }
+
+        // Return an expression that to instantiate a new TDest by using property getters
+        // as constructor arguments
+        return Expression.Condition(
+            Expression.Equal(
+                param,
+                Expression.Constant(null)
+            ),
+            Expression.Constant(default(TDest), typeof(TDest)),
+            Expression.New(
+                _constructor,
+                constructorParameterExpressions.ToArray()
+            )
+        );
+    }
+
+There's some handling in there to return default(TDest) if a null source reference is passed in but there are no other particular areas of note.
+
+## Limitations
+
+There's a lot more work to be done down this avenue, since currently there's only Compilable Property Getters for Assignable Types (where no real conversion is happening) and Enums (where lookups from the source values to destination values are attempted by name before falling back to a straight numeric mapping). The code as described here is available in this tagged release:
+
+[https://github.com/ProductiveRage/AutoMapper-By-Constructor-1/tree/LinqExpressionPropertyGetters](https://github.com/ProductiveRage/AutoMapper-By-Constructor-1/tree/LinqExpressionPropertyGetters)
+
+However, there's more on the way! I want to be able to take these simple compilable classes and use them to create more complicated type converters, so that once we have a compilable converter from:
+
+    public class SourceRole
+    {
+        public string Description { get; set; }
+    }
+
+to
+
+    public class DestRole
+    {
+        public DestRole(string description)
+        {
+            Description = description;
+        }
+        public string Description { get; private set; }
+    }
+
+we could leverage it translate
+
+    public class SourceEmployee
+    {
+        public string Name { get; set; }
+        public SourceRole Role { get; set; }
+    }
+
+to
+
+    public class DestEmployee
+    {
+        public DestEmployee(string name, DestRole role)
+        {
+            Name = name;
+            Roles = roles;
+        }
+        public string Name { get; private set; }
+        public DestRole Role { get; private set; }
+    }
+
+or:
+
+    public class SourceRole
+    {
+        public string Description { get; set; }
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+    }
+
+    public class SourceEmployee
+    {
+        public string Name { get; set; }
+        public IEnumerable<SourceRole> Roles { get; set; }
+    }
+
+to
+
+    public class DestRole
+    {
+        public DestRole(string description, DateTime startDate, DateTime endDate)
+        {
+            Description = description;
+            StartDate = startDate;
+            EndDate = endDate
+        }
+        public string Description { get; private set; }
+        public DateTime StartDate { get; private set; }
+        public DateTime EndDate { get; private set; }
+    }
+
+    public class DestEmployee
+    {
+        public DestEmployee(string name, IEnumerable<DestRole> roles)
+        {
+            Name = name;
+            Roles = roles;
+        }
+        public string Name { get; private set; }
+        public IEnumerable<DestRole> Roles { get; private set; }
+    }
+
+.. something similar to the way in which AutoMapper's CreateMap method works.
+
+### Update (2nd January 2012)
+
+I've finally got round to writing up this conclusion; [here](Post18).

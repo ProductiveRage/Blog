@@ -1,0 +1,160 @@
+﻿## The Full Text Indexer - Token Breaker and String Normaliser variations
+
+I've written a few Posts now about the investigative [Full Text Indexer](Post30) project I've been playing with (see also [Updating the Index](Post31), [MultiLingual Content](Post32) and various [tangents](Post26) [into](Post27) [plurality](Post28) [handling](Post29)) but I think I've got at least one more to round it off.
+
+Among the basic components of the Index Generator that determine the manner in which it processes content are (as outlined in that [First Indexer Post](Post30)):    
+
+> #### Token Breakers
+> This example uses a "WhiteSpaceTokenBreaker" which will take the string content from the Content Retrievers and break it into individual words by splitting on whitespace characters. Straight forward!
+> #### String Normaliser
+> The String Normaliser is essentially an IEqualityComparer<string> and will be used to generate a lookup of tokens and compare them against values passed into the GetMatches method. The DefaultStringNormaliser will remove all punctuation, exchange all non-latin characters for latin equivalents and lower-case them all. For the most basic lookups I had in mind, this does the hard work.
+
+### String Normalisers
+
+There are not many String Normaliser implementations at present, the most basic would be to compare two strings to see if they match. Very simple - but for the use cases I have in mind*, which are largely European languages passages, not very useful. The next step up is a case-insensitive match. Marginally better but there are all sorts of puncuation marks that I might want to ignore - eg. I probably want to consider "James" (the name) to be the same as "James'" (the possessive determiner; er, if my searching for the correct linguistic phrase has led me to the correct one :). I may want to try to ignore differences between accented characters (eg. consider "Jose" to match "José"). If we end up comparing strings that contain whitespace (since there's nothing from forcing all Token Breakers to break on whitespace) then we probably want to normalise the whitespace such that a tab is equivalent to a space is equivalent to a run of multiple spaces.
+
+The **DefaultStringNormaliser** will iron over all of these mentioned cracks by normalising whitespace, removing punctuation characters, replacing accented characters with non-accented equivalents, lower-casing the content and trimming it before yielding the final value for comparison.
+
+The **EnglishPluralityStringNormaliser** will (optionally) wrap another String Normaliser (very feasibly a DefaultStringNormaliser) and then add a further layer of processing to the output so that plurality of terms is ignored; so "cat" and "cats" are considered to match, as are "cactus" and "cactii", for example. The approach it takes isn't perfect but it gets the job done for the most common cases.
+
+\* (The fact that a String Normaliser has to be specified in order to instantiate an IndexGenerator should mean that it would be straight-forward to configure one for uses cases that I *didn't* specifically have in mind when I wrote it).
+
+### Token Breakers
+
+The **WhiteSpaceTokenBreaker** is probably the most obvious implementation, it breaks all content on whitespace and considers each resulting segment to be a token. However, there are a lot of other characters which may constitute a break between words - normally these have whitespace around *as well* but that relies on the input content following particular formatting rules (like ensuring that commas are *always* followed by a space). So we also have the **WhiteSpaceExtendingTokenBreaker**. This will replace particular characters with a space before handing off processing to another Token Breaker. It may, for example, specify that all brackets (round, square, curly or triangular) be replaced with whitespace, along with full stops and commas. This is useful for a lot of common content. Note that single quotes would not be replaced since they generally do *not* indicate the end of a word - eg. "don't" is one word, it should not be split into "don" and "t". This would rely upon the use of a String Normaliser that ignores punctuation such as single quotes so that "O'Connor" and "OConnor" are considered equivalent.
+
+More interesting variations on the theme are the **PartialMatchingTokenBreaker** and the **ConsecutiveTokenCombiningTokenBreaker**. The first will wrap another Token Breaker and then process each of the resulting tokens by generating all substrings from them that are at least as long as the "minlengthOfPartialmatches" and no longer than the "maxLengthOfPartialMatches" constructor arguments on the class. This provides a simple way to implement "partial word matching" and also illustrates the benefit of returning a "WeightAdjustingToken" set from the Token Breaker; these partial words can be given much less weight when stored in the Index, such that full word matches for content appear much higher in a result set (ordered by match weight aka match quality). A "partialMatchWeightDeterminer" delegate is passed to the constructor and used to calculate the weight of these partial matches.
+
+The ConsecutiveTokenCombiningTokenBreaker is essentially the opposite, it will apply a specified Token Breaker against the input content first and then generate additional tokens by combining runs of consecutive tokens. So if a passage contains the words "Gotos considered harmful" then instead of this being broken down into just the set "Gotos", "considered", "harmful" it would may also result in (depending upon the maxNumberOfTokens constructor argument) "Gotos considered", "considered harmful" and "Gotos considered harmful". Again, greater weights may be assigned to these runs of tokens via the weightMultiplierDeterminer constructor argument (a delegate that returns a weight multipler based upon the number of tokens combined to form the extended token). This would enable the article with the phase "Gotos considered harmful" to be assigned a greater weight than one that has the separate words "Gotos", "considered" and "harmful" (but not arranged into that particular phrase). This would rely upon a search being performed using the GetPartialMatches method of the index, which breaks up the search term according using a particular Token Breaker, rather than requiring the entire phrase be matched precisely (this is covered briefly towards the end of the first [Full Text Indexer](Post30) post).
+
+The use of these token breakers, whether individually or in combination, will result in more data being stored in the Index (as well as more processing of the input content required in order to generate the index) but offer the benefits that searches can also match content more loosely in some cases while prioritising the best matches in others.
+
+## Bonus Material: The Indexer in action (small scale, though it may be!)
+
+All of the above is a bit dry and I wanted to include it largely to round out the introductory series to this code. So to make this post marginally more interesting, I thought I'd include the configuration in which I've used it on this blog to implement the site search and the autocomplete facility.
+
+I have the following method which is used to generate Index content for both the site search *and* the auto-complete functionality. Posts have an integer Id and string Title and Content properties. They also have LastModified and Archive properties which enables the Indexes to be cached in memory and on disk, only rebuilding when content has changed (ie. a new Post has been published, an existing Post has been updated or a Post has been archived).
+
+The bulk of the Index generation is illustrated below with comments around most of the decisions:
+
+    private IIndexData<int> GenerateIndexData(
+        NonNullImmutableList<Post> posts,
+        IStringNormaliser sourceStringComparer)
+    {
+        if (posts == null)
+            throw new ArgumentNullException("posts");
+        if (sourceStringComparer == null)
+            throw new ArgumentNullException("sourceStringComparer");
+
+        // Define the manner in which the raw content is retrieved from Post title and body
+        // - English stop words will only receive 1% the weight when match qualities are
+        //   determined than other words will receive
+        // - Words in the title will be given 5x the weight of words found in body content
+        var englishStopWords = FullTextIndexer.Constants.GetStopWords("en");
+        var contentRetrievers = new List<ContentRetriever<Post, int>>();
+        contentRetrievers.Add(new ContentRetriever<Post, int>(
+            p => new PreBrokenContent<int>(p.Id, p.Title),
+            token => (englishStopWords.Contains(token, sourceStringComparer) ? 0.01f : 1f) * 5f
+        ));
+        contentRetrievers.Add(new ContentRetriever<Post, int>(
+            p => new PreBrokenContent<int>(p.Id, p.Content),
+            token => englishStopWords.Contains(token, sourceStringComparer) ? 0.01f : 1f
+        ));
+
+        // Specify the token breaker
+        // - English content will generally break on "." and "," (unlike "'" or "-" which
+        //   are commonly part of words). Also break on round brackets for written content
+        //   but also the other bracket types and other common characters that might
+        //   represent word breaks in code content found on the site
+        var tokenBreaker = new WhiteSpaceExtendingTokenBreaker(
+            new ImmutableList<char>(new[] {
+                '<', '>', '[', ']', '(', ')', '{', '}',
+                '.', ',', ':', ';', '"', '?', '!',
+                '/', '\\',
+                '@', '+', '|', '='
+            }),
+            new WhiteSpaceTokenBreaker()
+        );
+
+        // Generate an index using the specified StringNormaliser, 
+        // - The Post class has an integer Id so a simple IntEqualityComparer (see below)
+        //   will do the job fine for the dataKeyComparer
+        // - If the search term is matched multiple times in a Post then combine the match
+        //   weight in a simple additive manner (hence the weightedValues.Sum() call)
+        var indexGenerator = new IndexGenerator<Post, int>(
+            contentRetrievers.ToNonNullImmutableList(),
+            new IntEqualityComparer(),
+            sourceStringComparer,
+            tokenBreaker,
+            weightedValues => weightedValues.Sum(),
+            new NullLogger()
+        );
+        return indexGenerator.Generate(posts.ToNonNullImmutableList());
+    }
+
+    [Serializable]
+    private class IntEqualityComparer : IEqualityComparer<int>
+    {
+        public bool Equals(int x, int y)
+        {
+            return (x == y);
+        }
+
+        public int GetHashCode(int obj)
+        {
+            return obj;
+        }
+    }
+
+The generation of the search index is fairly straight-forward, the content on my blog is English with code samples (mostly C#) so I use an EnglishPluralityStringNormaliser that wraps a DefaultStringNormaliser (the PreNormaliserWorkOptions flags specified in the constructor are optimisations described in [Optimising the Plurality-Handling Normaliser](Post27)).
+
+    var indexDataForSearching = GenerateIndexData(
+        posts,
+        new EnglishPluralityStringNormaliser(
+            new DefaultStringNormaliser(),
+            EnglishPluralityStringNormaliser.PreNormaliserWorkOptions.PreNormaliserLowerCases
+            | EnglishPluralityStringNormaliser.PreNormaliserWorkOptions.PreNormaliserTrims
+        )
+    );
+
+The IIndexData&lt;T&gt; class has a GetAllTokens() method which is useful for the autocomplete functionality but it's *not* as useful with the above string normaliser as that applies various manipulations to the keys (not only does it normalise word endings for plurality handling but it replaces accented characters and removes punctuation). In order to generate an index that we could extract token data from for an autocomplete list we want to avoid these manipulations. This doesn't exist in the FullTextIndex project, since it's not very useful for the intended search functionality, but as a convenient (and very simple!) example of how to vary the functionality we can use a NonAlteringStrongNormaliser:
+
+    [Serializable]
+    public class NonAlteringStringNormaliser : StringNormaliser
+    {
+        public override string GetNormalisedString(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Null/blank value specified");
+
+            return value;
+        }
+    }
+
+This inherits from the abstract StringNormaliser class which *is* in the FullTextIndexer project and implements the Equals and GetHashCode methods of the IEqualityComparer&lt;string&gt; interface, requiring the derived class to provide the GetNormalisedString(string value) method only.
+
+And from this we can generate an autocomplete word list with a little more work:
+
+    var indexDataForAutoCompleteExtended = GenerateIndexData(
+        posts,
+        new NonAlteringStringNormaliser()
+    );
+    var autoCompleteContent = new NonNullOrEmptyStringList(
+        indexDataForAutoCompleteExtended.GetAllTokens()
+        .Where(token =>
+            (token.Length >= 3) &&
+            !char.IsPunctuation(token[0])
+            && !token.Any(c => char.IsNumber(c))
+        )
+        .Distinct(StringComparer.InvariantCultureIgnoreCase)
+        .Where(token => indexDataForSearching.GetMatches(token).Any())
+        .OrderBy(token => token.ToLower())
+    );
+
+The filters applied here were determined by running this against the blog content at the time and making up some rules that seemed like they made the resulting data look better (yes, as scientific as that! :) It ignores words less than three characters as these are usually stop words (I considered ignoring *all* stop words but some of the words in the stop word list seemed like things people *might* search on). If there are multiple tokens that are variations of each other with differing case then only one of them will be in the final list. Only tokens that actually result in matches in the "indexDataForSearching" content that was generated are included - this should always be the case for the string normaliser I'm currently using but if I tweak that in the future then I want to ensure that I don't end up with tokens being generated for the autocomplete list that don't actually match any Posts!
+
+It's worth noting that the autocomplete list generated is really more like a "suggested" words list since it can't cover every single match. If, for example, the input data contained the word "cats" but not "cat" then the plurality-handling string normaliser used in the search data generation will match the search term "cat" to the word "cats" in the content, but the autocomplete word list would *not* contain the word "cats" since that wasn't in the source content (though the word "cat" *would* be, as it *was* in the content). In practice, I don't see this being a problem as the search box on this site allows you to enter anything - you aren't restricted to only words in the autocomplete list.
+
+Finally, everything has been declared serialisable so that the index data could be cached on disk. In practice, this means that I build the index data locally when I update a Post and view it on my local computer - and then I upload the new content along with the on-disk index content so that searches performed on the site should be fast as soon as all this new data is uploaded.
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.

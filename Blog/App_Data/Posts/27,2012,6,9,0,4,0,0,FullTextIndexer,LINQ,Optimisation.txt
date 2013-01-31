@@ -1,0 +1,614 @@
+﻿## Optimising the Plurality-Handling Normaliser
+
+In the last post I took a first stab at an [English-language Plurality-handling String Normaliser](Post26) to work with a Full Text Indexer research project I'm playing with. I've been using it in conjunction with a normaliser that strips out punctuation from words, replaces accented characters with latin versions (eg. "é" replaced with "e") and lower-cases the content. This originally used a few regular expressions along with some character replacement but I wasn't delighted with the performance, so that was re-written to do one pass through the character and do it all at once and is now running much better. Whether that ties back into my [I don't like regular expressions](Post21) ramble well or not I'm not sure :)
+
+The point at which it does the most work is here:
+
+    public bool TryToTransform(string value, out string valueTransformed)
+    {
+        if (value == null)
+            throw new ArgumentNullException("value");
+                
+        if (_matchType == MatchTypeOptions.SuffixOnly)
+        {
+            var matchedSuffix = _values.FirstOrDefault(
+                suffix => (value.Length > suffix.Length) && value.EndsWith(suffix)
+            );
+            if (matchedSuffix != null)
+            {
+                valueTransformed =
+                    value.Substring(0, value.Length - matchedSuffix.Length) + _combinedValues;
+                return true;
+            }
+        }
+        else
+        {
+            if (_values.Contains(value))
+            {
+                valueTransformed = _combinedValues;
+                return true;
+            }
+        }
+
+        valueTransformed = null;
+        return false;
+    }
+
+The first approach I took was to take out some of the LINQ - it makes it easy to read but I don't actually know for sure what it's doing! I thought it was worth checking if being more explicit about what I want to do would reap any performance benefit.. So the lengths are explicitly checked first (if matching WholeWord then the value length must match the suffix length, if matching SuffixOnly then the value length must be *greater* than the suffix length) and then count back through the last characters of the input value and ensure that each one matches the suffix. Not *quite* as readable but no big deal.
+
+    public bool TryToTransform(string value, out string valueTransformed)
+    {
+        if (value == null)
+            throw new ArgumentNullException("value");
+                
+        foreach (var suffix in _values)
+        {
+            if (_matchType == MatchTypeOptions.WholeWord)
+            {
+                if (value.Length != suffix.Length)
+                    continue;
+            }
+            else if (!(value.Length > suffix.Length))
+                continue;
+
+            var matchedSuffixLength = 0;
+            for (var index = 0; index < suffix.Length; index++)
+            {
+                if (value[value.Length - (index + 1)] != suffix[suffix.Length - (index + 1)])
+                {
+                    matchedSuffixLength = 0;
+                    break;
+                }
+                matchedSuffixLength++;
+            }
+            if (matchedSuffixLength == 0)
+                continue;
+
+            valueTransformed =
+                value.Substring(0, value.Length - matchedSuffixLength) + _combinedValues;
+            return true;
+        }
+                
+        valueTransformed = null;
+        return false;
+    }
+
+Running a few loops of the All English Words data I mentioned in the [last post](Post26) saw an performance improvement (when run in release mode) over 3x - success!
+
+But with what I've been learning about LINQ Expressions over the last year or so (culminating in [The artist previously known as the AutoMapper-By-Constructor](Post23) and [The CompilableTypeConverter BitBucket repository](https://bitbucket.org/DanRoberts/compilabletypeconverter)) I couldn't help wondering if writing code that would generate expressions that unrolled the comparison loop and pre-generated the combined suffix extensions might not be faster. The only way to find out is to try!
+
+The idea is that it would effectively generate code along the lines of:
+
+    if ((value.length > 1)
+    && (value[value.length - 1] == 'y'))
+        return value.substring(0, value.length - 1) + "[y][ies]";
+
+    if ((value.length > 3)
+    && (value[value.length - 3] == 'i')
+    && (value[value.length - 2] == 'e')
+    && (value[value.length - 1] == 's'))
+        return value.substring(0, value.length - 3) + "[y][ies]";
+
+for all of the various plurality suffixes but while still maintaining the ability to easily define new suffix sets. And so, without further ado, I ended up with this:
+
+    /// <summary>
+    /// This will match common strings where one is the plural and the other the singular version
+    /// of the same word. It not intended to be perfect and may match a few false positives, but
+    /// it should catch most of the most common cases.
+    /// </summary>
+    [Serializable]
+    public class EnglishPluralityStringNormaliser : IStringNormaliser
+    {
+        private Func<string, string> _normaliser;
+        private IStringNormaliser _optionalPreNormaliser;
+        private PreNormaliserWorkOptions _preNormaliserWork;
+        public EnglishPluralityStringNormaliser(
+            IEnumerable<PluralEntry> plurals,
+            IEnumerable<string> fallbackSuffixes,
+            IStringNormaliser optionalPreNormaliser,
+            PreNormaliserWorkOptions preNormaliserWork)
+        {
+            if (plurals == null)
+                throw new ArgumentNullException("pluralEntries");
+            if (fallbackSuffixes == null)
+                throw new ArgumentNullException("fallbackSuffixes");
+            var allPreNormaliserOptions = (PreNormaliserWorkOptions)0;
+            foreach (PreNormaliserWorkOptions option in
+                Enum.GetValues(typeof(PreNormaliserWorkOptions)))
+            {
+                allPreNormaliserOptions = allPreNormaliserOptions | option;
+            }
+            if ((preNormaliserWork & allPreNormaliserOptions) != preNormaliserWork)
+                throw new ArgumentOutOfRangeException("preNormaliserWork");
+
+            _normaliser = GenerateNormaliser(plurals, fallbackSuffixes);
+            _optionalPreNormaliser = optionalPreNormaliser;
+            _preNormaliserWork = preNormaliserWork;
+        }
+
+        public EnglishPluralityStringNormaliser(
+            IStringNormaliser optionalPreNormaliser,
+            PreNormaliserWorkOptions preNormaliserWork
+        ) : this(DefaultPlurals, DefaultFallback, optionalPreNormaliser, preNormaliserWork) { }
+
+        public EnglishPluralityStringNormaliser()
+            : this(null, PreNormaliserWorkOptions.PreNormaliserDoesNothing) { }
+
+        public string GetNormalisedString(string value)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+
+            // If an additional normaliser was specified in the constructor then process the
+            // string with that first (eg. a normaliser that removes punctuation from values
+            // may be beneficial depending upon the the content that may be passed in)
+            if (_optionalPreNormaliser != null)
+                value = _optionalPreNormaliser.GetNormalisedString(value);
+
+            if ((_preNormaliserWork & PreNormaliserWorkOptions.PreNormaliserTrims)
+            != PreNormaliserWorkOptions.PreNormaliserTrims)
+                value = value.Trim();
+            if (value == "")
+                return "";
+
+            // We have to lower case the trimmed value since the suffixes are all stored as
+            // lower case values
+            if ((_preNormaliserWork & PreNormaliserWorkOptions.PreNormaliserLowerCases)
+            != PreNormaliserWorkOptions.PreNormaliserLowerCases)
+                value = value.ToLower();
+            return _normaliser(value);
+        }
+
+        public bool Equals(string x, string y)
+        {
+            if (x == null)
+                throw new ArgumentNullException("x");
+            if (y == null)
+                throw new ArgumentNullException("y");
+
+            return GetNormalisedString(x) == GetNormalisedString(y);
+        }
+
+        public int GetHashCode(string obj)
+        {
+            if (obj == null)
+                throw new ArgumentNullException("obj");
+
+            return GetNormalisedString(obj).GetHashCode();
+        }
+
+        private static Func<string, string> GenerateNormaliser(
+            IEnumerable<PluralEntry> plurals,
+            IEnumerable<string> fallbackSuffixes)
+        {
+            if (plurals == null)
+                throw new ArgumentNullException("pluralEntries");
+            if (fallbackSuffixes == null)
+                throw new ArgumentNullException("fallbackSuffixes");
+
+            // Build up if statements for each suffix - if a match is found, return the input
+            // value with the matched suffix replaced with a combination of all the other
+            // suffixes in PluralEntry
+            var result = Expression.Parameter(typeof(string), "result");
+            var endLabel = Expression.Label(typeof(string));
+            var valueTrimmed = Expression.Parameter(typeof(string), "valueTrimmed");
+            var expressions = new List<Expression>();
+            foreach (var plural in plurals)
+            {
+                if (plural == null)
+                    throw new ArgumentException("Null reference encountered in plurals set");
+
+                foreach (var suffix in plural.Values)
+                {
+                    var assignNormalisedValueToResult = Expression.Assign(
+                        result,
+                        GenerateStringConcatExpression(
+                            GenerateRemoveLastCharactersExpression(valueTrimmed, suffix.Length),
+                            Expression.Constant(
+                                CreateSuffixExtension(plural.Values),
+                                typeof(string)
+                            )
+                        )
+                    );
+                    expressions.Add(
+                        Expression.IfThen(
+                            GeneratePredicate(suffix, valueTrimmed, plural.MatchType),
+                            Expression.Block(
+                                assignNormalisedValueToResult,
+                                Expression.Return(endLabel, result)
+                            )
+                        )
+                    );
+                }
+            }
+
+            // If any fallback suffixes are specified, add a statement to append them if none
+            // of the PluralEntry matches are made
+            fallbackSuffixes = TidyStringList(fallbackSuffixes, v => v.Trim().ToLower());
+            if (fallbackSuffixes.Any())
+            {
+                expressions.Add(
+                    Expression.Assign(
+                        result,
+                        GenerateStringConcatExpression(
+                            valueTrimmed,
+                            Expression.Constant(
+                                CreateSuffixExtension(fallbackSuffixes),
+                                typeof(string)
+                            )
+                        )
+                    )
+                );
+            }
+            else
+                expressions.Add(Expression.Assign(result, valueTrimmed));
+
+            // Add the return-point label, configured to return the string value in "result"
+            expressions.Add(Expression.Label(endLabel, result));
+
+            return Expression.Lambda<Func<string, string>>(
+                Expression.Block(
+                    new[] { result },
+                    expressions
+                ),
+                valueTrimmed
+            ).Compile();
+        }
+
+        /// <summary>
+        /// Generate an expression that determines whether a string parameter matches a specified
+        /// suffix / matchType combination
+        /// </summary>
+        private static Expression GeneratePredicate(
+            string suffix,
+            ParameterExpression valueTrimmed,
+            MatchTypeOptions matchType)
+        {
+            if (string.IsNullOrWhiteSpace(suffix))
+                throw new ArgumentException("Null/blank suffix specified");
+            if (valueTrimmed == null)
+                throw new ArgumentNullException("valueTrimmed");
+            if (!Enum.IsDefined(typeof(MatchTypeOptions), matchType))
+                throw new ArgumentOutOfRangeException("matchType");
+
+            suffix = suffix.Trim();
+
+            var conditionElements = new List<Expression>();
+            var lengthProperty = typeof(string).GetProperty("Length");
+            var indexedProperty = typeof(string).GetProperties().First(
+                p => (p.GetIndexParameters() ?? new ParameterInfo[0]).Any()
+            );
+            if (matchType == MatchTypeOptions.SuffixOnly)
+            {
+                conditionElements.Add(
+                    Expression.GreaterThan(
+                        Expression.Property(valueTrimmed, lengthProperty),
+                        Expression.Constant(suffix.Length, typeof(int))
+                    )
+                );
+            }
+            else
+            {
+                conditionElements.Add(
+                    Expression.Equal(
+                        Expression.Property(valueTrimmed, lengthProperty),
+                        Expression.Constant(suffix.Length, typeof(int))
+                    )
+                );
+            }
+            for (var index = 0; index < suffix.Length; index++)
+            {
+                conditionElements.Add(
+                    Expression.Equal(
+                        Expression.Constant(suffix[index], typeof(char)),
+                        Expression.Property(
+                            valueTrimmed,
+                            indexedProperty,
+                            Expression.Subtract(
+                                Expression.Property(valueTrimmed, lengthProperty),
+                                Expression.Constant(suffix.Length - index, typeof(int))
+                            )
+                        )
+                    )
+                );
+            }
+            return CombineExpressionsWithAndAlso(conditionElements);
+        }
+
+        private static Expression CombineExpressionsWithAndAlso(
+            IEnumerable<Expression> expressions)
+        {
+            if (expressions == null)
+                throw new ArgumentNullException("expressions");
+
+            var expressionsTidied = new List<Expression>();
+            foreach (var expression in expressions)
+            {
+                if (expression == null)
+                    throw new ArgumentException("Null reference encountered in expressions set");
+                expressionsTidied.Add(expression);
+            }
+            if (!expressionsTidied.Any())
+                throw new Exception("No entries in expressions set");
+            else if (expressionsTidied.Count == 1)
+                return expressionsTidied[0];
+
+            var reducedExpressions = new List<Expression>();
+            for (var index = 0; index < expressionsTidied.Count; index += 2)
+            {
+                var expression = expressionsTidied[index];
+                if (index < (expressionsTidied.Count - 1))
+                {
+                    var expressionNext = expressionsTidied[index + 1];
+                    reducedExpressions.Add(Expression.AndAlso(expression, expressionNext));
+                }
+                else
+                    reducedExpressions.Add(expression);
+            }
+
+            return (reducedExpressions.Count == 1)
+                ? reducedExpressions[0]
+                : CombineExpressionsWithAndAlso(reducedExpressions);
+        }
+
+        /// <summary>
+        /// The value Expression must represent a non-null string that is as at least as long as
+        /// the specified length or an exception will
+        /// be thrown upon exection
+        /// </summary>
+        private static Expression GenerateRemoveLastCharactersExpression(
+            Expression value,
+            int length)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+            if (length < 0)
+                throw new ArgumentOutOfRangeException("length");
+
+            return Expression.Call(
+                value,
+                typeof(string).GetMethod("Substring", new[] { typeof(int), typeof(int) }),
+                Expression.Constant(0),
+                Expression.Subtract(
+                    Expression.Property(value, typeof(string).GetProperty("Length")),
+                    Expression.Constant(length, typeof(int))
+                )
+            );
+        }
+
+        /// <summary>
+        /// The values Expressions must represent strings otherwise the expression will fail when
+        /// executed
+        /// </summary>
+        private static Expression GenerateStringConcatExpression(params Expression[] values)
+        {
+            if (values == null)
+                throw new ArgumentNullException("values");
+
+            var valuesTidied = values.ToList();
+            if (!valuesTidied.Any())
+                throw new ArgumentException("No entries in values set");
+            if (valuesTidied.Any(v => v == null))
+                throw new ArgumentException("Null reference encountered in values set");
+
+            return Expression.Call(
+                typeof(string).GetMethod("Concat", new[] { typeof(string[]) }),
+                Expression.NewArrayInit(
+                    typeof(string),
+                    valuesTidied
+                )
+            );
+        }
+
+        private static string CreateSuffixExtension(IEnumerable<string> suffixes)
+        {
+            if (suffixes == null)
+                throw new ArgumentNullException("suffixes");
+
+            var suffixesTidied = suffixes.ToList();
+            if (!suffixesTidied.Any())
+                throw new ArgumentException("No entries in suffixes set");
+            if (suffixesTidied.Any(s => string.IsNullOrWhiteSpace(s)))
+                throw new ArgumentException("Null/blank entry encountered in suffixes set");
+
+            return "|" + string.Join("|", suffixesTidied.Select(s => s.Trim()));
+        }
+
+        /// <summary>
+        /// Given a set of values, ensure that none are null and return them de-duplicated after
+        /// having been pushed through a string manipulation. This will throw an exception for
+        /// null arguments or if any null value is encountered in the values set.
+        /// </summary>
+        private static IEnumerable<string> TidyStringList(
+            IEnumerable<string> values,
+            Func<string, string> transformer)
+        {
+            if (values == null)
+                throw new ArgumentNullException("values");
+            if (transformer == null)
+                throw new ArgumentNullException("transformer");
+
+            var valuesTidied = new List<string>();
+            foreach (var value in values)
+            {
+                if (value == null)
+                    throw new ArgumentException("Null entry encountered in values");
+
+                var valueToStore = transformer(value);
+                if (!valuesTidied.Contains(valueToStore))
+                    valuesTidied.Add(valueToStore);
+            }
+            return valuesTidied.Distinct();
+        }
+
+        public readonly static IEnumerable<string> DefaultFallback = new[] { "ses", "es", "s" };
+        public readonly static PluralEntry[] DefaultPlurals = new[]
+        {
+            // eg. formula / formulae / formulas
+            new PluralEntry(new[] { "ula", "ulae", "ulas" }, MatchTypeOptions.SuffixOnly),
+
+            // eg. category / categories
+            new PluralEntry(new[] { "y", "ies" }, MatchTypeOptions.SuffixOnly),
+
+            // eg. cactus / cactii
+            new PluralEntry(new[] { "us", "ii" }, MatchTypeOptions.SuffixOnly),
+
+            // eg. child / children
+            new PluralEntry(new[] { "ld", "ldren" }, MatchTypeOptions.SuffixOnly),
+
+            // eg. medium / media
+            new PluralEntry(new[] { "ium", "ia" }, MatchTypeOptions.SuffixOnly),
+
+            // Common special cases that have to come before the "ses", es", "s" form
+            new PluralEntry(new[] { "index", "indexes", "indices" }, MatchTypeOptions.WholeWord),
+            new PluralEntry(new[] { "matrix", "matrices" }, MatchTypeOptions.WholeWord),
+            new PluralEntry(new[] { "vertex", "vertices" }, MatchTypeOptions.WholeWord),
+
+            // eg. Abacuses, matching "s" here means we must use "ses", "es" AND "s" as fallbacks
+            new PluralEntry(new[] { "ses", "es", "s" }, MatchTypeOptions.SuffixOnly),
+
+            // Other common special cases
+            new PluralEntry(new[] { "datum", "data" }, MatchTypeOptions.WholeWord),
+            new PluralEntry(new[] { "man", "men" }, MatchTypeOptions.WholeWord),
+            new PluralEntry(new[] { "woman", "women" }, MatchTypeOptions.WholeWord)
+        };
+
+        [Serializable]
+        public class PluralEntry
+        {
+            public PluralEntry(IEnumerable<string> values, MatchTypeOptions matchType)
+            {
+                if (values == null)
+                    throw new ArgumentNullException("values");
+                if (!Enum.IsDefined(typeof(MatchTypeOptions), matchType))
+                    throw new ArgumentOutOfRangeException("matchType");
+
+                var valuesTidied = TidyStringList(values, v => v.Trim().ToLower());
+                if (!valuesTidied.Any())
+                    throw new ArgumentException("No entries in values set");
+
+                Values = valuesTidied.Distinct().ToList().AsReadOnly();
+                MatchType = matchType;
+            }
+
+            /// <summary>
+            /// This will never be null or an empty set, nor will it contain any null, empty or
+            /// duplicate values (all values are lower-cased and trimmed)
+            /// </summary>
+            public ReadOnlyCollection<string> Values { get; private set; }
+
+            public MatchTypeOptions MatchType { get; private set; }
+        }
+
+        [Serializable]
+        public enum MatchTypeOptions
+        {
+            SuffixOnly,
+            WholeWord
+        }
+    }
+
+It still takes me a far while to craft the generation LINQ Expressions but I do think that once written the resulting code is actually fairly easy to follow. For each suffix in a "PluralEntry" (where the PluralEntry might describe the group "y", "ies" as a SuffixOnly extension - as clearly seen in the [last post](Post26)) a predicate is generated with LINQ Expressions that compares the input string's length and each of the characters that could correlate with the suffix string. Very similar to inside the loop of the first optimisation at the top of this post. An IfThen Expression will consider this predicate and - if matched - generate result that removes the suffix from the input value and appends a combined string consisting of the the suffix values in the group before jumping to the end of the Expression block (effectively "returning" out of the block). Again, just like the setting of the valueTransformed string in the earlier code. If none of the suffix groups are found to match then it will append a default set of suffixes, so that "cat" is transformed to "cat|s|es|ses" in order to match "cats" which would also be transformed to "cat|s|es|ses", for example.
+
+There are couple of oddities in the code - I struggled for a while to find a nice way to access characters by index in a string since the ArrayAccess Expressions can't be used since a string isn't *technically* an array of characters; you have to first use reflection to get hold of the indexed property of the string type, there's only one so that must be the property we want to access! When comparing the string length and the individual characters, the Expressions are combined with the AndAlso Expression as this ensures that short-circuiting of the conditions is utilised - as soon as one condition is not met, any further ones are ignored.
+
+This brought on another performance improvement of over 3x - success again!
+
+### Additional tweaks
+
+There are a couple more minor optimisations in the new code that were made with knowledge of how I intended to integrate it. I was intending to use this "DefaultStringNormaliser" mentioned earlier that would trim, lower-case, remove punctuation and replace non-latin characters. This can be passed in as the "optionalPreNormaliser" constructor parameter and will process the string before the plurality normalisation is handled. However, if this "pre-normaliser" is going to trim and lower-case the input then there's no need for the EnglishPluralityStringNormaliser to do it as well! So there's a PreNormaliserWorkOptions enum that allows the instantiator to pass in hints as to whether the optionalPreNormaliser (if any) is going to do any of this work.
+
+Sending a few passes of the All English Words data through an EnglishPluralityStringNormaliser that wraps the DefaultStringNormaliser (code below) with PreNormaliserLowerCases and PreNormaliserTrims specified compared to running it with PreNormaliserDoesNothing (which force the Trim and ToLower calls to be made by the EnglishPluralityStringNormaliser even though the DefaultStringNormaliser has already done this work) resulted in a performance boost of over 1.4x. Not as dramatic, but definitely not to be sniffed at!
+
+There's one final tweak to note; I've switched from appending the suffix groups as "[s][es][ses]" to "|s|es|ses" since I'm intended to store the resulting normalised strings in a Ternary Search Tree (as discussed in [The .Net Dictionary is FAST!](Post25)) and if the string is shorter then less comparisons have to be made when matching a string in that structure!
+
+### The "Default String Normaliser"
+
+Since I've made reference a few times to the DefaultStringNormaliser which I've made use of, here's the current code:
+
+    /// <summary>
+    /// This will perform string comparisons where the values have any accented characters
+    /// replaced with non-accented versions, all whitespace converted to spaces and runs of
+    /// whitespace replaced with a single space, all punctuation removed and the content
+    /// then lower-cased.
+    /// </summary>
+    [Serializable]
+    public sealed class DefaultStringNormaliser : IStringNormaliser
+    {
+        private readonly static HashSet<Char> PunctuationCharacters = new HashSet<char>(
+            Enumerable.Range(char.MinValue, char.MaxValue)
+                .Select(c => (char)c)
+                .Where(c => char.IsPunctuation(c))
+        );
+
+        public string GetNormalisedString(string value)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+
+            var normalisedValue = value.Normalize(NormalizationForm.FormKD);
+            var content = new char[normalisedValue.Length];
+            var contentIndex = 0;
+            var contentIndexOfLastNonWhitespace = 0;
+            var lastCharWasWhitespace = false;
+            var gotContent = false;
+            for (var index = 0; index < normalisedValue.Length; index++)
+            {
+                var currentChar = normalisedValue[index];
+                if (PunctuationCharacters.Contains(currentChar))
+                    continue;
+                if ((currentChar == '\r') || (currentChar == '\n') || (currentChar == '\t'))
+                    currentChar = ' ';
+                else
+                {
+                    var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(currentChar);
+                    if ((unicodeCategory == UnicodeCategory.EnclosingMark)
+                    || (unicodeCategory == UnicodeCategory.NonSpacingMark)
+                    || (unicodeCategory == UnicodeCategory.SpacingCombiningMark))
+                        currentChar = ' ';
+                }
+                if (currentChar == ' ')
+                {
+                    if (!lastCharWasWhitespace && gotContent)
+                    {
+                        content[contentIndex] = currentChar;
+                        contentIndex++;
+                        lastCharWasWhitespace = true;
+                    }
+                    continue;
+                }
+                if (!char.IsLower(currentChar))
+                    currentChar = char.ToLower(currentChar);
+                content[contentIndex] = currentChar;
+                contentIndex++;
+                contentIndexOfLastNonWhitespace = contentIndex;
+                lastCharWasWhitespace = false;
+                gotContent = true;
+            }
+            return new string(content, 0, contentIndexOfLastNonWhitespace);
+        }
+
+        public bool Equals(string x, string y)
+        {
+            if (x == null)
+                throw new ArgumentNullException("x");
+            if (y == null)
+                throw new ArgumentNullException("y");
+
+            return GetNormalisedString(x) == GetNormalisedString(y);
+        }
+
+        public int GetHashCode(string obj)
+        {
+            if (obj == null)
+                throw new ArgumentNullException("obj");
+
+            return GetNormalisedString(obj).GetHashCode();
+        }
+    }
+
+### Conclusion
+
+I'm still a firm believer in writing the code to work and be easily understood and maintained first. But when a section of code is measurably a bottleneck, and that bottleneck is worth removing, then little adventures like this can be fun *and* beneficial! And, to be honest, I don't think the resulting code is *that* difficult to understand. There are probably a few more tweaks that could be made to really eke out some more performance but I'm perfectly happy with it for now :)
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.

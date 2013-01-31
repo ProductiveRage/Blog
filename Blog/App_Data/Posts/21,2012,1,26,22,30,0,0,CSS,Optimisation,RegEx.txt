@@ -1,0 +1,131 @@
+## CSS Minification Regular Expressions
+
+### I don't like regular expressions (most of the time)
+
+> Some people, when confronted with a problem, think "I know, I'll use regular expressions." Now they have two problems.
+
+Using this quote when talking about regular expressions is not exactly original, [I know](http://www.codinghorror.com/blog/2008/06/regular-expressions-now-you-have-two-problems.html) but I do have a long-standing mistrust and borderline disdain for regular expressions which may well have a relation to the fact that they are not exactly my forte. But unfortunately they also seem to be frequently used by people whose forte they also are not! Often the times I come across them they don't cover all the edge cases that the writer originally either expected them to or didn't expect at all - and then they sort of mutate over time into barely-readable strings of symbols that are more difficult to comprehend and maintain (and slower) than a set of functionally-equivalent string manipulation procedures. Don't even get me started on the fact that commenting them seems to be bypassed every time.. since the regex itself is so small the comment would dwarf it, and that would be stupid right? [Wrong](http://twitter.com/#!/quepimquepam/statuses/141976977061068801).
+
+Everyone knows the classic email validation example which is frequently brought out as a case against regular expressions but I've got two other stories I suffered through first hand:
+
+#### The CSS comment-extracing regular expression fail
+
+I wrote a CSS minimiser for use in a Classic ASP Javascript app some years ago using a regular expression to strip the comments out before further processing was done, thus:
+
+    return strContent.replace(/\/\*(.|[\r\n])*?\*\//g, "");
+
+I did my research on the old t'interwebs and this seemed to be well recommended and would do just what I wanted. It worked fine for a few weeks until - out of the blue - IIS was flatlining the CPU and requests were timing out. I don't even remember how we tracked this down but it eventually arose that a stylesheet had an unclosed comment in it. Appending "/**/" to the content before performing the replacement made the problem disappear.
+
+#### The Availability Component regular expression fail
+
+The second example was a component I was given to integrate with at work, part of whose job was to query a Hotel Availablity Web Service. The response xml was always passed through a regular expression that would ensure no credit card details appeared in the content. The xml returned often described detailed information from many Suppliers and could be several megabytes of text so when these calls were taking over 60 seconds and pegging the cpu I was told that it must be the weight of data and the deserialisation causing it. Watching the data move back and forth in Fiddler, though, it was clear that these requests would complete in around 6 seconds.. further investigation by the component writer eventually confirmed that the deserialisation took very little time or resources (well, "very little" in relation to a 60 seconds / 100% cpu event) but the regular expression scanning for the card details was creating all the work. The best part being that these response would *never* contain any credit card details, its just that this expression had been applied to *all* responses for "consistency".
+
+It could well be argued that none of these cases are really the fault of regular expressions themselves - the email example is misuse of a tool, the CSS comment removal could be the regex engine implementation (possibly?!) and the availability issue was entirely unnecessary work. But the fact that these issues are lurking out there (waiting to strike!) makes me wary - which is *not* a reason in isolation not to use something, but it definitely makes me think that my understanding not only of how they can be written but the implications of how they will be processed could do with serious improvement. But I think this needs to go for anyone else writing these regular expressions - if you don't know how they're being worked out, how do you know whether or not they'll scale to text more than a few lines long? Will they scale linearly or exponentially or in some completely different manner?? Again, these are not exactly original thoughts and Joel Spolsky's [Leaky Abstractions](http://www.joelonsoftware.com/articles/LeakyAbstractions.html) article is basically saying (much more eloquently) that you should understand at least one layer below the current abstraction you're using.
+
+### Fighting my fears
+
+But so many people will tell you that regular expressions are a valuable tool to have on hand. And I've used ISAPI Rewriter before to deal with friendly urls and that was great. (Not that I can say I miss it when I use ASP.Net MVC Routing instead though :) And there are definite occassion where regular expressions look like the *ideal* tool to use - the ones I "borrowed" to write the CSS minifier in my [last post](Post20) were *so* convenient and much nicer than the idea of parsing all that content manually. And so I'm off to try and expand my knowledge and experience by extending the minifier to deal with "@import" statements in the stylesheets..
+
+This is what I've cobbled together for now. It probably looks to an experienced regular expression writer like it was written by a noob.. er, yeah, there's a good reason for that! :D And I'm not sure if the way I've tried to combine the various import formats using String.Join makes for more readable code or for code that looks like nonsense. Not to mention that they all start and end exactly the same - is this duplication something I want to hide away ([DRY](http://en.wikipedia.org/wiki/Don't_repeat_yourself)) or will that harm the readability which is also very important??
+
+    private static Regex ImportDeclarationsMatcher = new Regex(
+        String.Join("|", new[]
+        {
+            // @import url("test.css") screen;
+            "@import\\s+url\\(\"(?<filename>.*?)\"\\)\\s*(?<media>.*?)\\s*(?:;|\r|\n)",
+
+            // @import url("test.css") screen;
+            "@import\\s+url\\('(?<filename>.*?)'\\)\\s*(?<media>.*?)\\s*(?:;|\r|\n)",
+
+            // @import url(test.css) screen;
+            "@import\\s+url\\((?<filename>.*?)\\)\\s*(?<media>.*?)\\s*(?:;|\r|\n)",
+
+            // @import "test.css" screen;
+            "@import\\s+\"(?<filename>.*?)\"\\s*(?<media>.*?)\\s*(?:;|\r|\n)",
+
+            // @import 'test.css' screen;
+            "@import\\s+'(?<filename>.*?)'\\s*(?<media>.*?)\\s*(?:;|\r|\n)"
+        }),
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
+
+    /// <summary>
+    /// This will never return null nor any null instances. The content should be stripped of
+    /// comments before being passed in since there is no parsing done to ensure that the
+    /// imports matched exist in active (ie. non-commented-out) declarations.
+    /// </summary>
+    public static IEnumerable<StylesheetImportDeclaration> GetImports(string content)
+    {
+        if (content == null)
+            throw new ArgumentNullException("content");
+        if (content.Trim() == "")
+            return new NonNullImmutableList<StylesheetImportDeclaration>();
+
+        // Note: The content needs a line return appending to the end just in case the last line
+        // is an import doesn't have a trailing semi-colon or line return of its own (the Regex
+        // won't pick it up otherwise)
+        var imports = new List<StylesheetImportDeclaration>();
+        foreach (Match match in ImportDeclarationsMatcher.Matches(content + "\n"))
+        {
+            if (match.Success)
+            {
+                imports.Add(new StylesheetImportDeclaration(
+                    match.Value,
+                    match.Groups["filename"].Value,
+                    match.Groups["media"].Value
+                ));
+            }
+        }
+        return imports;
+    }
+
+    public class StylesheetImportDeclaration
+    {
+        public StylesheetImportDeclaration(
+            string declaration,
+            string filename,
+            string mediaOverride)
+        {
+            if (string.IsNullOrWhiteSpace(declaration))
+                throw new ArgumentException("Null/blank declaration specified");
+            if (string.IsNullOrWhiteSpace(filename))
+                throw new ArgumentException("Null/blank filename specified");
+
+            Declaration = declaration.Trim();
+            Filename = filename.Trim();
+            MediaOverride = string.IsNullOrWhiteSpace(mediaOverride)
+                ? null
+                : mediaOverride.ToString();
+        }
+
+        /// <summary>
+        /// This will never be null or empty
+        /// </summary>
+        public string Declaration { get; private set; }
+
+        /// <summary>
+        /// This will never be null or empty
+        /// </summary>
+        public string Filename { get; private set; }
+
+        /// <summary>
+        /// This may be null but it will never be empty
+        /// </summary>
+        public string MediaOverride { get; private set; }
+    }
+
+This will hopefully match imports of the various supported formats
+
+    @import url("test.css")
+    @import url("test.css")
+    @import url(test.css)
+    @import "test.css"
+    @import 'test.css'
+
+all terminated with either semi-colons or line returns, all with optional media types / media queries, all with variable whitespace between the elements. That is all done in a _lot_ less code that if I was going to try to parse that content myself. Which is nice!
+
+### So..
+
+I think this little foray has been a success! But now I've got the syntax down (for this case at least), I need to stop being a hypocrit and go off and try to find out how exactly these expressions are processed. As far as I know these might run fine on content up to a certain size and then go batshit crazy on anything bigger! Or they might run like finely honed algorithmic masterpieces on anything thrown at them* - I guess I won't know until I find out more!
+
+\* No, I don't believe that either! :)

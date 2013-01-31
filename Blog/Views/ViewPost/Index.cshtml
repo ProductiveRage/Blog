@@ -1,0 +1,74 @@
+﻿@model Blog.Models.PostListModel
+@using Blog.Helpers.Posts;
+@using System.Linq;
+
+@{
+    ViewBag.Title = Model.Title;
+    Layout = "~/Views/Shared/SiteMasterWithSidebar.cshtml";
+}
+
+@if (Model.Posts.Any())
+{
+	if (Model.OptionalDisqusShortName != null)
+	{
+				<script type="text/javascript">
+					var disqus_shortname = "@Html.Raw(HttpUtility.JavaScriptStringEncode(Model.OptionalDisqusShortName))";
+					function executeWhen(fncAction, fncConditional, intDelayBetweenRetries) {
+						if (fncConditional()) { fncAction(); return; }
+						setTimeout(function () { executeWhen(fncAction, fncConditional, intDelayBetweenRetries); }, intDelayBetweenRetries);
+					}
+					executeWhen(
+						function () { $("div.Content p.Comments").show(); },
+						function () { return (typeof ($) !== "undefined") },
+						10
+					);
+				</script>
+ }
+}
+
+@foreach (var post in Model.Posts)
+{
+				<div class="Content">
+					@Html.RenderPost(post, Model.PostContentCache)
+					@if (Model.IsSinglePostView)
+					{
+						<div id="disqus_thread"></div>
+						<script type="text/javascript">
+							var disqus_identifier = "@post.Id";
+							var disqus_title = "@Html.Raw(HttpUtility.JavaScriptStringEncode(post.Title.Trim()))";
+							executeWhen(
+								function () {
+									$(document).ready(function () {
+										var dsq = document.createElement("script");
+										dsq.type = "text/javascript";
+										dsq.async = true;
+										dsq.src = "http://" + disqus_shortname + ".disqus.com/embed.js";
+										(document.getElementsByTagName("head")[0] || document.getElementsByTagName("body")[0]).appendChild(dsq);
+									})
+								},
+								function () { return (typeof ($) !== "undefined") },
+								10
+							);
+						</script>
+					}
+					else
+					{
+						<p class="Comments">
+							<a href="/Read/@post.Id#disqus_thread" data-disqus-identifier="@post.Id">Comments</a>
+						</p>
+					}
+				</div>
+}
+
+@if (!Model.IsSinglePostView)
+{
+				<script type="text/javascript">
+					(function () {
+						var s = document.createElement("script");
+						s.type = "text/javascript";
+						s.async = true;
+						s.src = "http://" + disqus_shortname + ".disqus.com/count.js";
+						(document.getElementsByTagName("HEAD")[0] || document.getElementsByTagName("BODY")[0]).appendChild(s);
+					} ());
+				</script>
+}

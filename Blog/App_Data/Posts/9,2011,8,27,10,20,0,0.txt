@@ -1,0 +1,175 @@
+## Impersonating the ASP Request Object
+
+I've got something coming up at work soon where we're hoping to migrate some internal web software from VBScript ASP to .Net, largely for performance reasons. The basic structure is that there's an ASP "Engine" running which instantiates and renders Controls that are VBScript WSC components. The initial task is going to be to try to replace the main Engine code and work with the existing Controls - this architecture give us the flexibility to migrate in this manner, rather than having to try to attack the entire codebase all at once. References are passed into the WSC Controls for various elements of the Engine but also for ASP objects such as Request and Response.
+
+The problem comes with the use of the Request object. I want to be able to swap it out for a .Net COM component since access to the ASP Request object won't be available when the Engine is running in .Net. But the Request collections (Form, QueryString and ServerVariables) have a variety of access methods that are not particular easy to replicate -
+
+    ' Returns the full QueryString content (url-encoded), 
+    Request.QueryString
+     
+    Request.QueryString.Count
+    Request.QueryString.Keys.Count
+
+    ' Loops over the keys in the collections
+    For .. in Request.QueryString
+    For .. in Request.QueryString.Keys
+
+    ' Returns a string containing values for the specified key (comma-separated)
+    Request.QueryString(key) 
+    Request.QueryString.Item(key) 
+
+    ' Loops over the values for the specified key
+    For Each .. In Request.QueryString(key)
+    For Each .. In Request.QueryString.Item(key)
+
+### Approaches
+
+In the past I've made a few attempts at attacking this before -
+
+First trying a VBScript wrapper to take advantage of VBScript's Default properties and methods. But it doesn't seem possible to create a collection in VBScript that the For.. Each construct can work over.
+
+Another time I tried a Javascript wrapper - a returned array can be enumerate with For.. Each and I thought I might be able to add methods of properties to the returned array for the default properties, but these were returned in the keys when enumerated.
+
+I've previously tried to write a COM component but was unable to construct classes that would be accessible by all the above examples. This exact problem is described in a thread on StackOverflow and I thought that one of the answers would solve my problem by returning different data depending upon whether a key was supplied: [here](http://stackoverflow.com/questions/317759/why-is-the-indexer-on-my-net-component-not-always-accessible-from-vbscript/1539519#1539519).
+
+Hooray!
+
+Actually, no. I tried using that code and couldn't get it to work as advertised - getting a COM exception when trying to access QueryString without a key.
+
+_However_, further down in that thread ([here](http://stackoverflow.com/questions/317759/why-is-the-indexer-on-my-net-component-not-always-accessible-from-vbscript/4124031#4124031)) there's another suggestion - to implement IReflect. Not an interface I was familiar with..
+
+### IReflect
+
+It turns out writing a class that implements IReflect and specifies ClassInterface(ClassInterfaceType.AutoDispatch) will enable us to handle all querying and invoking of the class interface from COM! The AutoDispatch value, as I understand it (and I'm far from an authority on this!), prevents the class from being used in any manner other than late binding as it doesn't publish any interface data in a type library - callers must always query the object for method, property, etc.. accessibility. And this will enable us to intercept this queries and invoke requests and handle as we see fit.
+
+It turns out that we don't even really have to do anything particularly fancy with the requests, and can pass them straight through to a .Net object that has method signatures with different number of parameters (which ordinarily we can't do through a COM interface).
+
+A cut down version of the code I've ended up with will demonstate:
+
+    // This doesn't need to be ComVisible since we're never returning an instance of it through COM, only
+    // one wrapped in a LateBindingComWrapper
+    public class RequestImpersonator
+    {
+        public RequestDictionary Querystring()
+        {
+          // Return a reference to the whole RequestDictionary if no key specified
+        }
+        public RequestStringList Querystring(string key)
+        {
+          // Return data for the particular key, if one is specified
+        }
+
+        // .. code for Form, ServerVariables, etc..
+
+    }
+
+    [ClassInterface(ClassInterfaceType.AutoDispatch)]
+    [ComVisible(true)]
+    public class LateBindingComWrapper : IReflect
+    {
+        private object _target;
+        public LateBindingComWrapper(object target)
+        {
+          if (target == null)
+            throw new ArgumentNullException("target");
+          _target = target;
+        }
+
+        public Type UnderlyingSystemType
+        {
+          get { return _target.GetType().UnderlyingSystemType; }
+        }
+
+        public object InvokeMember(
+          string name,
+          BindingFlags invokeAttr,
+          Binder binder,
+          object target,
+          object[] args,
+          ParameterModifier[] modifiers,
+          CultureInfo culture,
+          string[] namedParameters)
+        {
+          return _target.GetType().InvokeMember(
+            name,
+            invokeAttr,
+            binder,
+            _target,
+            args,
+            modifiers,
+            culture,
+            namedParameters
+          );
+        }
+
+        public MethodInfo GetMethod(string name, BindingFlags bindingAttr)
+        {
+          return _target.GetType().GetMethod(name, bindingAttr);
+        }
+
+        public MethodInfo GetMethod(
+          string name,
+          BindingFlags bindingAttr,
+          Binder binder,
+          Type[] types,
+          ParameterModifier[] modifiers)
+        {
+          return _target.GetType().GetMethod(name, bindingAttr, binder, types, modifiers);
+        }
+        
+        public MethodInfo[] GetMethods(BindingFlags bindingAttr)
+        {
+          return _target.GetType().GetMethods();
+        }
+
+        // .. Other IReflect methods for fields, members and properties
+
+    }
+
+If we pass a RequestImpersonator-wrapping LateBindingComWrapper reference that wraps one of the WSC Controls as its Request reference then we've got over the problem with the optional key parameter and we're well on our way to a solution!
+
+RequestDictionary is enumerable for VBScript and exposes a Keys property which is a self-reference so that "For Each .. In Request.QueryString" and "For Each .. In Request.QueryString.Keys" constructs are possible. It also has a default GetSummary method which returns the entire querystring content (url-encoded). The enumerated values are RequestStringList instances which are in turn enumerable so that "For Each .. In Request.QueryString(key)" is possible but _also_ have a default property which combines the values into a single (comma-separated) string.
+
+### VBScript Enumeration
+
+I spent a lot of time trying to ascertain what exactly was required for a class to be enumerable by VBScript - implementing Generic.IEnumerable and/or IEnumerable didn't work, returning an ArrayList _did_ work, implementing ICollection _did_ work. Now I thought I was on to something! After looking into which methods and properties were actually being used by the COM interaction, it seemed that only "IEnumerator GetEnumerator()" and "int Count" were called. So I started off with:
+
+    [ComVisible(true)]
+    public class RequestStringList
+    {
+        private List<string> _values;
+
+        // ..
+
+        [DispId(-4)]
+        public IEnumerator GetEnumerator()
+        {
+            return _values.GetEnumerator();
+        }
+        public int Count
+        {
+            get { return _values.Count; }
+        }
+    }
+
+which worked great.
+
+This concept of Dispatch Ids (DispId) was ringing a vague bell from some VB6 component work I'd done the best part of a decade ago but not really encountered much since. These Dispatch Ids identify particular functions in a COM interface with zero and below having secret special Microsoft meanings. Zero would be default and -4 was to do with enumeration, so I guess this explains why there is a [DispId(-4)] attribute on GetEnumerator in IEnumerable.
+
+_However_, .. RequestStringList also works if we DON'T include the [DispId(-4)] and try to enumerate over it. To be completely honest, I'm not sure what's going on with that. I'm not sure if the VBScript approach to the enumeration is performing some special check to request the GetEnumerator method by name rather than specific Dispatch Id.
+
+On a side note, I optimistically wondered if I could create an enumerable class in VBScript by exposing a GetEnumerator method and Count property (implementing an Enumerator class matching .Net's IEnumerator interface).. but VBScript was having none of it, giving me the "object not a collection" error. Oh well; no harm, no foul.
+
+### More Dispatch Id Confusion
+
+As mentioned above, RequestDictionary and RequestStringList have default values on them. The would ordinarily be done with a method or property with Dispatch Id of zero. But again, VBScript seems to have its own special cases - if a method or property is named "Value" then this will be used as the default even if it doesn't have DispId(0) specified.
+
+### Limitations
+
+I wrote this to try to solve a very specific problem, to create a COM component that could be passed to a VBScript WSC Control that would appear to mimic the ASP Request object's interface. And while I'm happy with the solution, it's not perfect - the RequestDictionary and RequestStringList classes are not enumerable from Javascript in a "for (var .. in ..)" construct. I've not looked into why this this or how easy (or not!) it would be to solve since it's not imporant for my purposes.
+
+One thing I did do after the bulk of the work was done, though, was to add some managed interfaces to RequestDictionary, RequestStringList and RequestImpersonatorCom which enabled managed code to access the data in a sensible manner. Adding classes to RequestImpersonatorCom has no effect on the COM side since all of the invoke calls are performed against the RequestImpersonator that's wrapped up in the LateBindingComWrapper.
+
+### Success!
+
+After the various attempts I've made at looking into this over the years, I'm delighted that I've got a workable solution that integrates nicely with both VBScript _and_ the managed side (though the latter was definitely a bonus more than an original requirement). The curent code can be found on GitHub at: [https://github.com/ProductiveRage/ASPRequestImpersonator](https://github.com/ProductiveRage/ASPRequestImpersonator).

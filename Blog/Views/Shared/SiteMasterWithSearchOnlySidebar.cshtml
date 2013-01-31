@@ -1,0 +1,25 @@
+﻿@model Blog.Models.ISideBarContentModel
+@using Blog.Helpers.Sidebar;
+@{
+	Layout = "~/Views/Shared/SiteMaster.cshtml";
+}
+			<div class="Main HasSideBar">
+				@RenderBody()
+				<div class="Footer">
+					Productive Rage @DateTime.Now.Year
+				</div>
+			</div>
+
+			<div class="SideBar">
+				<div class="Search">
+					@using (Html.BeginForm("Search", "Search", FormMethod.Get))
+					{
+						<div>
+							<input type="text" class="SiteSearch" name="term" value="@Html.Raw(((Model is Blog.Models.SearchResultsModel)
+																					? Html.AttributeEncode(  ((Blog.Models.SearchResultsModel)Model).SearchTerm )
+																					: ""))" />
+							<input type="submit" class="SiteSearchSubmit" value="Search" />
+						</div>
+					}
+				</div>
+			</div>

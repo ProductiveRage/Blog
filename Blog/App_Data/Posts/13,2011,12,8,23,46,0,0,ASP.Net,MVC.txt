@@ -1,0 +1,97 @@
+## STA ApartmentState with ASP.Net MVC
+
+Continuing on with the proof-of-concept I'm doing at work regarding reimplementing a VBScript Engine with WSC Controls in .Net I've been trying to develop an ASP.Net MVC Controller that will execute in the STA ApartmentState having read this article:
+
+[http://msdn.microsoft.com/en-us/magazine/cc163544.aspx](http://msdn.microsoft.com/en-us/magazine/cc163544.aspx).
+
+The upshot is that if components that run in STA are shared by something executing as MTA then only a single thread from the MTA worker can operate on the component at a time. If the caller is running as STA then separate instances will exist such that each request (I'm thinking in terms of ASP.Net MVC requests) gets its own instance, preventing requests getting queued up waiting for each other when accessing the STA components.
+
+ASP.Net WebForms Pages support an "ASPCompat" attibute which will create the request as STA, rather than MTA. The article I linked above demonstrates how to do similar for an asmx web service. And the forum answer here claims to describe how to do the same for ASP.Net MVC: [http://forums.asp.net/t/1302406.aspx](http://forums.asp.net/t/1302406.aspx).
+
+_However.._
+
+I'm not sure what version of MVC that was for, and if things have changed since then (it's marked August 2008), but when I tried to use it it didn't compile :(
+
+So here's the version I'm using with the MVC 3 / .Net 4.0 project I've got on the go - we need an IRouteHandler implementation which makes use of an STA-inducing Handler. Thus:
+
+
+    public class STAThreadRouteHandler : IRouteHandler
+    {
+        public IHttpHandler GetHttpHandler(RequestContext requestContext)
+        {
+            if (requestContext == null)
+                throw new ArgumentNullException("requestContext");
+
+            return new STAThreadHttpAsyncHandler(requestContext);
+        }
+    }
+
+    public class STAThreadHttpAsyncHandler : Page, IHttpAsyncHandler, IRequiresSessionState
+    {
+        private RequestContext _requestContext;
+        public STAThreadHttpAsyncHandler(RequestContext requestContext)
+        {
+            if (requestContext == null)
+                throw new ArgumentNullException("requestContext");
+
+            _requestContext = requestContext;
+        }
+
+        public IAsyncResult BeginProcessRequest(HttpContext context, AsyncCallback cb, object extraData)
+        {
+            return this.AspCompatBeginProcessRequest(context, cb, extraData);
+        }
+
+        protected override void OnInit(EventArgs e)
+        {
+            var controllerName = _requestContext.RouteData.GetRequiredString("controller");
+            var controllerFactory = ControllerBuilder.Current.GetControllerFactory();
+            var controller = controllerFactory.CreateController(_requestContext, controllerName);
+            if (controller == null)
+                throw new InvalidOperationException("Could not find controller: " + controllerName);
+            try
+            {
+                controller.Execute(_requestContext);
+            }
+            finally
+            {
+                controllerFactory.ReleaseController(controller);
+            }
+            this.Context.ApplicationInstance.CompleteRequest();
+        }
+
+        public void EndProcessRequest(IAsyncResult result)
+        {
+            this.AspCompatEndProcessRequest(result);
+        }
+
+        public override void ProcessRequest(HttpContext httpContext)
+        {
+            throw new NotSupportedException(
+                "STAThreadRouteHandler does not support ProcessRequest called (only BeginProcessRequest)"
+            );
+        }
+    }
+
+Then in the routes defined in Global.asx.cs we need something along the lines of:
+
+    RouteTable.Routes.Add(new Route(
+        "{*url}",
+        new RouteValueDictionary(new { controller = "Default", action = "PageRequest" }),
+        new STAThreadRouteHandler()
+    ));
+
+in place of
+
+    routes.MapRoute(
+        "Default",
+        "{*url}",
+        new { controller = "Default", action = "PageRequest" }
+    );
+
+
+This post has been quite derivative of other works but it took me a fair amount of researching to get to this point! Maybe this will benefit someone else going down a similar windy path..
+
+###IRequiresSessionState
+
+Of particular note (and absent from the referenced forum answer) is the IRequiresSessionState implemented by STAThreadRouteHandler. This interface has no methods or properties but identifies the Handler as being one that requires that Session State be passed to it.. er, as the name implies! But without this, the Session property of the specified Controller will always be null. This took me quite a while to track down since - unless you know of this particular interface - it's fairly difficult information to track down! Or maybe I was just having a bad Google day.. :)

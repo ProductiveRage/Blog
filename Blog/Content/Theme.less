@@ -1,0 +1,28 @@
+html { background: url("/Content/Images/Background-Repeat.jpg") repeat-x #800C0E; }
+
+body, td
+{
+	background: url("/Content/Images/Background.jpg") no-repeat;
+	font-family: "Segoe UI", "Lucida Grande", Verdana;
+	font-size: 15px;
+	color: #121212;
+	padding: 16px;
+}
+
+a
+{
+	color: #30a;
+	&:hover { color: #63f; }
+}
+
+em { font-style: italic; }
+strong { font-weight: bold; }
+
+.RounderBorders (@radius)
+{
+	-webkit-border-radius: @radius;
+	-moz-border-radius: @radius;
+	-ms-border-radius: @radius;
+	-o-border-radius: @radius;
+	border-radius: @radius;
+}

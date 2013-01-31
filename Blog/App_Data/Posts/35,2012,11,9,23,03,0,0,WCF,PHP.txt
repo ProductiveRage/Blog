@@ -1,0 +1,161 @@
+﻿## Consuming a WCF Web Service from PHP
+
+For the Web Service that I've been developing at work, I was asked to support a Developer who was trying to consume it for a project. The problem being that he was developing in PHP and had never connected to a .Net Web Service before - at least not knowingly; the APIs he'd integrated with before would all communicate in JSON. The other half of the problem is that I've never developed anything in PHP! In fact I'd not written a line in my life before last week.
+
+From what I'm led to understand of PHP it's somewhat of a mess of 1000s of functions with inconsistent names, signatures and approaches. It's dynamically typed and may or may not have namespaces in any usable manner. But it's got an enormous set of well-established libraries available for everything under the sun. So this should be a walk in the park, right??
+
+Below is a simplified version of what we're working with; the idea that you could search for Hotels that meet various criteria, where the criteria can be built up with the application of multiple Filters - at least one must be specified but multiple may be, in which case Hotels must meet the criteria in all Filters in order to be returned.
+
+    [ServiceContract]
+    public class HotelService
+    {
+        [OperationContract]
+        public Hotel[] GetHotels(HotelSearchRequest request)
+        {
+            ..
+        }
+    }
+
+    [DataContact]
+    public class HotelSearchRequest
+    {
+        [DataMember]
+        public string APIKey { get; set; }
+
+        [DataMember]
+        public Filter[] Filters { get; set; }
+    }
+
+    [KnownType(CategoryFilter)]
+    [KnownType(ProximityFilter)]
+    [DataContract]
+    public abstract class Filter { }
+
+    [DataContract]
+    public class CategoryFilter : Filter
+    {
+        [DataMember]
+        public int[] CategoryKeys { get; set; }
+    }
+
+    [DataContract]
+    public class ProximityFilter : Filter
+    {
+        [DataMember]
+        public CoordinateDetails Centre { get; set; }
+
+        [DataMember(IsRequired = true)]
+        public int MaxDistanceInMetres { get; set; }
+    }
+
+We have to mess about a bit with KnownType declarations in the right place in the service contract but once that's all sorted the service is easy to consume from a .Net WCF Client, all of the inheritance is easily understood (as they're documented in the xsd that the service exposes) and queries are easy to construct.
+
+Getting things working in PHP is another matter, however. For someone who doesn't know what he's doing, at least! All of the basic examples suggest something along the lines of:
+
+    $client = new SoapClient(
+        "http://testhotelservice.com/HotelService.svc?wsdl",
+        array("trace" => 1)
+    );
+    $data = $client->GetHotels(
+        array(
+            "request" => array(    
+                "ApiKey" => "{KeyGoesHere}",
+                "Filters" => array(
+                    // TODO: What to write here?!
+                )
+            )
+        )
+    );
+
+It seems like the SoapClient can do some sort of magic with what are presumably associative arrays to build up the web request. All looks for declaring data for the "request" argument of the GetHotels method; we set the "ApiKey" property of the request to an appropriate string, the SoapClient must be doing something clever with the wsdl to determine the xml to generate, which must include the type name of the request to specify. But if the type names are intended to be hidden, how am I going to specify them when I build the "Filters" array?? I can't just carry on with this type-name-less associated-array approach because there will be no way for the request to know that I want the CategoryFilter or the ProximityFilter (or any other Filter that might be available).
+
+Hmmm...
+
+More googling brings me to discover the SoapVar class for use with the SoapClient. If we do the following:
+
+    $client = new SoapClient(
+        "http://testhotelservice.com/HotelService.svc?wsdl",
+        array("trace" => 1)
+    );
+    $data = $client->GetHotels(
+        array(
+            "request" => array(    
+                "ApiKey" => "{KeyGoesHere}",
+                "Filters" => array(
+                    new SoapVar(
+                        array(
+                            "CategoryKeys" => array(1, 2, 3)
+                        ), 
+                        SOAP_ENC_OBJECT,
+                        "CategoryFilter",
+                        "http://schemas.datacontract.org/2004/07/DemoService.Messages.Requests"
+                    )
+                )
+            )
+        )
+    );
+
+Then we *are* able to include information about the type. Progress! The namespace string specified references the C# namespace of the CategoryFilter class.
+
+As with so many things, it looks all so easy. But I didn't know what exactly I should be searching for, getting this far took me quite a while - and the resource out there explaining this are thin on the ground! With the maturity of both PHP and WCF I would have thought that information about calling into WCF Services from PHP in this manner would be much readily available!
+
+### But wait; there's more
+
+While I was at it, I thought I'd dig a little further. When I first communicated with this other Developer, I asked him to send me a trace of the requests that were being generated by his PHP code, using Fiddler or something. This information was not forthcoming and when I was running test PHP scripts on my local machine the requests weren't being captured by Fiddler anyway. But I found these handy methods:
+
+    $client->__getLastRequest()
+    $client->__getLastRequestHeaders()
+
+which will retrieve the sent content, ideal for looking into exactly what messages were being generated! These only work if the "trace" => "1" argument is specified when the SoapClient is instantiated. Which explained to me what that was for, which was nice :)
+
+### Enabling gzip support
+
+The next issue I had was another one that I thought would be beyond easy to solve, with easy-to-follow and accurate information all over the place. I was wrong again! At least, my first searches didn't bring me immediately to the answer :(
+
+A *lot* of resources suggest the following:
+
+    $client = new SoapClient(
+        "http://testhotelservice.com/HotelService.svc?wsdl",
+        array(
+            "compression" => SOAP_COMPRESSION_ACCEPT | SOAP_COMPRESSION_GZIP | 9,
+            "trace" => 1
+        )
+    );
+
+and some suggest this variation (quoting the compression value):
+
+    $client = new SoapClient(
+        "http://testhotelservice.com/HotelService.svc?wsdl",
+        array(
+            "compression" => "SOAP_COMPRESSION_ACCEPT | SOAP_COMPRESSION_GZIP | 9",
+            "trace" => 1
+        )
+    );
+
+These do *not* work. The first results in a "can't uncompress compressed response" after a delay which makes me think that it's doing work. The latter does cause any error but also doesn't include the "Accept-encoding: gzip" HTTP header that I'm looking for.
+
+They both *feel* wrong, anyway; presumably the 9 relates to gzip compression level 9. The compression level should surely be set on the server only, not referenced by the client?? And what *are* these SOAP_COMPRESS_ACCEPT and SOAP_COMPRESSION_GZIP values? These values are just numeric constants, it turns out, which are OR'd together in the first variation. But what's the 9 for; is it supposed to be there at all; is it some other mystery constant?? And surely the quoted version is incorrect unless PHP has some mad string rules that I don't know about (totally possible with my knowledge of PHP but not the case here! :)
+
+The correct version is simply:
+
+    $client = new SoapClient(
+        "http://testhotelservice.com/HotelService.svc?wsdl",
+        array(
+            "compression" => SOAP_COMPRESSION_ACCEPT | SOAP_COMPRESSION_GZIP,
+            "trace" => 1
+        )
+    );
+
+Again, oh so simple yet so much harder to come to in the end than it should have been.
+
+### One more thing
+
+A final note, that actually *was* commonly documented and pointed out, was that if you are developing against a service that is still in flux that you should disable wsdl caching in PHP. This will affect performance as the wsdl will be retrieved on each request (I presume), but it may prevent some headaches if the contract changes. I changed a value in the php.ini file but apparently it can also be done in the PHP script with:
+
+    ini_set("soap.wsdl_cache_enabled", 0);
+
+(Courtesy of a [StackOverflow answer](http://stackoverflow.com/a/303514)).
+
+### Conclusion
+
+This may well be simple stuff to the real PHP developers out there but since I struggled, maybe this post will help others in the future with this particular problem!

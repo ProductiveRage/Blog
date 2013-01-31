@@ -1,0 +1,25 @@
+﻿## The Full Text Indexer Post Round-up
+
+This is a compilation of links to articles outlining some of the details of the Full Text Indexer project I put together, just so I could point a link to everything all in one place (like from the BitBucket ReadMe!)
+
+I wrote about the basic building blocks of the Index Generator, went off on a few tangents about how using different key types could allow for searches over data with multi-lingual content (or support Product data that has different descriptions for different web sites, for example) and then came back round to illustrate how I've used the code for this blog's search functionality.
+
+* [The Full Text Indexer](Post30)
+* [The Full Text Indexer - Adding and Subtracting](Post31)
+* [The Full Text Indexer - Going International!](Post32)
+* [The Full Text Indexer - Token Breaker and String Normaliser variations](Post36)
+
+Along the journey, I got to learn a few new things, take advantage of other's research and have fun trying to improve the performance of some of the bottlenecks in the index generation process.
+
+* [The .Net Dictionary is FAST!](Post25)
+* [An English-language Plurality-handling String Normaliser](Post26)
+* [Optimising the Plurality-Handling Normaliser](Post27)
+* [A Plurality-Handling Normaliser Correction](Post28)
+* [Compiled LINQ Expressions don't serialise :(](Post29)
+
+I also had a chance to revisit the basic immutable list structure that I used from the get-go in this project and improve its performance characteristics as well (again, taking a lot of inspiration from cleverer people who've tackled the same problems before me! :)
+
+* [Persistent Immutable Lists](Post38)
+* [Persistent Immutable Lists - Extended](Post39)
+
+The code can be found in the [Full Text Indexer BitBucket Repository](https://bitbucket.org/DanRoberts/full-text-indexer/). I've still got a few ideas I'm contemplating toying with - but I've also got other projects I want to investigate! So we'll just have to see what happens with this next..

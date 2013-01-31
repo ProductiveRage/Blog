@@ -1,0 +1,70 @@
+body
+{
+	div.Header
+	{
+		margin: 0 auto 16px auto;
+		width: 1030px;
+		position: relative;
+		left: -19px;
+		@media screen and (max-width: 70em)
+		{
+			margin: 0 0 16px 0;
+			width: 100%;
+			min-width: 250px;
+			left: 0;
+		}
+	}
+
+	div.WrapperOuter
+	{
+		margin: 0 auto;
+		width: 1014px;
+		@media screen and (max-width: 70em)
+		{
+			width: 100%;
+			min-width: 250px;
+		}
+
+		div.Wrapper
+		{
+			float: left;
+			width: 100%;
+			@media screen and (max-width: 70em) { float: none; }
+
+			div.Main
+			{
+				float: left;
+				&.HasSideBar { width: 834px; }
+				@media screen and (max-width: 70em)
+				{
+					float: none;
+					&.HasSideBar { width: 100%; }
+				}
+
+				p.NoResults { width: 764px; }
+			}
+
+			div.SideBar
+			{
+				float: right;
+				clear: right;
+				position: relative;
+				left: -40px;
+				width: 173px;
+				@media screen and (max-width: 70em)
+				{
+					clear: both;
+					float: none;
+					left: 0;
+					width: 100%;
+					min-width: 250px;
+				}
+			}
+		}
+	}
+
+	@media screen and (max-width: 70em)
+	{
+		div.Footer { display: none; }
+	}
+}

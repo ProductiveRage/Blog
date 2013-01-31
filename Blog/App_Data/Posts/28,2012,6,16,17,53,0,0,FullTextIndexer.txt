@@ -1,0 +1,119 @@
+﻿## A Plurality-Handling Normaliser Correction
+
+A slight amendment to a previous post ([An English-language Plurality-handling String Normaliser](Post26)); the original intention of IStringNormaliser implementations was to expose IEqualityComparer&lt;string&gt; and return a value from GetNormalisedString that could be maintained in a dictionary (specifically a [Ternary Search Tree](Post25)). And at this the English Language Pluarity-handling String Normaliser has operated splendidly! Does the string "cat" match the string "cats" when searching? Why, yes it does! (And things like this are important to know since [the internet is made of cats](http://www.rathergood.com/cats)).
+
+However.. since the normalised values are maintained as strings in a dictionary they may be returned *as* normalised values. And *then* compared to a string that would be normalised to that value; so "cat" may be transformed through GetNormalisedString and then compared again to "cat" - and this is where things go awry. "cat" and "cats" are found to match as they are both normalised to "cat|s|es|ses" (as covered the [earlier post I linked to](Post26)) and the problem is that "cat|s|es|ses" does *not* get matched to "cat" (or "cats" for that matter) as it incorrectly gets transformed *again* to "cat|s|es|se|s|es|ses" as the final "s" gets matched as a potential suffix and the value gets altered.
+
+Thankfully, the fix is none too difficult; before tring to perform transformations based upon value endings, we need to check for whether a suffix group has already been appended to the value. So before checking whether a value ends with "s", "es" or "ses" we need to check whether it ends with "|s|es|ses" and if so then return it as pre-transformed.
+
+The method that requires changing is that below:
+
+    private static Func<string, string> GenerateNormaliser(
+        IEnumerable<PluralEntry> plurals,
+                IEnumerable<string> fallbackSuffixes)
+    {
+        if (plurals == null)
+            throw new ArgumentNullException("pluralEntries");
+        if (fallbackSuffixes == null)
+            throw new ArgumentNullException("fallbackSuffixes");
+
+        // Build up if statements for each suffix - if a match is found, return the input value
+        // with the matched suffix replaced with a combination of all the other suffixes in
+        // PluralEntry
+        var result = Expression.Parameter(typeof(string), "result");
+        var endLabel = Expression.Label(typeof(string));
+        var valueTrimmed = Expression.Parameter(typeof(string), "valueTrimmed");
+        var expressions = new List<Expression>();
+        var pluralsTidied = new List<PluralEntry>();
+        foreach (var plural in plurals)
+        {
+            if (plural == null)
+                throw new ArgumentException("Null reference encountered in plurals set");
+            pluralsTidied.Add(plural);
+        }
+        foreach (var plural in pluralsTidied)
+        {
+            // Before checking for for suffix matches we need to check whether the input string
+            // is a value that has already been through the normalisation process! eg. "category"
+            // and "categories" will both be transformed into the value "categor|y|ies", but if
+            // that value is passed in again it should leave as "categor|y|ies" and not have
+            // any futher attempts at normalisation applying to it.
+            expressions.Add(
+                Expression.IfThen(
+                    GeneratePredicate(
+                        CreateSuffixExtension(plural.Values),
+                        valueTrimmed,
+                        plural.MatchType
+                    ),
+                    Expression.Block(
+                        Expression.Assign(
+                            result,
+                            valueTrimmed
+                        ),
+                        Expression.Return(endLabel, result)
+                    )
+                )
+            );
+        }
+        foreach (var plural in pluralsTidied)
+        {
+            foreach (var suffix in plural.Values)
+            {
+                var assignNormalisedValueToResult = Expression.Assign(
+                    result,
+                    GenerateStringConcatExpression(
+                        GenerateRemoveLastCharactersExpression(valueTrimmed, suffix.Length),
+                        Expression.Constant(
+                            CreateSuffixExtension(plural.Values),
+                            typeof(string)
+                        )
+                    )
+                );
+                expressions.Add(
+                    Expression.IfThen(
+                        GeneratePredicate(suffix, valueTrimmed, plural.MatchType),
+                        Expression.Block(
+                            assignNormalisedValueToResult,
+                            Expression.Return(endLabel, result)
+                        )
+                    )
+                );
+            }
+        }
+
+        // If any fallback suffixes are specified, add a statement to append them if none of the
+        // PluralEntry matches are made
+        fallbackSuffixes = TidyStringList(fallbackSuffixes, v => v.Trim().ToLower());
+        if (fallbackSuffixes.Any())
+        {
+            expressions.Add(
+                Expression.Assign(
+                    result,
+                    GenerateStringConcatExpression(
+                        valueTrimmed,
+                        Expression.Constant(
+                            CreateSuffixExtension(fallbackSuffixes),
+                            typeof(string)
+                        )
+                    )
+                )
+            );
+        }
+        else
+            expressions.Add(Expression.Assign(result, valueTrimmed));
+
+        // Add the return-point label, configured to return the string value in "result"
+        expressions.Add(Expression.Label(endLabel, result));
+
+        return Expression.Lambda<Func<string, string>>(
+            Expression.Block(
+                new[] { result },
+                expressions
+            ),
+            valueTrimmed
+        ).Compile();
+    }
+
+In the places I'm using this the plurality-handling normaliser wraps another normaliser that trims the string, lower-cases it, removes any punctuation and replaces any non-latin characters with latin equivalents. This is no problem. But if a normaliser was wrapped that removed any non-alpha characters completely then the the method above wouldn't be able to match the transformed "|s|es|ses" ending as the pipe characters would have been removed. So long as this situation is avoided then everything will work lovely, but it's worth bearing in mind!
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.

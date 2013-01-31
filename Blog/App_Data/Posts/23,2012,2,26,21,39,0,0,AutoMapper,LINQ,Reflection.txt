@@ -1,0 +1,349 @@
+## The artist previously known as the AutoMapper-By-Constructor
+
+I've had a series of posts that was initiated by a desire to integrate AutoMapper more easily with classes that are instantiated with so-called "verbose constructors"..
+
+* [Teaching AutoMapper about "verbose constructors"](Post5)
+* [AutoMapper-By-Constructor without AutoMapper.. and faster](Post7)
+* [Extendable LINQ-compilable Mappers](Post18)
+* [The Less-Effort Extendable LINQ-compilable Mappers](Post19)
+
+.. that ended up going on somewhat of a tangent and enabled the generation of compilable converters (using LINQ Expressions) that didn't utilise AutoMapper for the majority of simple cases.
+
+While the original intention of the project was to handle the conversion to these "verbose constructor"-based types, it struck me a few days ago that it shouldn't be much work to put together a class similar to the CompilableTypeConverterByConstructor that instead instantiates a type with a parameter-less constructor and sets the data through property-setters rather than by converter. The concept that started this all off in my head was a service that exposed xml-serialisable objects at the boundary but used "always-valid" internal representations (ie. immutable data where all values were specified and validated by constructor) - I wanted a way to convert _to_ internal types. But with this property-setting approach the code could transform both ways.
+
+(Just a quick side-node that for transformations _to_ data-set-by-property types, [AutoMapper](http://automapper.org) is actually a much more full-featured package but for what I had in mind the simple name-matching in my project coupled with the significantly improved performance from the compiled converters was a better fit).
+
+### I still find LINQ Expressions hard to write
+
+I envisaged something along the lines of a new class
+
+    public class CompilableTypeConverterByPropertySetting<TSource, TDest>
+        : ICompilableTypeConverter<TSource, TDest> where TDest : new()
+    {
+        public CompilableTypeConverterByPropertySetting(
+            IEnumerable<ICompilablePropertyGetter> propertyGetters,
+            IEnumerable<PropertyInfo> propertiesToSet)
+        {
+            // Do constructor work..
+
+where the number of propertyGetters would match the number of propertiesToSet. I won't go back over the ICompilableTypeConverter since it's not that important right this second but the property getters are:
+
+    public interface ICompilablePropertyGetter : IPropertyGetter
+    {
+        /// <summary>
+        /// This must return a Linq Expression that retrieves the value from SrcType.Property as
+        /// TargetType - the specified "param" Expression must have a type that is assignable to
+        /// SrcType.
+        /// </summary>
+        Expression GetPropertyGetterExpression(Expression param);
+    }
+
+    public interface IPropertyGetter
+    {
+        /// <summary>
+        /// The type whose property is being accessed
+        /// </summary>
+        Type SrcType { get; }
+
+        /// <summary>
+        /// The property on the source type whose value is to be retrieved
+        /// </summary>
+        PropertyInfo Property { get; }
+
+        /// <summary>
+        /// The type that the property value should be converted to and returned as
+        /// </summary>
+        Type TargetType { get; }
+
+        /// <summary>
+        /// Try to retrieve the value of the specified Property from the specified object (which
+        /// must be of type SrcType) - this will throw an exception for null or if retrieval fails
+        /// </summary>
+        object GetValue(object src);
+    }
+
+So this should be easy! All I need is to create LINQ Expressions that can take a ParameterExpression of type TSource, use it to instantiate a new TDest and set each of the properties that I already have. And I've already got Expressions to retrieve the data from the TSource instance for each of the properties!
+
+    private Func<TSource, TDest> GenerateCompiledConverter()
+    {
+        // Declare an expression to represent the src parameter
+        var src = Expression.Parameter(typeof(TSource), "src");
+
+        // Declare a local variable that will be used within the Expression block to have a new
+        // instance assigned to it and properties set
+        var dest = Expression.Parameter(typeof(TDest));
+
+        // Build up a list of Expressions that:
+        // 1. Instantiate a new TDest instance
+        var newInstanceGenerationExpressions = new List<Expression>
+        {
+            Expression.Assign(
+                dest,
+                Expression.New(typeof(TDest).GetConstructor(new Type[0]))
+            )
+        };
+
+        // 2 Set properties on the new instance
+        for (var index = 0; index < _propertiesToSet.Count; index++)
+        {
+            newInstanceGenerationExpressions.Add(
+                Expression.Call(
+                    dest,
+                    _propertiesToSet[index].GetSetMethod(),
+                    _propertyGetters[index].GetPropertyGetterExpression(src)
+                )
+            );
+        }
+
+        // 3. Return the reference
+        newInstanceGenerationExpressions.Add(
+            dest
+        );
+
+        // Return compiled expression that instantiates a new object by retrieving properties
+        // from the source and passing as constructor arguments
+        return Expression.Lambda<Func<TSource, TDest>>(
+            Expression.Block(
+                new[] { dest },
+                newInstanceGenerationExpressions
+            ),
+            src
+        ).Compile();
+    }
+
+(Take it as read that _propertiesToSet and _propertyGetters are PropertyInfo[] and ICompilablePropertyGetter[] that are validated and set as class-scoped members by the constructor).
+
+And indeed it _does_ look easy! And I'm kinda wondering what all the fuss was about, but it took me a fair bit of tinkering and reasoning to get here since the LINQ Expression tutorials and examples just aren't that easy to track down! And it's not like you can easily take apart arbitrary example code like when dealing with IL (see the IL Disassembler mention in [Dynamically applying interfaces to objects](Post15)).
+
+But I got there in the end! The only slightly odd thing is that the last expression has to be the ParameterExpression "dest" that we've constructed, otherwise the block won't return anything - it just returns the result of the last expression.
+
+Ok. I've actually lied. That _isn't_ quite all of it. As an ICompilableTypeConverter, the CompilableTypeConverterByPropertySetting should be able to handle null values so that the CompilableTypeConverterPropertyGetter class can take any ICompilableTypeConverter reference and use it to retrieve and convert property values.. even when they're null. So the last section becomes:
+
+        // Return compiled expression that instantiates a new object by retrieving properties
+        // from the source and passing as constructor arguments
+        return Expression.Lambda<Func<TSource, TDest>>(
+
+            Expression.Condition
+                Expression.Equal(
+                    src,
+                    Expression.Constant(null)
+                ),
+                Expression.Constant(default(TDest), typeof(TDest)),
+                Expression.Block(
+                    new[] { dest },
+                    newInstanceGenerationExpressions
+                )
+            ),
+
+            src
+
+        ).Compile();
+
+.. so that it will return the default value to TDest (null unless TDest is a ValueType) if the TSource value is null.
+
+### Wrapping in a Factory
+
+As with the similar CompilableTypeConverterByConstructor class there's a factory class which will examine given TSource and TDest types and try to generate a CompilableTypeConverterByPropertySetting&lt;TSource, TDest&gt; instance based on the ICompilablePropertyGetter set it has (and the INameMatcher for matching source and destination properties).
+
+I've also updated the ExtendableCompilableTypeConverterFactory (see [The Less-Effort Extendable LINQ-compilable Mappers](Post19)) such that it is more generic and doesn't insist on being based around CompilableTypeConverterByConstructorFactory. There is now a static helper class to instantiate an ExtendableCompilableTypeConverterFactory instance based upon whether the target type is to have its data set by-constructor or by-property-setting since the changes to ExtendableCompilableTypeConverterFactory have made it very abstract!
+
+### Splitting the AutoMapper dependency
+
+Since the majority of work in this solution no longer requires AutoMapper, I've broken out a separate project "AutoMapperIntegration" which houses the AutoMapperEnabledpropertyGetter and AutoMapperEnabledpropertyGetterFactory classes so now the main project has no AutoMapper reference. My original intention was improve how AutoMapper worked with by-constructor conversions and this functionality is still available - without taking advantage of the compiled converters - by referencing the main project along with AutoMapperItegration (and so the example in [Teaching AutoMapper about "verbose constructors"](Post5) is still applicable).
+
+And so I've renamed the solution itself to...
+
+### The Compilable Type Converter!
+
+Yeah, yeah, not too imaginative a title, I will admit! :)
+
+I've actually moved my code over to BitBucket (see [upcoming post](Post24)!) from GitHub, so the code that I've been talking about can now be found at:
+
+[https://bitbucket.org/DanRoberts/compilabletypeconverter](https://bitbucket.org/DanRoberts/compilabletypeconverter)
+
+### An apology
+
+This has been a particularly dry and largely self-involved post but if the Compilable Type Converter sounds like it might be useful to you, check out that BitBucket link and there's an introduction on the Overview page which jumps straight into example code.
+
+### Examples
+
+To demonstrate the generation of a converter from a generic SourceType class to one that is based upon verbose constructors:
+
+    // Prepare a converter factory using the base types (AssignableType and
+	// EnumConversion property getter factories)
+    var nameMatcher = new CaseInsensitiveSkipUnderscoreNameMatcher();
+    var converterFactory = ExtendableCompilableTypeConverterFactoryHelpers.GenerateConstructorBasedFactory(
+        nameMatcher,
+        new ArgsLengthTypeConverterPrioritiserFactory(),
+        new ICompilablePropertyGetterFactory[]
+        {
+            new CompilableAssignableTypesPropertyGetterFactory(nameMatcher),
+            new CompilableEnumConversionPropertyGetterFactory(nameMatcher)
+        }
+    );
+
+    // Extend the converter to handle SourceType.Sub1 to ConstructorDestType.Sub1 and
+	// IEnumerable<SourceType.Sub1> to IEnumerable<ConstructorDestType.Sub1>
+    // - This will raise an exception if unable to create the mapping
+    converterFactory = converterFactory.CreateMap<SourceType.Sub1, ConstructorDestType.Sub1>();
+
+    // This will enable the creation of a converter for SourceType to ConstructorDestType
+    // - This will return null if unable to generate an appropriate converter
+    var converter = converterFactory.Get<SourceType, ConstructorDestType>();
+    if (converter == null)
+        throw new Exception("Unable to obtain a converter");
+
+    var result = converter.Convert(new SourceType()
+    {
+        Value = new SourceType.Sub1() { Name = "Bo1" },
+        ValueList = new[]
+        {
+            new SourceType.Sub1() { Name = "Bo2" },
+            null,
+            new SourceType.Sub1() { Name = "Bo3" }
+        },
+        ValueEnum = SourceType.Sub2.EnumValue2
+    });
+
+    public class SourceType
+    {
+        public Sub1 Value { get; set; }
+        public IEnumerable<Sub1> ValueList { get; set; }
+        public Sub2 ValueEnum { get; set; }
+        public class Sub1
+        {
+            public string Name { get; set; }
+        }
+        public enum Sub2
+        {
+            EnumValue1,
+            EnumValue2,
+            EnumValue3,
+            EnumValue4,
+            EnumValue5,
+            EnumValue6,
+            EnumValue7,
+            EnumValue8
+        }
+    }
+
+    public class ConstructorDestType
+    {
+        public ConstructorDestType(Sub1 value, IEnumerable<Sub1> valueList, Sub2 valueEnum)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+            if (valueList == null)
+                throw new ArgumentNullException("valueList");
+            if (!Enum.IsDefined(typeof(Sub2), valueEnum))
+                throw new ArgumentOutOfRangeException("valueEnum");
+            Value = value;
+            ValueList = valueList;
+            ValueEnum = valueEnum;
+        }
+        public Sub1 Value { get; private set; }
+        public IEnumerable<Sub1> ValueList { get; private set; }
+        public Sub2 ValueEnum { get; private set; }
+        public class Sub1
+        {
+            public Sub1(string name)
+            {
+                name = (name ?? "").Trim();
+                if (name == "")
+                    throw new ArgumentException("Null/empty name specified");
+                Name = name;
+            }
+            public string Name { get; private set; }
+        }
+        public enum Sub2 : uint
+        {
+            EnumValue1 = 99,
+            EnumValue2 = 100,
+            EnumValue3 = 101,
+            EnumValue4 = 102,
+            EnumValue5 = 103,
+            enumValue_6 = 104,
+            EnumValue7 = 105
+        }
+    }
+
+.. and the equivalent where the destination types are based upon property-setting:
+
+    // Prepare a converter factory using the base types (AssignableType and EnumConversion property
+	// getter factories)
+    var nameMatcher = new CaseInsensitiveSkipUnderscoreNameMatcher();
+    var converterFactory = ExtendableCompilableTypeConverterFactoryHelpers.GeneratePropertySetterBasedFactory(
+        nameMatcher,
+        CompilableTypeConverterByPropertySettingFactory.PropertySettingTypeOptions.MatchAsManyAsPossible,
+        new ICompilablePropertyGetterFactory[]
+        {
+            new CompilableAssignableTypesPropertyGetterFactory(nameMatcher),
+            new CompilableEnumConversionPropertyGetterFactory(nameMatcher)
+        }
+    );
+
+    // Extend the converter to handle SourceType.Sub1 to ConstructorDestType.Sub1 and
+	// IEnumerable<SourceType.Sub1> to IEnumerable<ConstructorDestType.Sub1>
+    // - This will raise an exception if unable to create the mapping
+    converterFactory = converterFactory.CreateMap<SourceType.Sub1, PropertySettingDestType.Sub1>();
+
+    // This will enable the creation of a converter for SourceType to ConstructorDestType
+    // - This will return null if unable to generate an appropriate converter
+    var converter = converterFactory.Get<SourceType, PropertySettingDestType>();
+    if (converter == null)
+        throw new Exception("Unable to obtain a converter");
+
+    var result = converter.Convert(new SourceType()
+    {
+        Value = new SourceType.Sub1() { Name = "Bo1" },
+        ValueList = new[]
+        {
+            new SourceType.Sub1() { Name = "Bo2" },
+            null,
+            new SourceType.Sub1() { Name = "Bo3" }
+        },
+        ValueEnum = SourceType.Sub2.EnumValue2
+    });
+
+    public class SourceType
+    {
+        public Sub1 Value { get; set; }
+        public IEnumerable<Sub1> ValueList { get; set; }
+        public Sub2 ValueEnum { get; set; }
+        public class Sub1
+        {
+            public string Name { get; set; }
+        }
+        public enum Sub2
+        {
+            EnumValue1,
+            EnumValue2,
+            EnumValue3,
+            EnumValue4,
+            EnumValue5,
+            EnumValue6,
+            EnumValue7,
+            EnumValue8
+        }
+    }
+
+    public class PropertySettingDestType
+    {
+        public Sub1 Value { get; set; }
+        public IEnumerable<Sub1> ValueList { get; set; }
+        public Sub2 ValueEnum { get; set; }
+        public class Sub1
+        {
+            public string Name { get; set; }
+        }
+        public enum Sub2 : uint
+        {
+            EnumValue1 = 99,
+            EnumValue2 = 100,
+            EnumValue3 = 101,
+            EnumValue4 = 102,
+            EnumValue5 = 103,
+            enumValue_6 = 104,
+            EnumValue7 = 105
+        }
+    }

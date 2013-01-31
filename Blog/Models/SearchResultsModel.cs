@@ -1,0 +1,80 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using BlogBackEnd.Caching;
+using BlogBackEnd.Models;
+using Common.Lists;
+
+namespace Blog.Models
+{
+	public class SearchResultsModel : ICommonSiteConfigModel, ISideBarContentModel
+	{
+		public SearchResultsModel(
+			string searchTerm,
+			IEnumerable<SearchResult> results,
+			IEnumerable<PostStub> recent,
+			IEnumerable<PostStub> highlights,
+			IEnumerable<ArchiveMonthLink> archiveLinks,
+			string optionalGoogleAnalyticsId,
+			ICache postContentCache)
+		{
+			if (searchTerm == null)
+				throw new ArgumentNullException("searchTerm");
+			if (results == null)
+				throw new ArgumentNullException("results");
+			if (recent == null)
+				throw new ArgumentNullException("recent");
+			if (highlights == null)
+				throw new ArgumentNullException("highlights");
+			if (archiveLinks == null)
+				throw new ArgumentNullException("archiveLinks");
+			if (postContentCache == null)
+				throw new ArgumentNullException("cache");
+
+			SearchTerm = searchTerm.Trim();
+			Results = new NonNullImmutableList<SearchResult>(
+				results.OrderByDescending(r => r.Weight)
+			);
+			MostRecent = new NonNullImmutableList<PostStub>(recent.Where(p => p != null).OrderByDescending(p => p.Posted));
+			Highlights = new NonNullImmutableList<PostStub>(highlights.Where(p => p != null));
+			ArchiveLinks = new NonNullImmutableList<ArchiveMonthLink>(archiveLinks.Where(l => l != null).OrderByDescending(a => new DateTime(a.Year, a.Month, 1)));
+			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
+			PostContentCache = postContentCache;
+		}
+
+		/// <summary>
+		/// This will never be null but it may be blank (this is the actual search term entered by the user)
+		/// </summary>
+		public string SearchTerm { get; private set; }
+
+		/// <summary>
+		/// This will never be null but it may be an empty list (the results will be ordered by descending weight)
+		/// </summary>
+		public NonNullImmutableList<SearchResult> Results { get; private set; }
+
+		/// <summary>
+		/// This will never return null (the results will be ordered in descending date order)
+		/// </summary>
+		public NonNullImmutableList<PostStub> MostRecent { get; private set; }
+
+		/// <summary>
+		/// This will never return null (no ordering is guaranteed)
+		/// </summary>
+		public NonNullImmutableList<PostStub> Highlights { get; private set; }
+
+		/// <summary>
+		/// This will never return null (the results will be ordered in descending date order, by month)
+		/// </summary>
+		public NonNullImmutableList<ArchiveMonthLink> ArchiveLinks { get; private set; }
+
+		/// <summary>
+		/// This may be null but it will never be empty if non-null
+		/// </summary>
+		public string OptionalGoogleAnalyticsId { get; private set; }
+
+		/// <summary>
+		/// This will never be null
+		/// </summary>
+		public ICache PostContentCache { get; private set; }
+	}
+}

@@ -1,0 +1,354 @@
+﻿## The Full Text Indexer - Going International!
+
+Pushing on with the Full Text Indexer series I'm been posting about (see [Full Text Indexer](Post30) and [Full Text Indexer - Adding and Subtracting](Post31)) I want to demonstrate how it can work with multi-lingual content (or other content variations - for example, with the data at my day job Products have different delivery "channels" for which different descriptions may be recorded, _as well_ as being in multiple languages).
+
+**A heads-up:** This post is going to be largely code with a few explanatory paragraphs. There's nothing particularly complex going on and I think the code will - for the most part - speak for itself!
+
+### Setting the scene
+
+In the previous examples, the TKey type of the IIndexData was an int representing an item's unique id. One way to extend this would be to specify as TKey the following:
+
+    public interface ILanguageScopedId : IEquatable<ILanguageScopedId>
+    {
+        int Id { get; }
+        bool IsApplicableForLanguage(int language);
+    }
+
+Where two simple implementations might be:
+
+    public sealed class LanguageScopedId : ILanguageScopedId
+    {
+        public LanguageScopedId(int id, int language)
+        {
+            Id = id;
+            Language = language;
+        }
+
+        public int Id { get; private set; }
+            
+        public int Language { get; private set; }
+            
+        public bool IsApplicableForLanguage(int language)
+        {
+            return (language == Language);
+        }
+            
+        public bool Equals(ILanguageScopedId obj)
+        {
+            var objLanguageScopedId = obj as LanguageScopedId;
+            if (objLanguageScopedId == null)
+                return false;
+
+            return ((objLanguageScopedId.Id == Id) && (objLanguageScopedId.Language == Language));
+        }
+            
+        public override bool Equals(object obj)
+        {
+            return Equals(obj as ILanguageScopedId);
+        }
+
+        public override int GetHashCode()
+        {
+            // Since the overridden ToString method will consistently encapsulate all of the
+            // information for this instance we use it to override the GetHashCode method,
+            // consistent with the overridden Equals implementation
+            return ToString().GetHashCode();
+        }
+
+        public override string ToString()
+        {
+            return String.Format("{0}:{1}-{2}", base.ToString(), Id, Language);
+        }
+    }
+
+    public sealed class : ILanguageScopedId
+    {
+        public NonLanguageScopedId(int id)
+        {
+            Id = id;
+        }
+
+        public int Id { get; private set; }
+            
+        public bool IsApplicableForLanguage(int language)
+        {
+            return true;
+        }
+            
+        public bool Equals(ILanguageScopedId obj)
+        {
+            var objLanguageScopedId = obj as NonLanguageScopedId;
+            if (objLanguageScopedId == null)
+                return false;
+
+            return (objLanguageScopedId.Id == Id);
+        }
+            
+        public override bool Equals(object obj)
+        {
+            return Equals(obj as ILanguageScopedId);
+        }
+            
+        public override int GetHashCode()
+        {
+            // Since the overridden ToString method will consistently encapsulate all of the
+            // information for this instance we use it to override the GetHashCode method,
+            // consistent with the overridden Equals implementation
+            return ToString().GetHashCode();
+        }
+            
+        public override string ToString()
+        {
+            return String.Format("{0}:{1}", base.ToString(), Id);
+        }
+    }
+
+There are two implementations to account for it's feasible that not _all_ content will be multi-lingual (see the Article class further down). I only really included IEquatable&lt;ILanguageScopedId&gt; in the ILanguageScopedId so that it would be easy to write the KeyComparer that the IndexGenerator requires (this was the same motivation for having implementations being sealed, since they can't be inherited from the type comparisons are easier in the Equals methods) -
+
+    /// <summary>
+    /// As the ILanguageScopedId interface implements IEquatable ILanguageScopedId, this class
+    /// has very little work to do
+    /// </summary>
+    public class LanguageScopedIdComparer : IEqualityComparer<ILanguageScopedId>
+    {
+        public bool Equals(ILanguageScopedId x, ILanguageScopedId y)
+        {
+            if ((x == null) && (y == null))
+                return true;
+            else if ((x == null) || (y == null))
+                return false;
+            return x.Equals(y);
+        }
+
+        public int GetHashCode(ILanguageScopedId obj)
+        {
+            if (obj == null)
+                throw new ArgumentNullException("obj");
+
+            return obj.GetHashCode();
+        }
+    }
+
+The previous posts used an Article class as an illustration. Here I'll expand that class such that the Title and Content have content that may vary across different languages (represented by the MultiLingualContent class, also below) while Author will not (and so is just a string) -
+
+    public class Article
+    {
+        public Article(
+            int id,
+            DateTime lastModified,
+            MultiLingualContent title,
+            string author,
+            MultiLingualContent content)
+        {
+            if (title == null)
+                throw new ArgumentNullException("title");
+            if (string.IsNullOrWhiteSpace(author))
+                throw new ArgumentException("Null/blank author specified");
+            if (content == null)
+                throw new ArgumentNullException("content");
+
+            Id = id;
+            LastModified = lastModified;
+            Title = title;
+            Author = author.Trim();
+            Content = content;
+        }
+
+        public int Id { get; private set; }
+
+        public bool IsActive { get; private set; }
+
+        public DateTime LastModified { get; private set; }
+
+        /// <summary>
+        /// This will never be null
+        /// </summary>
+        public MultiLingualContent Title { get; private set; }
+
+        /// <summary>
+        /// This will never be null or blank
+        /// </summary>
+        public string Author { get; private set; }
+
+        /// <summary>
+        /// This will never be null
+        /// </summary>
+        public MultiLingualContent Content { get; private set; }
+    }
+
+    public class MultiLingualContent
+    {
+        private string _defaultContent;
+        private ImmutableDictionary<int, string> _languageOverrides;
+        public MultiLingualContent(
+            string defaultContent,
+            ImmutableDictionary<int, string> languageOverrides)
+        {
+            if (string.IsNullOrWhiteSpace(defaultContent))
+                throw new ArgumentException("Null/blank defaultContent specified");
+            if (languageOverrides == null)
+                throw new ArgumentNullException("languageOverrides");
+            if (languageOverrides.Keys.Select(key => languageOverrides[key]).Any(
+                value => string.IsNullOrWhiteSpace(value))
+            )
+                throw new ArgumentException("Null/blank encountered in languageOverrides data");
+
+            _defaultContent = defaultContent.Trim();
+            _languageOverrides = languageOverrides;
+        }
+
+        /// <summary>
+        /// This will never return null or blank. If there is no language-specific content for
+        /// the specified language then the default will be returned.
+        /// </summary>
+        public string GetContent(int language)
+        {
+            if (_languageOverrides.ContainsKey(language))
+                return _languageOverrides[language].Trim();
+            return _defaultContent;
+        }
+    }
+
+**Note:** The ImmutableDictionary (along with the NonNullImmutableList and the ToNonNullImmutableList extension method which are seen elsewhere in the code) can be found in the [Full Text Indexer repo on Bitbucket](https://bitbucket.org/DanRoberts/full-text-indexer).
+
+### Generating and querying the new Index format
+
+For the purposes of this example, I'm going to assume that all of the possible languages are known upfront (if not then each time an Index is built, it's feasible that the source Article data could be analysed each time to determine which languages are present but for now I'm going to go with the easier case of knowledge of all options beforehand).
+
+As we've seen before, we need to prepare an IndexGenerator (this time IndexGenerator&lt;ArticleI, LanguageScopedId&gt; instead of IndexGenerator&lt;ArticleI, int&gt; since the key type of the IIndexData that will be produced is no longer an int) with Content Retrievers, a Key Comparer, Token Breaker, Weighted Entry Combiner and Logger. Here there are more Content Retrievers as the multi-lingual content must be requested for each supported language (though the non-multi-lingual content - the Author field on Article instances - only needs a single retriever).
+
+    var languages = new[] { 1, 2, 3 };
+
+    var contentRetrievers = 
+        new[]
+        {
+            new ContentRetriever<Article, ILanguageScopedId>(
+                article => new PreBrokenContent<ILanguageScopedId>(
+                    new NonLanguageScopedId(article.Id),
+                    article.Author
+                ),
+                token => 1f
+            )
+        }
+        .Concat(
+            languages.SelectMany(language => new[]
+            {
+                new ContentRetriever<Article, ILanguageScopedId>(
+                    article => new PreBrokenContent<ILanguageScopedId>(
+                        new LanguageScopedId(article.Id, language),
+                        article.Title.GetContent(language)
+                    ),
+                    token => 5f
+                ),
+                new ContentRetriever<Article, ILanguageScopedId>(
+                    article => new PreBrokenContent<ILanguageScopedId>(
+                        new LanguageScopedId(article.Id, language),
+                        article.Content.GetContent(language)
+                    ),
+                    token => 1f
+                )
+            }
+        ));
+
+    var indexGenerator = new IndexGenerator<Article, ILanguageScopedId>(
+        contentRetrievers.ToNonNullImmutableList(),
+        new LanguageScopedIdComparer(),
+        new DefaultStringNormaliser(),
+        new WhiteSpaceTokenBreaker(),
+        weightedValues => weightedValues.Sum(),
+        new NullLogger()
+    );
+
+    var index = indexGenerator.Generate(new NonNullImmutableList<Article>(new[]
+    {
+        new Article(
+            1,
+            new DateTime(2012, 7, 24),
+            new ContentBuilder("One").AddLanguage(2, "Un").Get(),
+            "Terrence",
+            new ContentBuilder("First Entry").AddLanguage(2, "Première entrée").Get()
+        ),
+        new Article(
+            2,
+            new DateTime(2012, 8, 24),
+            new ContentBuilder("Two").AddLanguage(2, "Deux").Get(),
+            "Jeroshimo",
+            new ContentBuilder("Second Entry").AddLanguage(2, "Deuxième entrée").Get()
+        )
+    }));
+
+Finally, there's a slight change to the querying mechanism. We have to perform a lookup for all keys that match a given token and then filter out any entries that we're not interested in. And since there are multiple key types which can relate to content in the same language (because a request for content in language 1 should combine keys of type LanguageScopedId which are marked as being for language 1 alongside keys of type NonLanguageScopedId), we may have to group and combine some of the results.
+
+    var resultsEntryInLanguage1 = index.GetMatches("Entry")
+        .Where(weightedMatch => weightedMatch.Key.IsApplicableForLanguage(language))
+        .GroupBy(weightedMatch => weightedMatch.Key.Id)
+        .Select(weightedMatchGroup => new WeightedEntry<int>(
+            weightedMatchGroup.Key,
+            weightedMatchGroup.Sum(weightedMatch => weightedMatch.Weight)
+        ));
+
+The earlier code uses a "ContentBuilder" to prepare the MultiLingualContent instances, just because it removes some of the clutter from the code. For the sake of completeness, that can be seen below:
+            
+    private class ContentBuilder
+    {
+        private string _defaultContent;
+        private ImmutableDictionary<int, string> _languageOverrides;
+
+        public ContentBuilder(string defaultContent)
+            : this(defaultContent, new ImmutableDictionary<int, string>()) { }
+
+        private ContentBuilder(
+            string defaultContent,
+            ImmutableDictionary<int, string> languageOverrides)
+        {
+            if (string.IsNullOrWhiteSpace(defaultContent))
+                throw new ArgumentException("Null/blank defaultContent specified");
+            if (languageOverrides == null)
+                throw new ArgumentNullException("languageOverrides");
+
+            _defaultContent = defaultContent;
+            _languageOverrides = languageOverrides;
+        }
+
+        public ContentBuilder AddLanguage(int language, string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+                throw new ArgumentException("Null/blank content specified");
+            if (_languageOverrides.ContainsKey(language))
+                throw new ArgumentException("Duplicate language: " + language);
+
+            return new ContentBuilder(
+                _defaultContent,
+                _languageOverrides.AddOrUpdate(language, content)
+            );
+        }
+
+        public MultiLingualContent Get()
+        {
+            return new MultiLingualContent(_defaultContent, _languageOverrides);
+        }
+    }
+
+### Extended Key Types
+
+This approach to supporting multi-lingual data is just one way of using the generic TKey type of the IndexGenerator / IndexData classes. I mentioned at the top that the data I deal with at my real job also varies descriptive data over multiple delivery channels, this could be implemented in a similar manner to the above by extending the ILanguageScopedId interface to:
+
+    public interface ILanguageScopedId : IEquatable<ILanguageScopedId>
+    {
+        int Id { get; }
+        bool IsApplicableFor(int language, int channel);
+    }
+
+And, in the same way as the above code has both the LanguageScopedId and NonLanguageScopedId, there could be various implementations for content that does/doesn't vary by language and/or does/doesn't vary by delivery channel.
+
+In fact, since there must be a Key Comparer passed in as a constructor argument to the IndexGenerator, any kind of key can be used with the index so long as an appropriate comparer is available!
+
+### Performance
+
+The downside to this sort of approach is, predictably, increased resource requirements in the index generation. I say predictably because it should be clear that specifying more Content Retrievers (which we are; they have to increase as the number languages of increases) means that more work will be done when an index is generated from input data.
+
+Also in the above example, more storage space will be required to store the results as more content is being extracted and stored in the index - it's feasible that source data could be present which doesn't have any multi-lingual data and so returns the default values from the MultiLingualContent.GetContent(language) call for every language. For each token that is recorded for the data, keys for each of the languages will be recorded in the index - each with duplicate weight data, repeated for each language. It's possible that a more intelligent key structure could reduce that amount of space taken up in these cases but that's outside the scope of this post I think (plus no solution springs immediately to mind at this time of night! :)
+
+The good news is that the retrieval time shouldn't be significantly increased; the additional work is to filter the matched keys and group them together on the underlying id, the lookup should still be very quick. The additional load that the filtering and grouping will incur will depend upon the structure of the key class.
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.
