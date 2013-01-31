@@ -1,0 +1,71 @@
+﻿## Compiled LINQ Expressions don't serialise :(
+
+In the last post ([Optimising the Plurality-Handling Normaliser](Post27)) I got all excited about improving the performance of what is essentially a string comparer for use in a Full Text Indexer I'm playing around with (which is now handling the search facilities on this blog so it must be half way to working at least! :) but the use of compiled LINQ expressions brought about their own problems when I tried to write away a fully-generated index to a disk cache. The generated lambda expression is not serialisable!
+
+There was something in me that thought that since it had been formed through simple LINQ Expressions tied together that it would be easy to serialise and so not be a problem. But I suppose that once it becomes a generic lambda function then all bets are off since they can have references to all sort and so mightn't be easily serialisable anymore.
+
+As usual there's a Stack Overflow post showing I'm hardly the first person to have encountered this issue, and this particular one even has the authority Eric Lippert getting involved! :) Interesting to see him make the point that this was was work that was required with all of the "LINQ-to-whatever" integrations..
+
+[Stack Overflow: How can I pass a lambda expression to a WCF Service?]( http://stackoverflow.com/questions/6443433/how-can-i-pass-a-lambda-expression-to-a-wcf-service)
+
+### A solution.. for now
+
+I essentially just want to write to disk a custom string-keyed dictionary object with a particular key comparer to act as another level of caching when it drops out of memory so I didn't have any issues so complicated as passing expressions to a query service so I went for a relatively simple approach; I record all of the data as class members that are required to generate the LINQ Expressions so that I can implement ISerializable and write away just this data when an instance is serialised. Then when it's de-serialised I use this data to regenerate the lambdas.
+
+    // This de-serialising constructor takes the values that are stored in the GetObjectData
+    // method and passes them through to the standard public constructor
+    protected EnglishPluralityStringNormaliser(SerializationInfo info, StreamingContext context)
+        : this(
+            (IEnumerable<PluralEntry>)info.GetValue(
+                "_plurals",
+                typeof(IEnumerable<PluralEntry>)
+            ),
+            (IEnumerable<string>)info.GetValue(
+                "_fallbackSuffixes",
+                typeof(IEnumerable<string>)
+            ),
+            (IStringNormaliser)info.GetValue(
+                "_optionalPreNormaliser",
+                typeof(IStringNormaliser)
+            ),
+            (PreNormaliserWorkOptions)info.GetValue(
+                "_preNormaliserWork",
+                typeof(PreNormaliserWorkOptions)
+            )
+        ) { }
+
+    public void GetObjectData(SerializationInfo info, StreamingContext context)
+    {
+        // Unfortunately we can't serialise the generated normaliser (we'll get a "Cannot
+        // serialize delegates over unmanaged function pointers, dynamic methods or methods
+        // outside the delegate creator's assembly" error) so if we have to serialise this
+        // instance we'll store all of the dat and then re-generate the normaliser on
+        // de-serialisation. Not ideal from a performance point of view but at least
+        // it will work.
+        info.AddValue("_plurals", _plurals);
+        info.AddValue("_fallbackSuffixes", _fallbackSuffixes);
+        info.AddValue("_optionalPreNormaliser", _optionalPreNormaliser);
+        info.AddValue("_preNormaliserWork", _preNormaliserWork);
+    }
+
+### However..
+
+Then I tried integrating the project as a search facility into my blog which is running ASP.Net MVC 3 (.Net 4.0) and ran into another snag; "Inheritance security rules violated while overriding member: MyBusinessException.GetObjectData(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)'. Security accessibility of the overriding method must match the security accessibility of the method being overriden."
+
+Hmmm...
+
+Stack Overflow to the rescue again! [Inheritance security rules violated with overriding member](http://stackoverflow.com/questions/3055792/inheritance-security-rules-violated-while-overriding-member-securityruleset-le). Reading the post led me to click "Use Definition" on ISerializable and observice that the "SecurityCritical" attribute was marked on the GetObjectData method - and from what I understand from what I read, I should be able to fix this by marking that attribute on my GetObjectData method. Sortio!
+
+Not sortio.. :( And now I must admit to being a bit lazy in my eagerness to get the search functionality integrated on the site. One of the Stack Overflow answers was to specify "Full Trust" for the web application but I got the impression that this was cheating a bit and bypassing some of the new .Net 4.0 security mechanisms. However, for now I've gone with it by adding this to the web.config (as per one of the posted answers):
+
+    <system.web>
+        <trust level="Full" />
+    <system.web>
+
+and now it _is_ working! Still, something to look into further another day I think.
+
+### For the curious
+
+The project I've been talking about is publicly accessible at BitBucket but I'm yet to sort out a decent Readme for it and I'm hoping to write some posts about its development, its use so far and a range of examples - watch this space! [Full Text Indexer BitBucket repo](https://bitbucket.org/DanRoberts/full-text-indexer)
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.

@@ -1,0 +1,75 @@
+﻿@using System.Web.Script.Serialization;
+@model Blog.Models.ICommonSiteConfigModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<title>Productive Rage - @ViewBag.Title</title>
+	<link rel="stylesheet" type="text/css" media="all" href="../../Content/Styles.less" />
+	<!--[if lt IE 9]>
+	<link rel="stylesheet" type="text/css" href="../../Content/IEBefore9.css" />
+	<![endif]-->
+	<link rel="stylesheet" type="text/css" media="print" href="../../Content/PrintOverrides.css" />
+	<link rel="shortcut icon" href="/favicon.ico" />
+@if ((Model != null) && (Model.OptionalGoogleAnalyticsId != null)) {
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', @(new HtmlString(new JavaScriptSerializer().Serialize(Model.OptionalGoogleAnalyticsId)))]);
+		_gaq.push(['_setSiteSpeedSampleRate', 100]);
+		_gaq.push(['_trackPageview']);
+		(function () {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+	<meta charset="utf-8" />
+}
+</head>
+
+<body>
+
+	<div class="Header">
+		<div class="HeaderContent">
+			<h1>
+				<a href="/">Productive Rage</a>
+			</h1>
+			<span class="Tagline">Dan's techie ramblings</span>
+		</div>
+	</div>
+
+	<div class="WrapperOuter">
+		<div class="Wrapper">
+@RenderBody()
+		</div>
+	</div>
+
+	<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js"></script>
+	<script type="text/javascript" src="/Scripts/jquery.autocomplete.min.js"></script>
+	<script type="text/javascript" src="/Scripts/prettify.js"></script>
+	<script type="text/javascript">
+		var $search = $("input.SiteSearch");
+		if ($search.length > 0) {
+			$.ajax({
+				url: "/AutoComplete.json",
+				dataType: 'json',
+				success: function (data) {
+					$search.autocomplete(data);
+				}
+			});
+		}
+		var $content = $("div.Main div.Content");
+		$content.find("pre").addClass("prettyprint");
+		prettyPrint();
+		$content.find("img").each(function() {
+			var $this = $(this);
+			if ($this.width() > 500) {
+				$this.addClass("WideImage");
+			}
+		});
+	</script>
+
+</body>
+</html>

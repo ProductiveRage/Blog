@@ -1,0 +1,11 @@
+﻿@model Blog.Models.ICommonSiteConfigModel
+@using Blog.Helpers.Sidebar;
+@{
+	Layout = "~/Views/Shared/SiteMaster.cshtml";
+}
+			<div class="Main">
+				@RenderBody()
+				<div class="Footer">
+					Productive Rage @DateTime.Now.Year
+				</div>
+			</div>

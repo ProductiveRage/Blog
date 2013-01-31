@@ -1,0 +1,113 @@
+## Problems in Immutability-land
+
+Having sung the praises of immutability last time, there *are* a couple of flies in the ointment. The first is a bit of a non-issue I think, but bears mentioning; if I have a class with half a dozen properties it feels like a *lot* of monotonous typing hammering out those private properties, those arguments-not-whitespace-or-null checks, those property assigments, those public properties, those comments about the class contract - it's boring! Now I know that developers should all be superfast, touch-typist maniacs ([http://www.codinghorror.com/blog/2008/11/we-are-typists-first-programmers-second.html](http://www.codinghorror.com/blog/2008/11/we-are-typists-first-programmers-second.html)) - and I am, that's not the problem - but it still makes me grimace when I know I have to throw down a big chunk of boilerplate-looking code like the Name class I used in an example last time.
+
+    public class Name
+    {
+      public Name(string title, string firstName, string lastName)
+      {
+        if ((title ?? "").Trim() == "")
+          throw new ArgumentException("Null/empty title specified");
+        if ((firstName ?? "").Trim() == "")
+          throw new ArgumentException("Null/empty firstName specified");
+        if ((lastName ?? "").Trim() == "")
+          throw new ArgumentException("Null/empty lastName specified");
+
+        Title = title;
+        FirstName = firstName;
+        LastName = lastName;
+      }
+
+      /// <summary>
+      /// This will never be null or empty
+      /// </summary>
+      public string Title { get; private set; }
+
+      /// <summary>
+      /// This will never be null or empty
+      /// </summary>
+      public string FirstName { get; private set; }
+
+      /// <summary>
+      /// This will never be null or empty
+      /// </summary>
+      public string LastName { get; private set; }
+    }
+
+Now, on the other hand, this means that callers can take on certain guarantees about the class and so contain less "gotcha" code (checking for null values and all that). So this is probably code that would have to be written in one way or another elsewhere. Possibly many times over. So I think it's definitely a win overall, which is why I said it's kind of a non-issue - but still it makes my fingers hurt a bit for that quick blaze of crazy typing. I'm concerned the key motions for ArgumentNullException are so ingrained in my muscle memory that my one day my hands will refuse to type anything else!
+
+### The DeferredElementStore
+
+Another issue I've come across a few times was highlighted quite nicely by something I was writing the other day; we had some forms that we wanted to generate from xml config files so some of the elements could be added, removed, made optional, compulsory, etc, etc.. It was fairly straight-forward and each element was parsed from the file and described by a corresponding immutable class but there was a problem - some of the elements were related, or rather one might depend on another. A cascading dropdown scenario, basically. So each element needed a way to access the other elements in the form data to read their values and whatnot. But when initialising each element there didn't exist any single object that had awareness of all of the elements since we were still in the process of initialising them! Catch-22, bang!
+
+To work around this I used an object that appear immutable to the element but which would not guarantee to be able to respond to requests for references to other element until the Init phase of the pagecycle (this was in ASP.Net and the process was to parse the config file, build a list of controls that the elements required and then add those controls to a Page all at once - so the Init event for each of those controls would be raised after all of the elements had been initialised and the controls created). This object would contain no data initially and be used just as a reference to pass to the elements during initialisation. When the initialisation of all of the elements was complete, a reference to the list of these elements was passed to this mystery object; our "deferred element store". And then the elements' controls were added to the Page. So when the element classes requested access to other elements during or after the Init phase, the data was available!
+
+Now, this clearly immutable data - it's more like some sort of single-setting, delayed-instantation object.. or something. I'm going to link to Eric Lippert again here since he's pretty much the guru on this sort of thing and since he describes this precise scenario in the following article:
+
+[http://blogs.msdn.com/b/ericlippert/archive/2007/11/13/immutability-in-c-part-one-kinds-of-immutability.aspx](http://blogs.msdn.com/b/ericlippert/archive/2007/11/13/immutability-in-c-part-one-kinds-of-immutability.aspx)
+
+.. I'm not so sure about the phrase "popsicle immutability" but that's basically what I'm talking about! There's a slight variation that I've used here (which actually is talked about in the comments for that article) where the real "element store" class is not passed to the elements during initialisation, only a wrapper around it. This ensures that the element classes couldn't mess with the state, only the form parser could:
+
+    public interface IDeferredElementStore
+    {
+      AbstractFormElement TryToGetElement(string id);
+    }
+
+    public class DeferredElementStore : IDeferredElementStore
+    {
+      private NonNullImmutableList<AbstractFormElement> _elements;
+      public DeferredElementStore()
+      {
+        _elements = new NonNullImmutableList<AbstractFormElement>();
+      }
+      public void StoreElementData(NonNullImmutableList<AbstractFormElement> elements)
+      {
+        if (elements == null)
+          throw new ArgumentNullException("elements");
+        _elements = elements;
+      }
+      public AbstractFormElement TryToGetElement(string id)
+      {
+        var element = _elements.FirstOrDefault(e.Id = id);
+        if (element == null)
+          throw new ArgumentException("Invalid Id");
+        return element;
+      }
+    }
+
+    public class ReadOnlyDeferredElementStore : IDeferredElementStore
+    {
+      private IDeferredElementStore _elementStore;
+      public ReadOnlyDeferredElementStore(IDeferredElementStore elementStore)
+      {
+        if (elementStore == null)
+          throw new ArgumentNullException("elementStore");
+        _elementStore = elementStore;
+      }
+      public AbstractFormElement TryToGetElement(string id)
+      {
+        return _elementStore.TryToGetElement(id);
+      }
+    }
+
+.. and the element generation code could look something like:
+
+    var elements = new List<AbstractFormElement>();
+    var elementStore = new DeferredElementStore();
+    var elementStoreReadOnly = new ReadOnlyDeferredElementStore(elementStore);
+    elements.Add(new FreeTextElement(.., elementStoreReadOnly, ..));
+    elements.Add(new DropDownElement(.., elementStoreReadOnly, ..));
+    elementStore.StoreElementData(new NonNullImmutableList<AbstractFormElement>(elements));
+    foreach (var element in elements)
+    {
+      foreach (var control in element.Controls)
+        this.Controls.Add(control);
+    }
+
+This could just as well be used if there are circular references between classes. I suppose then you'd have to have a container to handle both objects being instantiated and pass a read-only wrapper of this container to both classes, then push references to those instances into the container.
+
+This isn't quite the same as the "obervational immutability" described in that article, but I feel I've got an article about dynamic factory classes coming on which will touch on that!
+
+### Still loving it
+
+All in all, I'm still definitely a big fan of this immutability lark and am still convinced it makes the code easier to deal with overall. I was reading something earlier that I know can't find so I'll have to paraphrase - they were saying that when you're trying to get to grips with existing code, the less you have to keep in your head about what's going on at any time, the easier it is. This is hardly news but it was used in the context of the advantages of immutable data; that if you have references that just *are* and aren't going to undergo all sorts of states changes, there's much fewer potential interactions you have to deal with mentally. And that means it should be easier to deal with!

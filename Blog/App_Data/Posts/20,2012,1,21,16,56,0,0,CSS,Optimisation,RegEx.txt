@@ -1,0 +1,305 @@
+## On-the-fly CSS Minification
+
+I've been experimenting with minifying javascript and stylesheet content on-the-fly with an ASP.Net MVC project where different pages may have different combinations of javascript and stylesheets - not just to try to minimise the quantity of data transmitted but because some of the stylesheets may conflict.
+
+If this requirement was absent and *all* of the stylesheets or javascript files from a given folder could be included, I'd probably wait until this becomes available (I'm sure I read somewhere it would be made available for .Net 4.0 as well, though I'm struggling now to find a link to back that up!) -
+
+[New Bundling and Minification Support (ASP.NET 4.5 Series)](http://weblogs.asp.net/scottgu/archive/2011/11/27/new-bundling-and-minification-support-asp-net-4-5-series.aspx)
+
+However, mostly due to this special requirement (and partly because I'll still be learning thing even if this doesn't turn out being as useful as I'd initially hoped :) I've pushed on with investigation.
+
+### The proof-of-concept
+
+I'm going to jump straight to the first code I've got in use. There's a controller..
+
+    public class CSSController : Controller
+    {
+        public ActionResult Process()
+        {
+            var filename = Server.MapPath(Request.FilePath);
+            
+            DateTime lastModifiedDateOfData;
+            try
+            {
+                var file = new FileInfo(filename);
+                if (!file.Exists)
+                    throw new FileNotFoundException("Requested file does not exist", filename);
+
+                lastModifiedDateOfData = file.LastWriteTime;
+            }
+            catch (Exception e)
+            {
+                Response.StatusCode = 500;
+                Response.StatusDescription = "Error encountered";
+                return Content(
+                    String.Format(
+                        "/* Unable to determine LastModifiedDate for file: {0} [{1}] */",
+                        filename,
+                        e.Message
+                    ),
+                    "text/css"
+                );
+            }
+
+            var lastModifiedDateFromRequest = TryToGetIfModifiedSinceDateFromRequest();
+            if ((lastModifiedDateFromRequest != null) &&
+            (Math.Abs(
+                lastModifiedDateFromRequest.Value.Subtract(lastModifiedDateOfData).TotalSeconds)
+             < 2))
+            {
+                // Add a small grace period to the comparison (if only because
+                // lastModifiedDateOfLiveData is granular to milliseconds while
+                // lastModifiedDate only considers seconds and so will nearly
+                // always be between zero and one seconds older)
+                Response.StatusCode = 304;
+                Response.StatusDescription = "Not Modified";
+                return Content("", "text/css");
+            }
+
+            // Try to retrieve from cache
+            var cacheKey = "CSSController-" + filename;
+            var cachedData = HttpContext.Cache[cacheKey] as TextFileContents;
+            if (cachedData != null)
+            {
+                // If the cached data is up-to-date then use it..
+                if (cachedData.LastModified >= lastModifiedDateOfData)
+                {
+                    SetResponseCacheHeadersForSuccess(lastModifiedDateOfData);
+                    return Content(cachedData.Content, "text/css");
+                }
+
+                // .. otherwise remove it from cache so it can be replaced with current data below
+                HttpContext.Cache.Remove(cacheKey);
+            }
+
+            try
+            {
+                var content = MinifyCSS(System.IO.File.ReadAllText(filename));
+
+                SetResponseCacheHeadersForSuccess(lastModifiedDateOfData);
+
+                // Use DateTime.MaxValue for AbsoluteExpiration (since we're considering the
+                // file's LastModifiedDate we don't want this cache entry to expire
+                // on a separate time based scheme)
+                HttpContext.Cache.Add(
+                    cacheKey,
+                    new TextFileContents(filename, lastModifiedDateOfData, content),
+                    null,
+                    DateTime.MaxValue,
+                    System.Web.Caching.Cache.NoSlidingExpiration,
+                    System.Web.Caching.CacheItemPriority.Normal,
+                    null
+                );
+
+                return Content(content, "text/css");
+            }
+            catch (Exception e)
+            {
+                Response.StatusCode = 500;
+                Response.StatusDescription = "Error encountered";
+
+                return Content("/* Error: " + e.Message + " */", "text/css");
+            }
+        }
+
+        /// <summary>
+        /// Try to get the If-Modified-Since HttpHeader value - if not present or not valid
+        /// (ie. not interpretable as a date) then null will be returned
+        /// </summary>
+        private DateTime? TryToGetIfModifiedSinceDateFromRequest()
+        {
+            var lastModifiedDateRaw = Request.Headers["If-Modified-Since"];
+            if (lastModifiedDateRaw == null)
+                return null;
+
+            DateTime lastModifiedDate;
+            if (DateTime.TryParse(lastModifiedDateRaw, out lastModifiedDate))
+                return lastModifiedDate;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Mark the response as being cacheable and implement content-encoding requests such
+        /// that gzip is used if supported by requester
+        /// </summary>
+        private void SetResponseCacheHeadersForSuccess(DateTime lastModifiedDateOfLiveData)
+        {
+            // Mark the response as cacheable
+            // - Specify "Vary" "Content-Encoding" header to ensure that if cached by proxies
+            //   that different versions are stored for different encodings (eg. gzip'd vs
+            //   non-gzip'd)
+            Response.Cache.SetCacheability(System.Web.HttpCacheability.Public);
+            Response.Cache.SetLastModified(lastModifiedDateOfLiveData);
+            Response.AppendHeader("Vary", "Content-Encoding");
+
+            // Handle requested content-encoding method
+            var encodingsAccepted = (Request.Headers["Accept-Encoding"] ?? "")
+                .Split(',')
+                .Select(e => e.Trim().ToLower())
+                .ToArray();
+            if (encodingsAccepted.Contains("gzip"))
+            {
+                Response.AppendHeader("Content-encoding", "gzip");
+                Response.Filter = new GZipStream(Response.Filter, CompressionMode.Compress);
+            }
+            else if (encodingsAccepted.Contains("deflate"))
+            {
+                Response.AppendHeader("Content-encoding", "deflate");
+                Response.Filter = new DeflateStream(Response.Filter, CompressionMode.Compress);
+            }
+        }
+
+        /// <summary>
+        /// Represent a last-modified-date-marked text file we can store in cache
+        /// </summary>
+        [Serializable]
+        private class TextFileContents
+        {
+            public TextFileContents(string filename, DateTime lastModified, string content)
+            {
+                if (string.IsNullOrWhiteSpace(filename))
+                    throw new ArgumentException("Null/blank filename specified");
+                if (content == null)
+                    throw new ArgumentNullException("content");
+
+                Filename = filename.Trim();
+                LastModified = lastModified;
+                Content = content.Trim();
+            }
+
+            /// <summary>
+            /// This will never be null or empty
+            /// </summary>
+            public string Filename { get; private set; }
+
+            public DateTime LastModified { get; private set; }
+
+            /// <summary>
+            /// This will never be null but it may be empty if the source file had no content
+            /// </summary>
+            public string Content { get; private set; }
+        }
+
+        /// <summary>
+        /// Simple method to minify CSS content using a few regular expressions
+        /// </summary>
+        private string MinifyCSS(string content)
+        {
+            if (content == null)
+                throw new ArgumentNullException("content");
+
+            content = content.Trim();
+            if (content == "")
+                return "";
+
+            content = HashSurroundingWhitespaceRemover.Replace(content, "#");
+            content = ExtraneousWhitespaceRemover.Replace(content, "");
+            content = DuplicateWhitespaceRemover.Replace(content, " ");
+            content = DelimiterWhitespaceRemover.Replace(content, "$1");
+            content = content.Replace(";}", "}");
+            content = UnitWhitespaceRemover.Replace(content, "$1");
+            return CommentRemover.Replace(content, "");
+        }
+
+        // Courtesy of http://madskristensen.net/post/Efficient-stylesheet-minification-in-C.aspx
+        private static readonly Regex HashSurroundingWhitespaceRemover
+            = new Regex(@"[a-zA-Z]+#", RegexOptions.Compiled);
+        private static readonly Regex ExtraneousWhitespaceRemover
+            = new Regex(@"[\n\r]+\s*", RegexOptions.Compiled);
+        private static readonly Regex DuplicateWhitespaceRemover
+            = new Regex(@"\s+", RegexOptions.Compiled);
+        private static readonly Regex DelimiterWhitespaceRemover
+            = new Regex(@"\s?([:,;{}])\s?", RegexOptions.Compiled);
+        private static readonly Regex UnitWhitespaceRemover
+            = new Regex(@"([\s:]0)(px|pt|%|em)", RegexOptions.Compiled);
+        private static readonly Regex CommentRemover
+            = new Regex(@"/\*[\d\D]*?\*/", RegexOptions.Compiled);
+    }
+
+.. and some route configuration:
+
+    // Have to set this to true so that stylesheets (for example) get processed rather than
+    // returned direct
+    routes.RouteExistingFiles = true;
+    routes.MapRoute(
+        "StandardStylesheets",
+        "{*allwithextension}",
+        new { controller = "CSS", action = "Process" },
+        new { allwithextension = @".*\.css(/.*)?" }
+    );
+
+### The minification
+
+I've used a very straight-forward minification approach that I borrowed from the fella -
+
+[Efficient stylesheet minification in C#](http://madskristensen.net/post/Efficient-stylesheet-minification-in-C.aspx)
+
+### Caching / 304'ing
+
+The minified content is cached along with the last-modified-date of the file so that the http headers can be used to prevent unnecessary work (and bandwidth) by returning a 304 ("Not Modified") response (which doesn't require content). When a browser requests a "hard refresh" it will leave this header out of the request and so will get fresh content.
+
+### Compression / Encoding
+
+So far there have been no real surprises but I came across a problem for which I'm still not completely sure where to point the blame. When hosted in IIS (but not the "Visual Studio Development [Web] Server" or IIS Express) there would be responses with the minified content returned to "hard refresh" requests that would appear corrupted. Fiddler would pop up a "The content could not be decompressed. The magic number in GZip header is not correct. Make sure you are passing in a GZIP stream" message. If the css file was entered into the url bar in Firefox, it would display "Content Encoding Error".
+
+Successful requests (for example, where the cache is either empty or the file has been modified since the cache entry was recorded), the request and response headers would be of the form:
+
+    GET http://www.productiverage.com/Content/Default.css HTTP/1.1
+    Host: www.productiverage.com
+    User-Agent: Mozilla/5.0 (Windows NT 5.1; rv:6.0.2) Gecko/20100101 Firefox/6.0.2
+    Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+    Accept-Language: en-gb,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+    Connection: keep-alive
+
+    HTTP/1.1 200 OK
+    Cache-Control: public
+    Content-Type: text/css; charset=utf-8
+    Last-Modified: Thu, 19 Jan 2012 23:03:37 GMT
+    Vary: Accept-Encoding
+    Server: Microsoft-IIS/7.0
+    X-AspNetMvc-Version: 3.0
+    X-AspNet-Version: 4.0.30319
+    X-Powered-By: ASP.NET
+    Date: Thu, 19 Jan 2012 23:08:55 GMT
+    Content-Length: 4344
+
+    html{background:url("/Content/Images/Background-Repeat.jpg") repeat-x #800C0E}body,td{ ...
+
+while the failing requests would be such:
+
+    GET http://www.productiverage.com/Content/Default.css HTTP/1.1
+    Host: www.productiverage.com
+    User-Agent: Mozilla/5.0 (Windows NT 5.1; rv:6.0.2) Gecko/20100101 Firefox/6.0.2
+    Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+    Accept-Language: en-gb,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+    Connection: keep-alive
+    Pragma: no-cache
+    Cache-Control: no-cache
+
+    HTTP/1.1 200 OK
+    Cache-Control: public
+    Content-Type: text/css; charset=utf-8
+    Content-Encoding: gzip
+    Last-Modified: Thu, 19 Jan 2012 23:03:37 GMT
+    Vary: Accept-Encoding
+    Server: Microsoft-IIS/7.0
+    X-AspNetMvc-Version: 3.0
+    X-AspNet-Version: 4.0.30319
+    X-Powered-By: ASP.NET
+    Date: Thu, 19 Jan 2012 23:07:52 GMT
+    Content-Length: 4344
+
+    html{background:url("/Content/Images/Background-Repeat.jpg") repeat-x #800C0E}body,td{ ...
+
+The only differences in the request being the cache-disabling "Pragma" and "Cache-Control" headers but in the failing response a "Content-Encoding: gzip" header has been added but the content itself is in its raw form - ie. *not* gzip'd.
+
+That explains the gzip error - the content is being reported as compressed when in actual fact it isn't!
+
+I presume that the compression settings in IIS are somehow interfering here but unfortunately I've not been able to definitively find the cause or if I should do anything in configuration. My Google-fu is failing me today :(
+
+However, the solution in the above code is to handle the response compression in the CSSController. In the SetResponseCacheHeadersForSuccess method the "Accept-Encoding" request header is tested for gzip and deflate and will return content accordingly by setting the Response.Filter to be either a GZipStream or DeflateStream. This has solved the problem! And so I'm going to leave my root-cause investigation for another day :)

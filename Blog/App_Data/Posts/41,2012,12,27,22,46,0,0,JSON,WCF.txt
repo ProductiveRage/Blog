@@ -1,0 +1,220 @@
+﻿## WCF with JSON (and nullable types)
+
+I wanted to try putting together a WCF Service that would return JSON. With its configurable nature, I've heard before that it's not that big of a deal to do this.. and truth be told, it's not *that* awkward to do but it took me a while to find all the right hoops to jump through! (Another time, I might consider trying to put together a RESTful API using MVC and the JsonResult type unless there was some need to support multiple response types, such as XML *and* JSON).
+
+The best way to go through it is probably with an example, so here's a simple Service Contract interface, note the "WebGet" attribute and the BodyStyle and ResponseFormat values.
+
+    using System;
+    using System.ServiceModel;
+    using System.ServiceModel.Web;
+
+    namespace WCFJSONExample
+    {
+        [ServiceContract]
+        public interface IPostService
+        {
+            [OperationContract]
+            [WebGet(BodyStyle = WebMessageBodyStyle.Bare, ResponseFormat = WebMessageFormat.Json)]
+            PostResponseDetails Search(int id, DateTime postedAfter, DateTime postedBefore);
+        }
+    }
+
+When communicating through SOAP, the standard request method is to POST the data but for the purposes here I want to enable GET requests that return JSON. I also want the search parameters to be simple types, rather than having to support a complex SearchRequestDetails type, for example, that could specify the various criteria. There's nothing special about the PostResponseDetails type, though:
+
+    using System;
+    using System.Runtime.Serialization;
+
+    namespace WCFJSONExample
+    {
+        [DataContract]
+        public class PostResponseDetails
+        {
+            [DataMember]
+            public StatusDetails Status { get; set; }
+
+            [DataMember]
+            public PostDetails[] Posts { get; set; }
+        }
+
+        [DataContract]
+        public class StatusDetails
+        {
+            [DataMember]
+            public bool Success { get; set; }
+
+            [DataMember]
+            public string AdditionalStatusInformation { get; set; }
+        }
+
+        [DataContract]
+        public class PostDetails
+        {
+            [DataMember]
+            public int Id { get; set; }
+
+            [DataMember]
+            public DateTime Posted { get; set; }
+
+            [DataMember]
+            public string Title { get; set; }
+
+            [DataMember]
+            public string Content { get; set; }
+        }
+    }
+
+We're going to get the framework to serialise the response data for us, so nothing unusual was required there.
+
+Where things *do* need changing from the defaults, though, are some of the settings in the web.config. Within system.serviceModel / services, we need to add the following (the "services" node won't exist if you're working with a clean web.config file - ie. a web.config as Visual Studio will generate for a new "WCF Service Application" project):
+
+    <service name="WCFJSONExample.PostService">
+        <endpoint
+            name="jsonEndPoint"
+            address=""
+            binding="webHttpBinding"
+            behaviorConfiguration="json"
+            contract="WCFJSONExample.IPostService"
+        />
+    </service>
+
+
+And within system.serviceModel / behaviours / endpointBehaviors we need to add (again, the "behaviours" node won't exist in the clean / default web.config, just add it and the child "endpointBehaviors" node in, if required):
+
+    <behavior name="json">
+        <webHttp />
+    </behavior>
+
+And that's it! Web Service calls can be made by specifying the method name as part of the url - eg.
+
+    http://localhost:62277/PostService.svc/Search?id=1
+
+### Well..
+
+When making requests, if any of the parameters are not included then they will be given default values - eg.
+
+    http://localhost:62277/PostService.svc/Search?id=1
+
+will result in a method call with id specified as 1 and both postedAfter and postedBefore with the value default(DateTime). I wanted to be able to specify nullable types for the method arguments so that if I needed a method where I could differentiate between integer values being specified as zero and not being specified (and so appearing to be zero as that is default(int)).
+
+But changing the Operation Contract to
+
+    [OperationContract]
+    [WebGet(BodyStyle = WebMessageBodyStyle.Bare, ResponseFormat = WebMessageFormat.Json)]
+    PostResponseDetails Search(int? id, DateTime? postedAfter, DateTime? postedBefore);
+
+results in the unfriendly error:
+
+> Operation 'GetLogData' in contract 'IPostService' has a query variable named 'fromDate' of type 'System.Nullable`1[System.DateTime]', but type 'System.Nullable`1[System.DateTime]' is not convertible by 'QueryStringConverter'.  Variables for UriTemplate query values must have types that can be converted by 'QueryStringConverter'.
+
+It turns out that the WebHttp behaviour uses an internal class "QueryStringConverter" that will only translate particular types. But we can use a different end point behaviour that uses a different query string converter. Most of the behaviour of the webHttp behaviour (which corresponds to the System.ServiceModel.Description.WebHttpBehavior class) is correct and we just want to extend it, so we'll create a new class that inherits from it and tweak it slightly in that manner.
+
+The new class looks like this:
+
+    using System;
+    using System.ServiceModel.Configuration;
+    using System.ServiceModel.Description;
+    using System.ServiceModel.Dispatcher;
+
+    namespace WCFJSONExample
+    {
+        public class NullableSupportingWebHttpBehaviourExtension : BehaviorExtensionElement
+        {
+            public override Type BehaviorType
+            {
+                get
+                {
+                    return typeof(NullableSupportingWebHttpBehaviour);
+                }
+            }
+
+            protected override object CreateBehavior()
+            {
+                return new NullableSupportingWebHttpBehaviour();
+            }
+
+            private class NullableSupportingWebHttpBehaviour : WebHttpBehavior
+            {
+                protected override QueryStringConverter GetQueryStringConverter(
+                    OperationDescription operationDescription)
+                {
+                    return new NullableSupportingQueryStringConverter();
+                }
+
+                private class NullableSupportingQueryStringConverter : QueryStringConverter
+                {
+                    public override bool CanConvert(Type type)
+                    {
+                        if (base.CanConvert(type))
+                            return true;
+
+                        Type nullableInnerType;
+                        return TryToGetNullableTypeInformation(type, out nullableInnerType)
+                            && base.CanConvert(nullableInnerType);
+                    }
+
+                    public override object ConvertStringToValue(
+                        string parameter,
+                        Type parameterType)
+                    {
+                        Type nullableInnerType;
+                        if (TryToGetNullableTypeInformation(parameterType, out nullableInnerType))
+                        {
+                            if (parameter == null)
+                                return null;
+                            return ConvertStringToValue(parameter, nullableInnerType);
+                        }
+
+                        return base.ConvertStringToValue(parameter, parameterType);
+                    }
+
+                    public override string ConvertValueToString(
+                        object parameter,
+                        Type parameterType)
+                    {
+                        Type nullableInnerType;
+                        if (TryToGetNullableTypeInformation(parameterType, out nullableInnerType))
+                        {
+                            if (parameter == null)
+                                return null;
+                            return ConvertValueToString(parameter, nullableInnerType);
+                        }
+
+                        return base.ConvertValueToString(parameter, parameterType);
+                    }
+
+                    private bool TryToGetNullableTypeInformation(Type type, out Type innerType)
+                    {
+                        if (type == null)
+                            throw new ArgumentNullException("type");
+
+                        if (!type.IsGenericType
+                        || (type.GetGenericTypeDefinition() != typeof(Nullable<>)))
+                        {
+                            innerType = null;
+                            return false;
+                        }
+
+                        innerType = type.GetGenericArguments()[0];
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+And we plumb it in by adding this to system.serviceModel / extensions / behaviorExtensions (again, the "extensions" node and its "behaviorExtensions" child node need adding in to a vanila web.config):
+
+    <add
+        name="postServiceWebHttp"
+        type="WCFJSONExample.NullableSupportingWebHttpBehaviourExtension, WCFJSONExample"
+    />
+
+And then replace the "webHttp" node of the behaviour we added above with a "postServiceWebHttp" node, thus:
+
+    <behavior name="json">
+        <postServiceWebHttp />
+    </behavior>
+
+The QueryStringConverter's CanConvert, ConvertStringToValue and ConvertValueToString methods are overridden so that we can pick up on parameters that are of the type Nullable&lt;T&gt&; and deal with them appropriately - returning null if a null value is stored in the type and dealing with the wrapped value if not.
+
+This could easily be changed to perform different translation actions, if required (it could feasibly be integrated with a JSON serialiser to deal with complex data types, for example).

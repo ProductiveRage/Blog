@@ -1,0 +1,376 @@
+## I love Immutable Data
+
+I love immutable data. There, I said it. I think over the last couple of years a few major factors have had the most influence in leading me to this point -
+
+* I've been driven mad by dealing with code full of complicated object models with no indication which properties are required, which are optional, which go together, which are mutually exclusive, etc..
+* I was working on a store of data that would be read from and written to by multiple threads and the initial implementation had a naive lock-on-every-interaction approach when it seemed like we should be able to make the reads work without locking (especially since reads were massively more common than writes)
+* I've been working largely on Tourism websites (and all the related backend services) for a few years now and most of the data feels like it's read-only, though having thought about it I'm not sure if I'd change my mind if I was doing CRUD day-in, day-out instead
+
+The first point could really be addressed in all sorts of ways - the code's all a bit wishy-washy and poorly defined and nobody seems to know which fields are for what in the example I'm thinking of. But when I think of immutable types I instinctively think of classes whose values are set once through a constructor (though there are other variations that can be used) and then that instance is "locked" such that we know its state will never change - and that constructor will have ensured that this state is valid. If the classes in point were all written in this way then never again (hopefully!) would there be concerns regarding the validity of the states of the objects, they must have been valid in order to be instantiated and immutability means they can't have changed since!
+
+While we're doing some sort of validation on the constructor arguments I think it also encourages you to think about the various states that can exist - eg.
+
+    public class Employee
+    {
+      public string Title { get; set; }  	
+      public string FirstName { get; set; }  	
+      public string LastName { get; set; }  	
+      public string[] Roles { get; set; }  	
+    }
+
+This is the sort of thing that's found all over the place - especially across webservice interfaces. Assume that we have the requirements that Title, FirstName and LastName *all* have values and that all Employees have zero or more Roles. I think describing the requirements in constructor validation and then some liberal commenting ends up in nicer code:
+
+    public class Employee
+    {
+      public Employee(Name name, DefinedStringList roles)
+      {
+        if (name == null)
+          throw new ArgumentNullException("name");
+        if (roles == null)
+          throw new ArgumentNullException("roles");
+
+        Name = name;
+        Roles = roles;
+      }
+
+      /// <summary>
+      /// This will never be null
+      /// </summary>
+      public Name Name { get; private set; }
+
+      /// <summary>
+      /// This will never be null
+      /// </summary>
+      public DefinedStringList Roles { get; private set; }
+    }
+
+    public class Name
+    {
+      public Name(string title, string firstName, string lastName)
+      {
+        if ((title ?? "").Trim() == "")
+          throw new ArgumentException("Null/empty title specified");
+        if ((firstName ?? "").Trim() == "")
+          throw new ArgumentException("Null/empty firstName specified");
+        if ((lastName ?? "").Trim() == "")
+          throw new ArgumentException("Null/empty lastName specified");
+
+        Title = title;
+        FirstName = firstName;
+        LastName = lastName;
+      }
+
+      /// <summary>
+      /// This will never be null or empty
+      /// </summary>
+      public string Title { get; private set; }
+
+      /// <summary>
+      /// This will never be null or empty
+      /// </summary>
+      public string FirstName { get; private set; }
+
+      /// <summary>
+      /// This will never be null or empty
+      /// </summary>
+      public string LastName { get; private set; }
+    }
+
+Except - wow! - the amount of code seems to have ballooned and I've not even included the "DefinedStringList" class! (Well, not here at least - it's down the bottom of the post).
+
+But what we *do* have now will be instances of Employee that are always in a known good state and we can safely retrieve employee.Name.FirstName without first ensuring that Name is not null. We also know that Employees that have not been assigned roles will have a Roles instance that declares a Count of zero rather than wondering if it will be that or whether there will be a null Roles instance. So the upshot should be that there will actually be *less* code in places where Employee instances are accessed.
+
+### Multithreaded access
+
+Now, to recreate a really trivial version of the multithreaded datastore I mentioned earlier, imagine we have a local store of Employees that is being written to and read from - eg.
+
+    public class EmployeeStore
+    {
+      private List<Employee> _data = new List<Employee>();
+
+      public IEnumerable<Employee> GetAll()
+      {
+        lock (_data)
+        {
+          return _data.AsReadOnly();
+        }
+      }
+
+      public void Add(Employee employeeToAdd)
+      {
+        if (employeeToAdd == null)
+          throw new ArgumentNullException("employeeToAdd");
+
+        lock (_data)
+        {
+          _data.Add(employeeToAdd);
+        }
+      }
+    }
+
+We'll ignore any concept or deleting or updating for now. Since we don't know how many threads are at work in this scenario, or who's doing what, we lock the internal data at each read or write. We're also returning the data as an IEnumerable and using List's .AsReadOnly method in an optimistic attempt to keep the internal data from being manipulated externally after we return it. In fact, in the example I had, the data was actually (deep-)cloned before returning to ensure that no caller could manipulate any data inside the data store.
+
+If we're working with immutable data types and have access to an immutable list then we can change this without much effort to require no locks for reading and we can implicitly forget any AsReadOnly or cloning malarkey if we have an immutable list to work with as well. An immutable list works by returning new instances when methods that would otherwise effect its contents are called - so if a list has 3 items and we call Add then the existing list is unchanged and the Add method returns a *new* list with all 4 items. Example code is at the end of this post, along with a DefinedStringList implementation, as mentioned earlier.
+
+    public class EmployeeStoreWithoutReadLocking
+    {
+      private object _writeLock = new object();
+      private ImmutableList<Employee> _data = new ImmutableList<Employee>();
+
+      public ImmutableList<Employee> GetAll()
+      {
+        return _data;
+      }
+
+      public void Add(Employee employeeToAdd)
+      {
+        if (employeeToAdd == null)
+          throw new ArgumentNullException("employeeToAdd");
+
+        lock (_writeLock)
+        {
+          _data = _data.Add(employeeToAdd);
+        }
+      }
+    }
+
+Easy! Of course this relies upon the Employee class being immutable (which must cover all of its properties' types as well). Now we're not just reaping the benefits in state validity but we've got more performant threaded code (again, my example was heavy on reads and light). In a lot of cases immutability such as this can make areas of multi-threaded code much easier to write and maintain.
+
+I think in this case I extended the ImmutableList to a NonNullImmutableList which had validation to ensure it would never contain any null references. Similar to how the DefinedStringList will ensure it has no null or empty values. Another layer of comforting behaviour guarantee so that callers don't have to worry about nulls. It makes me feel warm and fuzzy.
+
+### Undo!
+
+In most scenarios it seems I've been working with recently, classes such as Employee *would* be instantiated just the once and then not changed unless another query was executed that returned a new set of Employee data. But feasibly we may want to alter the Employee class such that it is "editable" in the same way that the DefinedStringList that we're talking about is - you can call methods that return a new instance of the class with the alteration made, leaving the original reference unaltered.
+
+    public class Employee
+    {
+      public Employee(Name name, DefinedStringList roles)
+      {
+        if (name == null)
+          throw new ArgumentNullException("name");
+        if (roles == null)
+          throw new ArgumentNullException("roles");
+
+        Name = name;
+        Roles = roles;
+      }
+
+      /// <summary>
+      /// This will never be null
+      /// </summary>
+      public Name Name { get; private set; }
+
+      /// <summary>
+      /// This will never be null
+      /// </summary>
+      public DefinedStringList Roles { get; private set; }
+
+      public Employee UpdateName(Name name)
+      {
+        // This will throw an exception for a null name reference
+        return new Employee(name, _roles);
+      }
+
+      public Employee AddRole(string role)
+      {
+        // This will throw an exception for a null or empty role value
+        return new Employee(_name, _roles.Add(role));
+      }
+
+      public Employee RemoveRole(string role)
+      {
+        return new Employee(_name, _roles.Remove(role));
+      }
+    }
+
+Here the name can be overwritten and roles can be added or removed. What's interesting about this approach is that returning new instances each time means you could persists a chain of changes - an undo history or sorts! I must admit that I've never taken advantage of this in any way, but it's often struck me that it could be useful in some situations..
+
+### Some more views
+
+While writing this post, I did a bit of research to try and make sure I wasn't say anything either too done-to-death or too stupid and the following links are articles I like, largely because they agree with me! :)
+
+> Immutable data structures are the way of the future in C#
+
+[http://blogs.msdn.com/b/ericlippert/archive/2007/10/04/path-finding-using-a-in-c-3-0-part-two.aspx](http://blogs.msdn.com/b/ericlippert/archive/2007/10/04/path-finding-using-a-in-c-3-0-part-two.aspx)
+
+> One of reasons why immutable types can be faster is that they are optimized due to having dealt with memory management in years past
+
+[http://en.csharp-online.net/CSharp\_Coding\_Solutions-Immutable\_Types\_Are\_Scalable\_Types](http://en.csharp-online.net/CSharp_Coding_Solutions%E2%80%94Immutable_Types_Are_Scalable_Types)
+
+However there's also this one:
+
+> The "verbose constructor" is itself a good candidate for an anti-pattern for the following reasons:
+
+[http://blog.dezfowler.com/2009/05/always-valid-entity-anti-pattern.html](http://blog.dezfowler.com/2009/05/always-valid-entity-anti-pattern.html)
+
+I've worked with Derek before so although I read that article two or three times and couldn't agree with it, I didn't give up 'cos I know he's a bright guy. And it finally broke for me what I think he meant when I read the comments on that piece - there's only four and it's the last one that made it stick for me. Partly because someone I work with *now* has a similar view, I think. The way I see things working together is that the validation in these "verbose constructors" is a last line of defense to ensure that the object's state is ensured to be valid and is *not* business logic where the intention is to throw a load of possibly-valid values at it and see what sticks. There should be a nice validation layer between the UI and these constructors that only allows through allowable state and handles the aggregation of errors where required. The exceptions in the constructor should still be just that; exceptions, not the norm for invalid UI input.
+
+But in summary, I'm still all for these "verbose constructors" - as this final defense that allows us not to worry about instances of these immutable classes - if they exist, then they're valid. And I like that.
+
+### An immutable list (and the DefinedStringList class)
+
+Since this code is a bit long to jam in the middle of the article, here it is in all its glory:
+
+    public class ImmutableList<T> : IEnumerable<T>
+    {
+      private List<T> values;
+      private IValueValidator<T> validator;
+      public ImmutableList(IEnumerable<T> values, IValueValidator<T> validator)
+      {
+        if (values == null)
+          throw new ArgumentNullException("values");
+
+        var valuesList = new List<T>();
+        foreach (var value in values)
+        {
+          if (validator != null)
+          {
+            try { validator.EnsureValid(value); }
+            catch (Exception e)
+            {
+              throw new ArgumentException("Invalid reference encountered in values", e);
+            }
+          }
+          valuesList.Add(value);
+        }
+        this.values = valuesList;
+        this.validator = validator;
+      }
+      public ImmutableList(IEnumerable<T> values) : this(values, null) { }
+      public ImmutableList(IValueValidator<T> validator, params T[] values)
+        : this((IEnumerable<T>)values, validator) { }
+      public ImmutableList(params T[] values) : this(null, values) { }
+
+      public T this[int index]
+      {
+        get
+        {
+          if ((index < 0) || (index >= this.values.Count))
+            throw new ArgumentOutOfRangeException("index");
+          return this.values[index];
+        }
+      }
+
+      public int Count
+      {
+        get { return this.values.Count; }
+      }
+
+      public bool Contains(T value)
+      {
+        return this.values.Contains(value);
+      }
+
+      public ImmutableList<T> Add(T value)
+      {
+        if (this.validator != null)
+        {
+          try { this.validator.EnsureValid(value); }
+          catch (Exception e)
+          {
+            throw new ArgumentException("Invalid value", e);
+          }
+        }
+        var valuesNew = new List<T>();
+        valuesNew.AddRange(this.values);
+        valuesNew.Add(value);
+        return new ImmutableList<T>()
+        {
+          values = valuesNew,
+          validator = this.validator
+        };
+      }
+
+      /// <summary>
+      /// Removes the first occurrence of a specific object
+      /// </summary>
+      public ImmutableList<T> Remove(T value)
+      {
+        var valuesNew = new List<T>();
+        valuesNew.AddRange(this.values);
+        valuesNew.Remove(value);
+        return new ImmutableList<T>()
+        {
+          values = valuesNew,
+          validator = this.validator
+        };
+      }
+
+      /// <summary>
+      /// This is just a convenience method so that derived types can call Add, Remove, etc.. and return
+      /// instances of themselves without having to pass that data back through a constructor which will
+      /// check each value against the validator even though we already know they're valid! Note: This
+      /// can only be used by derived classes that don't have any new requirements of any type - we're
+      /// setting only the values and validator references here!
+      /// </summary>
+      protected static U toDerivedClass<U>(ImmutableList<T> list) where U : ImmutableList<T>, new()
+      {
+        if (list == null)
+          throw new ArgumentNullException("list");
+        
+        // Use same trick as above methods to cheat - we're changing the state of the object after
+        // instantiation, but after returning from
+        // this method it can be considered immutable
+        return new U()
+        {
+          values = list.values,
+          validator = list.validator
+        };
+      }
+
+      public IEnumerator<T> GetEnumerator()
+      {
+        return this.values.GetEnumerator();
+      }
+
+      IEnumerator IEnumerable.GetEnumerator()
+      {
+        return GetEnumerator();
+      }
+    }
+
+    public interface IValueValidator<T>
+    {
+      /// <summary>
+      /// This will throw an exception for a value that does pass validation requirements
+      /// </summary>
+      void EnsureValid(T value);
+    }
+
+That's all the setup to enable a DefinedStringList class, which we can with:
+
+    public class DefinedStringList : ImmutableList<string>
+    {
+      public DefinedStringList(IEnumerable<string> values)
+        : base(values, new NonNullOrEmptyWrappingValueValidator()) { }
+      public DefinedStringList(params string[] values) : this((IEnumerable<string>)values) { }
+      public DefinedStringList() : this(new string[0]) { }
+
+      public new DefinedStringList Add(string value)
+      {
+        return toDerivedClass<DefinedStringList>(base.Add(value));
+      }
+      public new DefinedStringList Remove(string value)
+      {
+        return toDerivedClass<DefinedStringList>(base.Remove(value));
+      }
+
+      private class NonNullOrEmptyWrappingValueValidator : IValueValidator<string>
+      {
+        public void EnsureValid(string value)
+        {
+          if ((value ?? "").Trim() == null)
+            throw new ArgumentException("Null/empty value specified");
+        }
+      }
+    }
+
+These are actually cut-down versions of classes I've got in one of my projects that also includes AddRange, Insert, RemoveAt, Contains(T value, IEqualityComparer<T> comparer), etc.. but this is more than enough to get the gist. At some point I may look into that GitHub thing..
+
+### Immutability purity
+
+A final side note(\*) - you might notice that internally the ImmutableList *does* actually participate in some mutability! When calling the Add method, we validate the new value (if required) and then create a new instance of the class with no data and *then* assign its internal "values" and "validator" references, meaning we sidestep the looping of all the data in the constructor which is unnecessary since we know the values are all valid, that's part of the point of the class! BTW, it feels like a bit of a trick updating these private references after creating the new instances and it's only possible because we've just created the instance ourself and the new object is an instance of the class that is performing the work. I don't know if there's a phrase to describe this method and I was a bit surprised to discover it could be done since it has a feeling of breaking the "private" member contract!
+
+\* I don't want to go into *too* much detail since I want to talk about this further another time!
+
+**Update (26th November 2012):** A re-visit of this principle can be seen in the post [Persistent Immutable Lists](Post38) which has an alternate implementation of the immutable list with improved performance but all of the immutability-based safety!

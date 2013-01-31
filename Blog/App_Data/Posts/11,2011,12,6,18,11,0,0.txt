@@ -1,0 +1,56 @@
+## IISExpress - Virtual Directories and Applications
+
+Recently I've been using IIS Express, mostly at home where I don't have a fancy OS with a full IIS installation. Integrated with Visual Studio it's great at being an environment closer-to-real-IIS than the built-in VS WebServer / Casini (is it even still called that these days??) but recently I've been doing some proof-of-concept work for an Engine that integrates with some Legacy WSC components we have in a project at work. Oh yes, the bleeding edge of VBScript in pseudo-COM wrappers - awesome :S And for this work there are stretches of time where I don't want the overhead of the debugger being attached and be able to flip the app pool and re-load the components and using WebMatrix to configure the site has allowed me to do just that.
+
+But even with WebMatrix there isn't a huge amount of configuring that can be done through the GUI. I'd heard that IIS Express could support Virtual Directories and Virtual Applications but I just couldn't find where to do it through the interface! And I still can't.. but the good news is that the config files for IIS Express - like IIS 7 - are really easy to get into!
+
+### The upshot
+
+Since IIS Express installs against the user account (which contributes to its non-requirement of Admin rights), the config files are located in the "IISExpress\config" folder under "My Documents". The interesting file here is "applicationhost.config" which describe all the sites under "configuration/system.applicationHost/sites". The default site may described as -
+
+    <site name="WebSite1" id="1" serverAutoStart="true">
+        <application path="/">
+            <virtualDirectory path="/" physicalPath="%IIS_SITES_HOME%\WebSite1" />
+        </application>
+        <bindings>
+            <binding protocol="http" bindingInformation=":8080:localhost" />
+        </bindings>
+    </site>
+
+to add a Virtual Directory is as easy as adding a new virtualDirectory node such as -
+
+    <site name="WebSite1" id="1" serverAutoStart="true">
+        <application path="/">
+            <virtualDirectory path="/" physicalPath="%IIS_SITES_HOME%\WebSite1" />
+            <virtualDirectory
+                path="/config"
+                physicalPath="C:\Documents and Settings\Dan\My Documents\Projects\Config"
+             />
+        </application>
+        <bindings>
+            <binding protocol="http" bindingInformation=":8080:localhost" />
+        </bindings>
+    </site>
+
+while adding a new Virtual Directory is done with a new application node -
+
+    <site name="WebSite1" id="1" serverAutoStart="true">
+        <application path="/">
+            <virtualDirectory path="/" physicalPath="%IIS_SITES_HOME%\WebSite1" />
+        </application>
+        <application path="/config">
+            <virtualDirectory
+                path="/"
+                physicalPath="C:\Documents and Settings\Dan\My Documents\Projects\Config"
+             />
+        </application>
+        <bindings>
+            <binding protocol="http" bindingInformation=":8080:localhost" />
+        </bindings>
+    </site>
+
+### So?
+
+Well it's hardly rocket science! But it took me a while to get this sorted out.. there are quite a few questions out there to this effect but it seems like once someone works it out they think it's obvious and so there aren't that many answering posts out there.
+ 
+This is my contribution to that end :)

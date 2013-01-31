@@ -1,0 +1,633 @@
+## Extendable LINQ-compilable Mappers
+
+To pick up from where I left off in a [previous post](Post7), I was trying to write something that could automatically generate LINQ Expressions that could translate from (for example) -
+
+    public class SourceEmployee
+    {
+        public string Name { get; set; }
+        public SourceRole Role { get; set; }
+    }
+
+    public class SourceRole
+    {
+        public string Description { get; set; }
+    }
+
+to
+
+    public class DestEmployee
+    {
+        public DestEmployee(string name, DestRole role)
+        {
+            Name = name;
+            Role = role;
+        }
+        public string Name { get; private set; }
+        public DestRole Role { get; private set; }
+    }
+
+    public class DestRole
+    {
+        public DestRole(string description)
+        {
+            Description = description;
+        }
+        public string Description { get; private set; }
+    }
+
+by applying name matching logic between properties on the source types and constructor arguments on the destination types. Having this all performed by LINQ Expressions should allow the final conversion to be comparatively fast to hand-rolled code.
+
+This was all kicked off initially since I was using [AutoMapper](http://automapper.codeplex.com/) for some work and wasn't happy with its approach to mapping to types that have to be initialised with verbose constructors (as opposed to a parameter-less constructor and then the setting of individual properties). This much was achieved and the solution can be found here -
+
+[https://github.com/ProductiveRage/AutoMapper-By-Constructor-1/tree/FirstImplementation](https://github.com/ProductiveRage/AutoMapper-By-Constructor-1/tree/FirstImplementation).
+
+But I wanted to see if I could improve the performance by removing AutoMapper from the equation and using LINQ Expressions.
+
+### A more detailed recap
+
+Where we left the code as of
+
+[https://github.com/ProductiveRage/AutoMapper-By-Constructor-1/tree/LinqExpressionPropertyGetters](https://github.com/ProductiveRage/AutoMapper-By-Constructor-1/tree/LinqExpressionPropertyGetters)
+
+we had the class
+
+    public class CompilableTypeConverterByConstructor<TSource, TDest>
+        : ITypeConverterByConstructor<TSource, TDest>
+    {
+        // ..
+        private Lazy<Func<TSource, TDest>> _converter;
+        public CompilableTypeConverterByConstructor(
+            IEnumerable<ICompilablePropertyGetter> propertyGetters,
+            ConstructorInfo constructor)
+        {
+            // ..
+            _converter = new Lazy<Func<TSource, TDest>>(generateCompiledConverter, true);
+        }
+
+        public ConstructorInfo Constructor
+        {
+            get
+            {
+                // ..
+            }
+        }
+
+        public TDest Convert(TSource src)
+        {
+            if (src == null)
+                throw new ArgumentNullException("src");
+
+            return _converter.Value(src);
+        }
+
+        private Func<TSource, TDest> generateCompiledConverter()
+        {
+            var srcParameter = Expression.Parameter(typeof(TSource), "src");
+            var constructorParameterExpressions = new List<Expression>();
+            foreach (var constructorParameter in _constructor.GetParameters())
+            {
+                var index = constructorParameterExpressions.Count;
+                constructorParameterExpressions.Add(
+                    _propertyGetters[index].GetPropertyGetterExpression(srcParameter)
+                );
+            }
+
+            return Expression.Lambda<Func<TSource, TDest>>(
+                Expression.New(
+                    _constructor,
+                    constructorParameterExpressions.ToArray()
+                ),
+                srcParameter
+            ).Compile();
+        }
+    }
+
+    public interface ITypeConverterByConstructor<TSource, TDest>
+    {
+        ConstructorInfo Constructor { get; }
+        TDest Convert(TSource src);
+    }
+
+which took a set of "Compilable Property Getters" that matched the arguments for a specified ConstructorInfo 
+
+    public interface ICompilablePropertyGetter : IPropertyGetter
+    {
+        Expression GetPropertyGetterExpression(Expression param);
+    }
+
+    public interface IPropertyGetter
+    {
+        Type SrcType { get; }
+        PropertyInfo Property { get; }
+        Type TargetType { get; }
+        object GetValue(object src);
+    }
+
+and generated an internal conversion using LINQ Expressions.
+
+There were only two Compilable Property Getters - CompilableAssignableTypesPropertyGetter, which would work with property-to-constructor-arguments where no conversion was required (eg. the available property was a string array and the constructor argument was an IEnumerable&lt;string&gt;) and CompilableEnumConversionPropertyGetter, which mapped one enum to another using an INameMatcher implementation. (The enum mapping LINQ Expression is generated by first coming up with a set of mappings and then generating a LINQ Expression consisting of a set of nested "if" statements for each mapped enum value).
+
+    public class CompilableAssignableTypesPropertyGetter<TSourceObject, TPropertyAsRetrieved>
+        : AbstractGenericCompilablePropertyGetter<TSourceObject, TPropertyAsRetrieved>
+    {
+        private PropertyInfo _propertyInfo;
+        public CompilableAssignableTypesPropertyGetter(PropertyInfo propertyInfo)
+        {
+            if (propertyInfo == null)
+                throw new ArgumentNullException("propertyInfo");
+            if (!propertyInfo.DeclaringType.Equals(typeof(TSourceObject)))
+                throw new ArgumentException("Invalid propertyInfo - DeclaringType must match TSourceObject");
+
+            _propertyInfo = propertyInfo;
+        }
+
+        public override PropertyInfo Property
+        {
+            get { return _propertyInfo; }
+        }
+
+        public override Expression GetPropertyGetterExpression(Expression param)
+        {
+            if (param == null)
+                throw new ArgumentNullException("param");
+            if (!typeof(TSourceObject).IsAssignableFrom(param.Type))
+                throw new ArgumentException("param.Type must be assignable to typeparam TSourceObject");
+
+            Expression getter = Expression.Property(
+                param,
+                _propertyInfo
+            );
+
+            var targetType = typeof(TPropertyAsRetrieved);
+            if (!targetType.IsAssignableFrom(_propertyInfo.PropertyType))
+                getter = Expression.Convert(getter, targetType);
+
+            if (!targetType.IsValueType && _propertyInfo.PropertyType.IsValueType)
+                getter = Expression.TypeAs(getter, typeof(object));
+
+            return getter;
+        }
+    }
+
+    public abstract class AbstractGenericCompilablePropertyGetter<TSourceObject, TPropertyAsRetrieved>
+        : ICompilablePropertyGetter
+    {
+        private Lazy<Func<TSourceObject, TPropertyAsRetrieved>> _getter;
+        public AbstractGenericCompilablePropertyGetter()
+        {
+            _getter = new Lazy<Func<TSourceObject, TPropertyAsRetrieved>>(generateGetter, true);
+        }
+
+        public Type SrcType
+        {
+            get { return typeof(TSourceObject); }
+        }
+
+        public abstract PropertyInfo Property { get; }
+
+        public Type TargetType
+        {
+            get { return typeof(TPropertyAsRetrieved); }
+        }
+
+        object IPropertyGetter.GetValue(object src)
+        {
+            if (src == null)
+                throw new ArgumentNullException("src");
+            if (!src.GetType().Equals(typeof(TSourceObject)))
+                throw new ArgumentException("The type of src must match typeparam TSourceObject");
+            return GetValue((TSourceObject)src);
+        }
+
+        public TPropertyAsRetrieved GetValue(TSourceObject src)
+        {
+            if (src == null)
+                throw new ArgumentNullException("src");
+            return _getter.Value(src);
+        }
+
+        public abstract Expression GetPropertyGetterExpression(Expression param);
+
+        private Func<TSourceObject, TPropertyAsRetrieved> generateGetter()
+        {
+            var param = Expression.Parameter(typeof(TSourceObject), "src");
+            return Expression.Lambda<Func<TSourceObject, TPropertyAsRetrieved>>(
+                GetPropertyGetterExpression(param),
+                param
+            ).Compile();
+        }
+    }
+
+    public interface ICompilablePropertyGetter : IPropertyGetter
+    {
+        /// <summary>
+        /// This Linq Expression will retrieves the value from SrcType.Property as TargetType,
+        /// the specified "param" Expression must have a type that is assignable to SrcType.
+        /// </summary>
+        Expression GetPropertyGetterExpression(Expression param);
+    }
+
+    public interface IPropertyGetter
+    {
+        /// <summary>
+        /// This is the type whose property is being accessed
+        /// </summary>
+        Type SrcType { get; }
+
+        /// <summary>
+        /// This is the property on the source type whose value is to be retrieved
+        /// </summary>
+        PropertyInfo Property { get; }
+
+        /// <summary>
+        /// This is the type that the property value should be converted to and returned as
+        /// </summary>
+        Type TargetType { get; }
+
+        /// <summary>
+        /// Try to retrieve the value of the specified Property from the specified object
+        /// (which must be of type SrcType)
+        /// </summary>
+        object GetValue(object src);
+    }
+
+and to generate instances of these classes we had some factories (CompilableTypeConverterByConstructorFactory, CompilableAssignableTypesPropertyGetterFactory and CompilableEnumConversionPropertyGetterFactory). These would do the work of examining the properties and constructors of specified source and destination type pairs and determining the best constructor that could be satisfied (if any) with the Compilable Property Getters. The code in these factories is none too exciting.
+
+### The problem
+
+If the mappings we want to generate are for very simple structures (in this case, "simple" means that all property-to-constructor-argument mappings are either directly assignable-to or are enum mappings) then everything's rosy - eg.
+
+    public class SourceEmployee
+    {
+        public string Name { get; set; }
+        public SourceRole Role { get; set; }
+    }
+
+    public enum SourceRole
+    {
+        big_boss_man,
+        worker_bee
+    }
+
+to
+
+    public class DestEmployee
+    {
+        public DestEmployee(string name, DestRole role)
+        {
+            Name = name;
+            Role = role;
+        }
+        public string Name { get; private set; }
+        public DestRole Role { get; private set; }
+    }
+
+    public enum DestRole
+    {
+        BigBossMan,
+        WorkerBee
+    }
+
+(The enum mapping in this example would be handled by specifying a CaseInsensitiveSkipUnderscoreNameMatcher for the CompilableEnumConversionPropertyGetterFactory).
+
+But the problem I opened with does *not* come under this "simple structure" umbrella as in that case SourceRole and DestRole are types for which we have no Compilable Property Getter! Oh nos!
+
+### The CompilableTypeConverterPropertyGetter
+
+For inspiration, I go back to AutoMapper since it too can not magically handle nested types - 
+
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            AutoMapper.Mapper.CreateMap<SourceTypeSub1, DestTypeSub1>();
+            AutoMapper.Mapper.CreateMap<SourceType, DestType>();
+            var dest = AutoMapper.Mapper.Map<SourceType, DestType>(
+                new SourceType()
+                {
+                    Value = new SourceTypeSub1() { Name = "N1" }
+                }
+            );
+        }
+    }
+
+    public class SourceType
+    {
+        public SourceTypeSub1 Value { get; set; }
+    }
+
+    public class SourceTypeSub1
+    {
+        public string Name { get; set; }
+    }
+
+    public class DestType
+    {
+        public DestTypeSub1 Value { get; set; }
+    }
+
+    public class DestTypeSub1
+    {
+        public string Name { get; set; }
+    }
+
+without the CreateMap call for SourceTypeSub1 to DestTypeSub1, the Map call from SourceType to DestType would fail with an AutoMapperMappingException.
+
+Following the same tack, a way to create a new Compilable Property Getter from a CompilableTypeConverterByConstructor (which could then be used alongside the existing AssignableType and Enum Compilable Property Getters) should solve the problem. A plan!
+
+Step one is going to be to expose a way to request the LINQ Expression that the CompilableTypeConverterByConstructor uses in its conversion. To address this we'll update CompilableTypeConverterByConstructor to implement a new interface ICompilableTypeConverterByConstructor which in turn implements ITypeConverterByConstructor (which is all that CompilableTypeConverterByConstructor implemented previously) -
+
+    public interface ICompilableTypeConverterByConstructor<TSource, TDest>
+        : ICompilableTypeConverter<TSource, TDest>,
+          ITypeConverterByConstructor<TSource, TDest> { }
+
+    public interface ICompilableTypeConverter<TSource, TDest>
+        : ITypeConverter<TSource, TDest>
+    {
+        /// <summary>
+        /// This Linq Expression will generate a new TDest instance - the specified "param"
+        /// Expression must have a type that is assignable to TSource
+        /// </summary>
+        Expression GetTypeConverterExpression(Expression param);
+    }
+
+    public interface ITypeConverterByConstructor<TSource, TDest> : ITypeConverter<TSource, TDest>
+    {
+        ConstructorInfo Constructor { get; }
+    }
+
+    public interface ITypeConverter<TSource, TDest>
+    {
+        TDest Convert(TSource src);
+    }
+
+The ITypeConverterByConstructor has now become a specialised form of ITypeConverter (with corresponding Compilable variants) which inherently makes sense but will also be useful where we're going (but let's not get ahead of ourselves, that's coming up later in the post).
+
+More importantly is the ICompilableTypeConverter GetTypeConverterExpression method which allows the creation of a Compilable Property Getter that is based upon a conversion that we want to feed back into the mapper -
+
+    public class CompilableTypeConverterPropertyGetter<TSourceObject, TPropertyOnSource, TPropertyAsRetrieved>
+        : AbstractGenericCompilablePropertyGetter<TSourceObject, TPropertyAsRetrieved>
+    {
+        private PropertyInfo _propertyInfo;
+        private ICompilableTypeConverter<TPropertyOnSource, TPropertyAsRetrieved> _compilableTypeConverter;
+        public CompilableTypeConverterPropertyGetter(
+            PropertyInfo propertyInfo,
+            ICompilableTypeConverter<TPropertyOnSource, TPropertyAsRetrieved> compilableTypeConverter)
+        {
+            if (propertyInfo == null)
+                throw new ArgumentNullException("propertyInfo");
+            if (!propertyInfo.DeclaringType.Equals(typeof(TSourceObject)))
+                throw new ArgumentException("Invalid propertyInfo - DeclaringType must match TSourceObject");
+            if (!propertyInfo.PropertyType.Equals(typeof(TPropertyOnSource)))
+                throw new ArgumentException("Invalid propertyInfo - PropertyType must match TPropertyOnSource");
+            if (compilableTypeConverter == null)
+                throw new ArgumentNullException("compilableTypeConverter");
+
+            _propertyInfo = propertyInfo;
+            _compilableTypeConverter = compilableTypeConverter;
+        }
+        
+        public override PropertyInfo Property
+        {
+            get { return _propertyInfo; }
+        }
+
+        /// <summary>
+        /// This Linq Expression will retrieves the value from SrcType.Property as TargetType,
+        /// the specified "param" Expression must have a type that is assignable to SrcType.
+        /// </summary>
+        public override Expression GetPropertyGetterExpression(Expression param)
+        {
+            if (param == null)
+                throw new ArgumentNullException("param");
+            if (typeof(TSourceObject) != param.Type)
+                throw new ArgumentException("param.NodeType must match typeparam TSourceObject");
+
+            // Get property value (from object of type TSourceObject) without conversion (this
+            // will be as type TPropertyOnSource)
+            // - If value is null, return default TPropertyAsRetrieved (not applicable if a
+            //   value type)
+            // - Otherwise, pass through type converter (to translate from TPropertyOnSource
+            //   to TPropertyAsRetrieved)
+            var propertyValue = Expression.Property(param, _propertyInfo);
+            var conversionExpression = _compilableTypeConverter.GetTypeConverterExpression(propertyValue);
+            if (typeof(TPropertyOnSource).IsValueType)
+                return conversionExpression;
+            return Expression.Condition(
+                Expression.Equal(
+                    propertyValue,
+                    Expression.Constant(null)
+                ),
+                Expression.Constant(default(TPropertyAsRetrieved), typeof(TPropertyAsRetrieved)),
+                conversionExpression
+            );
+        }
+    }
+
+A corresponding CompilableTypeConverterPropertyGetterFactory is straight-forward to write. Like the other Property Getter Factories, it doesn't do a huge amount - it will determine whether a named property can be retreived from a specified type and converted *into* a specified type based upon name match rules and what kind of Property Getter that Factory can generate)
+
+    public class CompilableTypeConverterPropertyGetterFactory<TPropertyOnSource, TPropertyAsRetrieved>
+        : ICompilablePropertyGetterFactory
+    {
+        private INameMatcher _nameMatcher;
+        private ICompilableTypeConverter<TPropertyOnSource, TPropertyAsRetrieved> _typeConverter;
+        public CompilableTypeConverterPropertyGetterFactory(
+            INameMatcher nameMatcher,
+            ICompilableTypeConverter<TPropertyOnSource, TPropertyAsRetrieved> typeConverter)
+        {
+            if (nameMatcher == null)
+                throw new ArgumentNullException("nameMatcher");
+            if (typeConverter == null)
+                throw new ArgumentNullException("typeConverter");
+
+            _nameMatcher = nameMatcher;
+            _typeConverter = typeConverter;
+        }
+
+        /// <summary>
+        /// This will return null if unable to return an ICompilablePropertyGetter for the
+        /// named property that will return a value as the requested type
+        /// </summary>
+        public ICompilablePropertyGetter Get(
+            Type srcType,
+            string propertyName,
+            Type destPropertyType)
+        {
+            if (srcType == null)
+                throw new ArgumentNullException("srcType");
+            propertyName = (propertyName ?? "").Trim();
+            if (propertyName == "")
+                throw new ArgumentException("Null/empty propertyName specified");
+            if (destPropertyType == null)
+                throw new ArgumentNullException("destPropertyType");
+
+            // If destination type does not match type converter's destination type then can
+            // not handle the request; return null
+            if (destPropertyType != typeof(TPropertyAsRetrieved))
+                return null;
+
+            // Try to get a property we CAN retrieve and convert as requested..
+            var property = srcType.GetProperties().FirstOrDefault(p =>
+                p.GetIndexParameters().Length == 0
+                && _nameMatcher.IsMatch(propertyName, p.Name)
+                && p.PropertyType == typeof(TPropertyOnSource)
+            );
+            if (property == null)
+                return null;
+
+            // .. if successful, use to instantiate a CompilableTypeConverterPropertyGetter
+            return (ICompilablePropertyGetter)Activator.CreateInstance(
+                typeof(CompilableTypeConverterPropertyGetter<,,>).MakeGenericType(
+                    srcType,
+                    property.PropertyType,
+                    destPropertyType
+                ),
+                property,
+                _typeConverter
+            );
+        }
+
+        IPropertyGetter IPropertyGetterFactory.Get(
+            Type srcType,
+            string propertyName,
+            Type destPropertyType)
+        {
+            return Get(srcType, propertyName, destPropertyType);
+        }
+    }
+
+Note: I skipped over actually altering the CompilableTypeConverterByConstructor class to implement the GetTypeConverterExpression but it wasn't anything too complex, the generateCompiledConverter method was changed from
+
+    private Func<TSource, TDest> generateCompiledConverter()
+    {
+        var srcParameter = Expression.Parameter(typeof(TSource), "src");
+        var constructorParameterExpressions = new List<Expression>();
+        foreach (var constructorParameter in _constructor.GetParameters())
+        {
+            var index = constructorParameterExpressions.Count;
+            constructorParameterExpressions.Add(
+                _propertyGetters[index].GetPropertyGetterExpression(srcParameter)
+            );
+        }
+
+        return Expression.Lambda<Func<TSource, TDest>>(
+            Expression.New(
+                _constructor,
+                constructorParameterExpressions.ToArray()
+            ),
+            srcParameter
+        ).Compile();
+    }
+
+and expanded into
+
+    private Func<TSource, TDest> generateCompiledConverter()
+    {
+        var srcParameter = Expression.Parameter(typeof(TSource), "src");
+        return Expression.Lambda<Func<TSource, TDest>>(
+            GetTypeConverterExpression(srcParameter),
+            srcParameter
+        ).Compile();
+    }
+
+    /// <summary>
+    /// This Linq Expression will generate a new TDest instance - the specified "param"
+    /// Expression must have a type that is assignable to TSource
+    /// </summary>
+    public Expression GetTypeConverterExpression(Expression param)
+    {
+        if (param == null)
+            throw new ArgumentNullException("param");
+        if (!typeof(TSource).IsAssignableFrom(param.Type))
+            throw new ArgumentException("param.Type must be assignable to typeparam TSource");
+
+        // Instantiate expressions for each constructor parameter by using each of the
+        // property getters against the source value
+        var constructorParameterExpressions = new List<Expression>();
+        foreach (var constructorParameter in _constructor.GetParameters())
+        {
+            var index = constructorParameterExpressions.Count;
+            constructorParameterExpressions.Add(
+                _propertyGetters[index].GetPropertyGetterExpression(param)
+            );
+        }
+
+        // Return an expression that to instantiate a new TDest by using property getters
+        // as constructor arguments
+        return Expression.Condition(
+            Expression.Equal(
+                param,
+                Expression.Constant(null)
+            ),
+            Expression.Constant(default(TDest), typeof(TDest)),
+            Expression.New(
+                _constructor,
+                constructorParameterExpressions.ToArray()
+            )
+        );
+    }
+
+The only notable difference is that GetTypeConverterExpression should return an Expression that can deal with null values - we need this so that null properties can be retrieved from source types and passed to destination type constructors. Previously there was a null check against the "src" parameter passed to the Convert method, but this can be relaxed now that nulls have to be supported for this class to work as part of a Property Getter.
+
+### Almost there!
+
+With the introduction of a CombinedCompilablePropertyGetterFactory (which will run through a set a Compilable Property Getter Factories for each request until one of the returns a non-null value to the Get request), we end up with this structure:
+
+    var nameMatcher = new CaseInsensitiveSkipUnderscoreNameMatcher();
+    var converterFactory = new CompilableTypeConverterByConstructorFactory(
+        new ArgsLengthTypeConverterPrioritiserFactory(),
+        new CombinedCompilablePropertyGetterFactory(
+            new ICompilablePropertyGetterFactory[]
+            {
+                // Insert Compilable Property Getter Factories here..
+            }
+        )
+    );
+
+which finally allows a setup such as:
+
+    var nameMatcher = new CaseInsensitiveSkipUnderscoreNameMatcher();
+
+    var roleConverterFactory = new CompilableTypeConverterByConstructorFactory(
+        new ArgsLengthTypeConverterPrioritiserFactory(),
+        new CombinedCompilablePropertyGetterFactory(
+            new ICompilablePropertyGetterFactory[]
+            {
+                new CompilableAssignableTypesPropertyGetterFactory(nameMatcher),
+                new CompilableEnumConversionPropertyGetterFactory(nameMatcher)
+            }
+        )
+    );
+
+    var employeeConverterFactory = new CompilableTypeConverterByConstructorFactory(
+        new ArgsLengthTypeConverterPrioritiserFactory(),
+        new CombinedCompilablePropertyGetterFactory(
+            new ICompilablePropertyGetterFactory[]
+            {
+                new CompilableAssignableTypesPropertyGetterFactory(nameMatcher),
+                new CompilableEnumConversionPropertyGetterFactory(nameMatcher),
+                new CompilableTypeConverterPropertyGetterFactory<SourceRole, DestRole>(
+                    nameMatcher,
+                    roleConverterFactory.Get<SourceRole, DestRole>()
+                )
+            }
+        )
+    );
+
+    var employeeConverter = employeeConverterFactory.Get<SourceEmployee, DestEmployee>();
+            
+    var dest = employeeConverter.Convert(
+        new SourceEmployee()
+        {
+            Name = "Richard",
+            Role = new SourceRole() { Description = "Penguin Cleaner" }
+        }
+    );
+
+Hoorah!
+
+Now, there's a slight refinement that I want to look at [next time](Post19) but I think this post has gone on more than long enough.
+
+### Footnote
+
+For the super-observant, I mentioned that the use of ITypeConverter (as opposed to necessarily requiring ITypeConverterByConstructor) would be touched on again in this post. Since I've run out of steam that will be covered [next time](Post19) too.

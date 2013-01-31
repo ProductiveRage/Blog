@@ -1,0 +1,37 @@
+## Mercurial and Dropbox
+
+We've moved over to using Mercurial at work (thank god; life in a post-CVS world it good!) so I've been playing around with that. I've used Git before so it's not been too painless - in fact I think the Windows integration and TortoiseHg tool are pretty good (which is one of the claimed benefits of using Mercurial over Git in a Windows environment, apparently).
+
+I've had a work-related idea that I've been trying to hash out that I've been doing mostly at home but playing round a bit with at work too. The Mercurial web server we've set up is for internal use only so I thought I'd try stuffing a repository into my Dropbox folder - since I already use that for some casual file sharing between work and home. The plan was to work on a local clone at home and at work and push / pull to the Dropbox repo as required.
+
+I'm far from the first person to think of this and initial research looked promising:
+
+[Mercurial (hg) with Dropbox](http://www.h4ck3r.net/2010/05/11/mercurial-hg-with-dropbox/)
+
+[Mercurial and Dropbox](http://iamthewalr.us/blog/2009/02/mercurial-and-dropbox/)
+
+[Personal Version Control with Mercurial + Dropbox](http://cottagelabs.com/personal-version-control-with-mercurial-dropbox/)
+
+### However..
+
+I've been happily using this for a couple of weeks, it's only me doing the work - from home and from the office; doing my commits locally and pushing up at the end of the day or whenever. Then pulling and updating from my other PC. But this morning the pull request failed at work; something about integrity errors. I did more some reading around and ran "hg verify" against the repository in Dropbox and got back a dozen errors along the lines of
+
+    SomeFile.cs@?: rev 5 points to unexpected changeset 26
+
+.. which didn't really mean a lot to me, to be honest.
+
+I tried to find out how easy it would or wouldn't be to recover but didn't make major inroads and in the end decided I'd wait until I got home and checked my local clone, the one that I was pushing _from_ to the Dropbox clone. _That_ should be fine, right?
+
+Happily (and logically, from what I understand), the local clone was absolutely fine and "hg verify" reported no issues. Happy days!
+
+As I look further into it, there is more information recommending _against_ this Mercurial (or Git) with Dropbox combination..
+
+[Using Mercurial with Dropbox](http://stackoverflow.com/questions/1964347/mercurial-and-i-guess-git-with-dropbox-any-drawbacks)
+
+[Mercurial (and, I guess GIT) with Dropbox: any drawbacks?](http://blog.pdark.de/2010/04/17/using-mercurial-with-dropbox/)
+
+### And now..
+
+If this was purely a personal project that I was happy to share with the world then I probably would have gone straight for BitBucket - I know one of the guys from work uses it for his personal bits & bobs - but knowing that GitHub doesn't support private accounts for free I presumed BitBucket was the same.. but they aren't! They'll let you have one free private repository with your account so once I'd checked the integrity of my local source I pushed it up to a new private BitBucket repository and that'll look after it from now on!
+
+In the long run - for this particular project - this is only going to be a short-term solution; either we'll pick up development at work or I'll decide that it wasn't as good an idea as I'd first thought. And I suppose I could have chucked it on a file share on one of the work servers since I can get VPN access.. but really I wanted to see if this Mercurial / Dropbox combo would be any good. And now I _do_ know! :)

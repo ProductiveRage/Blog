@@ -1,0 +1,13 @@
+## Visual Studio Express - The Cheats!
+
+Does it make me cheap that I use Visual Studio Express at home instead of paying hundreds of pounds for some full version? I hope not! :) I mean, isn't that why Microsoft released them, so that us hobby coders ("work" code by day, "hobby" code by evening!) can enjoy their tools??
+
+There have been a couple of restrictions which I'd taken for granted as part of the "Express" package that had been bugging me.. until recently.
+
+The first is very straight-forward: Visual Studio 2010's menu options weren't consistent with 2008 and me hitting [ALT]-[B]-[U] wasn't building my project, I had to go [ALT]-[D]-[B], via the "Debug" menu. Ok, it's still F6 to go direct.. But that's only because Express users would apparently prefer "Basic Settings" - this is an easy one; go through Tools / Settings / Expert Settings and now everything feels much more familiar. Hurrah!
+
+Visual Studio 2008 - if I hit F6 to "build" the solution, it builds to the Release folder, using Release settings. If I hit F5 to "Start debugging", it builds the project (before executing it) to the Debug folder, using Debug settings. So maybe that's just how Express work..
+
+Except it's not! Click Tools / Customize, choose the Commands tab and drag the "Solution Configuration" command from the Build menu onto one of the toolbars in Visual Studio. Now you can choose either Debug or Build before you build the solution (or any other configurations you've created in Configuration Manager).
+
+Having said that, there are still a few things that are lacking that I bump into from time to time; there's no Threads window which you can use when pausing execution, there's no Quick Watch option which can be annoying when you're poking at deep-hierarchy objects in the debugger and - weirdly - the "Open Folder in Windows Explorer" is absent from the context menu in the Solution Explorer. But all in all I can't help but be impressed by Express products - and even more so with these tweaks applied!

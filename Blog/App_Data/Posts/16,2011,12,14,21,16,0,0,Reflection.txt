@@ -1,0 +1,139 @@
+## Dynamically applying interfaces to objects - Part 2
+
+Today, I'm going to address some of the "future developments" I left at the end of the last post. Specifically:
+
+1. Wrapping up the "Interface Applier" into a generic method that specifies the target interface
+1. Handling interface hierarchies
+1. Marking the wrapper as being ComVisible
+
+### Wrapping up in a method
+
+Part one is easy. Take the code from the last article and wrap in 
+
+    public static T WrapObject<T>(object src)
+    {
+        if (src == null)
+            throw new ArgumentNullException("src");
+        if (!typeof(T).IsInterface)
+            throw new ArgumentException("Typeparam T must be an interface type");
+
+        // Insert existing code that generates the new class with its constructor, properties
+        // and methods here..
+
+        return (T)Activator.CreateInstance(
+            typeBuilder.CreateType(),
+            src
+        );
+    }
+
+Ta-da! Note that we ensure that the typeparam T really *is* an interface - we made assumptions about this in the last article, so we need to assert this fact here. (It means that we only ever have to deal with properties and methods, and that they will always be public).
+
+### Handling interface hierarchies
+
+This part is not much more difficult. We'll introduce something to recursively trawl through any interfaces that the target interface implements and build a list of them all:
+
+    public class InterfaceHierarchyCombiner
+    {
+        private Type _targetInterface;
+        private List<Type> _interfaces;
+        public InterfaceHierarchyCombiner(Type targetInterface)
+        {
+            if (targetInterface == null)
+                throw new ArgumentNullException("targetInterface");
+            if (!targetInterface.IsInterface)
+                throw new ArgumentException("targetInterface must be an interface type", "targetInterface");
+
+            _interfaces = new List<Type>();
+            buildInterfaceInheritanceList(targetInterface, _interfaces);
+            _targetInterface = targetInterface;
+        }
+
+        private static void buildInterfaceInheritanceList(Type targetInterface, List<Type> types)
+        {
+            if (targetInterface == null)
+                throw new ArgumentNullException("targetInterface");
+            if (!targetInterface.IsInterface)
+                throw new ArgumentException("targetInterface must be an interface type", "targetInterface");
+            if (types == null)
+                throw new ArgumentNullException("types");
+
+            if (!types.Contains(targetInterface))
+                types.Add(targetInterface);
+
+            foreach (var inheritedInterface in targetInterface.GetInterfaces())
+            {
+                if (!types.Contains(inheritedInterface))
+                {
+                    types.Add(inheritedInterface);
+                    buildInterfaceInheritanceList(inheritedInterface, types);
+                }
+            }
+        }
+
+        public Type TargetInterface
+        {
+            get { return _targetInterface; }
+        }
+
+        public IEnumerable<Type> Interfaces
+        {
+            get { return _interfaces.AsReadOnly(); }
+        }
+    }
+
+Then, in this new WrapObject method, we call instantiate a new InterfaceHierarchyCombiner for the typeparam T and use retrieve *all* the properties and methods from the Interfaces list, rather than just those on T.
+
+eg. Instead of
+
+    foreach (var property in typeof(ITest).GetProperties())
+    {
+        // Deal with the properties..
+
+we consider
+
+    var interfaces = (new InterfaceHierarchyCombiner(typeof(T))).Interfaces;
+    foreach (var property in interfaces.SelectMany(i => i.GetProperties()))
+    {
+        // Deal with the properties..
+
+and likewise for the methods.
+
+It's worth noting that there may be multiple methods within the interface hierarchy with the same name and signature. It may be worth keeping track of which properties / methods have had corresponding IL generated but - other than generating more instructions in the loop than strictly necessary - it doesn't do any harm generating duplicate properties or methods (so I haven't worried about it for now).
+
+### Com Visibility
+
+What I wanted to do for the wrappers I was implementing was to create classes with the **[ComVisible(true)]** and **[ClassInterface(ClassInterface.None)]** attributes. This is achieved by specifying these attributes on the typeBuilder (as seen in the code in the last article):
+
+    typeBuilder.SetCustomAttribute(
+        new CustomAttributeBuilder(
+            typeof(ComVisibleAttribute).GetConstructor(new[] { typeof(bool) }),
+            new object[] { true }
+        )
+    );
+    typeBuilder.SetCustomAttribute(
+        new CustomAttributeBuilder(
+            typeof(ClassInterfaceAttribute).GetConstructor(new[] { typeof(ClassInterfaceType) }),
+            new object[] { ClassInterfaceType.None }
+        )
+    );
+
+Again, easy! Once you know how :)
+
+### Example code / jumping to the end
+
+I've not included a complete sample here since it would take up a fairly hefty chunk of space but also because I created a GitHub repository with the final code. This can be found at [https://github.com/ProductiveRage/COMInteraction](https://github.com/ProductiveRage/COMInteraction)
+
+This includes the work here but also the work I want to address next time; a way to automagically wrap return values where required and a way to change the WrapObject method so that if the same interface is to be applied to multiple objects, only a single call is required (and an object be returned that can wrap any given reference in that interface). The example I put out for this return-value-wrapping was that we want to wrap an object in ITest and have the return value from its Get method *also* be wrapped if it did not already implement IEmployee:
+
+    public interface ITest
+    {
+        IEmployee Get(int id);
+    }
+
+    public interface IEmployee
+    {
+        int Id { get; }
+        string Name { get; }
+    }
+
+For more details of how exactly this will all work, I'll see you back here; same bat-time, same bat-channel! :)

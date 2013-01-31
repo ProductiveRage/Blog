@@ -1,0 +1,41 @@
+﻿## The WinDbg Blues
+
+To investigate some cpu-off-the-charts haning issue that refuses to reproduce itself in a local environment in a project I'm involved with I've had to use WinDbg to interrogate a process dump for clues. On the one hand, that all is information is available can seem amazing at times. Other times it's frustrating how primitive it feels compared to poking around with the Visual Studio debugger!
+
+One of the problems I have is that I only do this kind of investigation infrequently so I never quite internalise all the tricks that I need from one time to the next. The first that for some minidumps there seems to be a version mismatch problem with I try to ".loadby sos mscorwks", resulting in the following error:
+
+> CLRDLL: c:\WINDOWS\Microsoft.NET\Framework\v2.0.50727\mscordacwks.dll:2.0.50727.5448 f:0 doesn't match desired version 2.0.50727.3625 f:0
+
+The version of the clr on my computer doesn't match that loaded by the process running on the server. One way around this is to copy sos.dll and all msc*.dll files from the server's C:\Windows\Microsoft.Net\Framework64\v2.0.50727 (or equivalent, depending upon windows location and framework version) into a local folder and then load sos with the following: ".load C:\DllsFromServer\SOS.dll". I must admit, I think I came upon the set of files to load through some trial and error rather than comprehending the full depth of the issue. But it's worked each time I've encountered the issue so far! :)
+
+### Retrieving C# struct values
+
+Another problem I run into each time is the manner in which struct values needs to be probed. With other types you can just "!do {addr}" (DumpObject) it and nine times out of ten see the properties and values you want, with the occassional "!da {addr}" (DumpArray) thrown in for good measure. But if you try to do this for a struct value you get the cryptic response:
+
+> &lt;Note: this object has an invalid CLASS field&gt; Invalid object
+
+From what I understand, the type information is not contained at the address that is indicated (my understanding of all this is a bit limited, so if that's less than accurate then please forgive me!). To access its content we need to point the debugger at the type information as well. For a DateTime, we can get this with the following:
+
+    !Name2EE * System.DateTime
+
+This searches all of the loaded assemblies for the specified type and, if located, will report a MethodTable address. This can used with the DumpVC command to look into the DateTime data:
+
+    !DumpVC {MethodTableAddr} {addr}
+
+For DateTimes, the value is represented by a UInt64 which can be translated by C#:
+
+    var d = new DateTime(value);
+
+Alternatively, there is a WinDbg extension that can help with this: sosex (which can be downloaded from [http://www.stevestechspot.com/SOSEXV40NowAvailable.aspx](http://www.stevestechspot.com/SOSEXV40NowAvailable.aspx)). Once loaded (by putting the dll into the "winext" folder under the WinDbg installation location and using ".load sosex") you can:
+
+    !mdt System.DateTime {addr}
+
+Which is much easier!
+
+There is a similar problem with .Net generic nullable types. If you want to look into the state of a nullable int aka "int?" aka "Nullable&lt;int&gt;" you need to look into the type "System.Nullable`1" and then following the above !Name2EE / !DumpVC approach to looking as the "hasValue" and "value" fields.
+
+This only works following some guesswork at that precise "System.Nullable`1" name. It turns out that sosex can also help with this; it can look up type information given a partial name:
+
+    !mx System.Nullable*
+
+This returns clickable links, amongst which are "get_Value" which exposes a MethodTable for retrieving the content with !DumpVC.

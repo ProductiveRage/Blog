@@ -1,0 +1,22 @@
+## GitHub and I might be having a falling-out
+
+![GitHub Status Indicator](/Content/Images/Posts/GitHubStatus.png "GitHub Status Indicator") Last week I encountered some problems with pushing and pulling against my GitHub repositories. I've been using them (only on and off, granted) for a good few months now, maybe a year, and I've had no real issues with it. In fact for a free service it's been great - I like the UI (and the logos! :) and everything has been straight forward and let me play with Git for the first time.
+
+But then it stopped playing with me.
+
+Clicking on the "Help" link when in GitHub goes to [help.github.com](http://help.github.com) which has a "Site Status" indicator, which is cool. It was showing a happy green "All systems operational" display.
+
+I thought maybe it was TortoiseGit since it had been bugging me about updates for a while. So I uninstalled it and re-installed it and went through some questions that I remembered not really understanding from last time.. :( One tutorial I'd read those months ago had recommended using OpenSSH while another recommended PuTTY. I couldn't remember which I'd used in the past. I'd stored an SSH password somewhere but couldn't remember what it was for. So I tried sticking with the defaults (always a reasonable first-approach plan! :) and still wasn't getting it to communicate with GitHub properly..
+
+Turns out that _now_ the status page was showing that the service was indeed encountering difficulties. And I see now they have a Twitter account to keep you abreast of such issues. That's a nice touch.
+
+So I waited it out and then tried to get TortoiseGit working again. I can't remember exactly what hoops I had to jump through in the end. There was a load of faff about re-generating SSH public keys and registering them in the Admin section of my GitHub account. And some more and back and forth where authentication attempts would keep getting rejected because some PuTTy-related component insisted on being run manually (although this was somehow ironed out too such that it would fire up automatically at the first attempt).
+
+And then I _finally_ got it going again and couldn't successfully push a new tag up to GitHub. Then I remembered you have to choose "Push tags" in Git Sync. It won't do it otherwise.
+
+I think, on the whole, I've just been spoilt by all my recent dealing with Mercurial. I work solely with Windows and I'd sort of heard vague mutterings about Mercurial being an easier fit with Windows than Git and I think it's taken until now to get some first-hand experience.
+
+### At the end of the day
+I'm not sure how I feel about this whole episode. Don't get me wrong, I think GitHub's handling was basically first-rate - they openly admit when issues are detected and then keep you up-to-date with progress on fixes. That's awesome. It's a bit annoying that they hadn't noticed the problem when I first encountered it which is why, I presume, they were reporting "All systems operational" when all systems were not entirely operational. But I'm really not annoyed with them, I'm annoyed with how much harder work TortoiseGit with Windows is compared to TortoiseHg. Maybe my DVCS GUI reliance is my problem! For a _lot_ of things, I love the command line - but I feel much more comfortable with a GUI for source control; so I can easily see what's changed, added, deleted, so I can do a last-minute diff on every file before I commit - it just seems easier!
+
+I think I'll hold-fire on any hasty decisions for now. In large part because I've been mostly happy with the experience so far and in part because seeing the GitHub logos every time I check in online entertains me! :D

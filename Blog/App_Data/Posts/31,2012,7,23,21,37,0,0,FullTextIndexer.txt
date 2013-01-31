@@ -1,0 +1,404 @@
+﻿## The Full Text Indexer - Adding and Subtracting
+
+The [Full Text Indexer](Post30) that I talked about last time took a definition for an Index Generator for a specific TSource type and produced an IndexData instance, using that generator, for a TSource set.
+
+In the example shown there, it created an IndexGenerator for IArticle and then generated an Index for an IArticle list. The IIndexData&lt;int&gt; (TKey is an int in this case as the key on IArticle is its Id field, which is an int). This IIndexData&lt;int&gt; is an immututable data structure and so it may not be immediately obvious how to update it when the source data has changed.
+
+Last time I mentioned that IIndexData&lt;TKey&gt; has this method:
+
+    public interface IIndexData<TKey>
+    {
+        /// <summary>
+        /// This will throw an exception for null or blank input. It will never return null.
+        /// If there are no matches then an empty list will be returned.
+        /// </summary>
+        NonNullImmutableList<WeightedEntry<TKey>> GetMatches(string source);
+    }
+
+but the full interface is:
+
+    public interface IIndexData<TKey>
+    {
+        /// <summary>
+        /// This will throw an exception for null or blank input. It will never return null.
+        /// If there are no matches then an empty list will be returned.
+        /// </summary>
+        NonNullImmutableList<WeightedEntry<TKey>> GetMatches(string source);
+
+        /// <summary>
+        /// This will return a new instance that combines the source instance's data with the
+        /// data other IndexData instances using the specified weight combiner. In a case where
+        /// there are different TokenComparer implementations on this instance and on any of the
+        /// indexesToAdd, the comparer from the current instance will be used. It is recommended
+        /// that a consistent TokenComparer be used at all times. An exception will be thrown
+        /// for null dataToAdd or weightCombiner references.
+        /// </summary>
+        IIndexData<TKey> Combine(
+            NonNullImmutableList<IIndexData<TKey>> indexesToAdd,
+            IndexGenerators.IndexGenerator.WeightedEntryCombiner weightCombiner
+        );
+
+        /// <summary>
+        /// This will return a new instance without any WeightedEntry values whose Keys match
+        /// the removeIf predicate. If tokens are left without any WeightedEntry values then
+        /// the token will be excluded from the new data. This will never return null. It
+        /// will throw an exception for a null removeIf.
+        /// </summary>
+        IIndexData<TKey> Remove(Predicate<TKey> removeIf);
+
+        /// <summary>
+        /// This will never return null, the returned dictionary will have this instance's
+        /// KeyNormaliser as its comparer
+        /// </summary>
+        IDictionary<string, NonNullImmutableList<WeightedEntry<TKey>>> ToDictionary();
+
+        /// <summary>
+        /// This will never return null
+        /// </summary>
+        NonNullOrEmptyStringList GetAllTokens();
+
+        /// <summary>
+        /// This will never return null
+        /// </summary>
+        IEqualityComparer<string> TokenComparer { get; }
+
+        /// <summary>
+        /// This will never return null
+        /// </summary>
+        IEqualityComparer<TKey> KeyComparer { get; }
+    }
+
+The TokenComparer and KeyComparer are the instances passed into the IndexGenerator's constructor (a DefaultStringNormaliser and an IntEqualityComparer in last time's example). The GetAllTokens method returns a set of tokens that have matches in the IndexData (where multiple tokens are present in the data that are considered equivalent, only one will be in the set returned by GetAllTokens - the example used the DefaultStringNormaliser which ignores case, so if data for the tokens "Token" and "TOKEN" is present, and encountered in that order, then only "Token" would be in the GetAllTokens set, "TOKEN" wouldn't have been added as a distint value as it is equivalent to "Token").
+
+The interesting methods in this context are Combine and Remove.
+
+### Remove
+
+Remove is the simpler of the two so I'll address that first: A predicate is passed to it which filters which key values should be allowed through, data which passes this filtering will be used to form a new IIndexData instance which will be returned from the method. The original IndexData instance remains unaltered while a filtered version is provided which meets the particular criteria.
+
+### Combine
+
+The Combine method will take one or more additional IIndexData instances (for the same TKey type) and bring all of the content from these and the original index into a new instance describing aggregated data. Where data for the same keys appear in the indexes, the match weights will be combined using a specified "WeightedEntryCombiner" (which just takes a set of floats and returns a single value representing them all; the most common case is to sum the values but they could be averaged or the greatest value taken - whatever's most appropriate!).
+
+### Pulling an example together
+
+To show these methods in action I've extended the IArticle IndexGenerator concept that I showed in the [previous post](Post30) by wrapping it in another class that maintains an index based upon changing data by keeping a "source data summary" of what keys were used to generate the current data and what the last modified dates of the source data was. I'm aiming to come up with an "IndexBuilder" that will expose the following:
+
+    /// <summary>
+    /// This will never return null
+    /// </summary>
+    public IIndexData<TKey> Index { get; }
+
+    /// <summary>
+    /// This will never return null, it will throw an exception for null input
+    /// </summary>
+    public IIndexData<TKey> UpdateIndex(NonNullImmutableList<TSource> values);
+
+All the same types will be required in the IndexBuilder constructor that the IndexGenerator required last time (the Content Retrievers, Key Comparer, Token Comparer, Weighted Entry Combiner and Logger) along with one additional dependency; a "Source Item Status Retriever". This is just a delegate that takes an instance of the generic type parameter TSource and returns a SourceDataSummary instance that reports its Key and a LastModifiedDate (so hardly rocket science!). This will enable the IndexBuilder to maintain a summary of the input data that was used to build the current index and so determine what work (if any) is required when UpdateIndex is called.
+
+If the example code last time didn't look too scary, then neither should this:
+
+    // Instantiate an IndexBuilder that will index IArticles (which have ints as their Keys).
+    // - Content Retrievers describe how to extract data from each IArticle, there is a delegate
+    //   to retrieve Key and LastModifiedDate from IArticle (the "Source Item Status Retriever"),
+    //   there's a Token Breaker which breaks up the content, there's a String Normaliser which
+    //   compares the resulting Tokens to group them together, there's a "Weighted Entry
+    //   Combiner" which creates an aggregate weight for Tokens that are grouped,
+    //   there's an IntEqualityComparer that acts as a Key Comparer and there's
+    //   a Logger. See; nothing to it! :D
+
+    var indexBuilder = new IndexBuilder<IArticle, int>(
+        new NonNullImmutableList<ContentRetriever<IArticle, int>>(new []
+        {
+            // Additional weight is given to words matched in the Title
+            new ContentRetriever<IArticle, int>(
+                article => new PreBrokenContent<int>(article.Id, article.Title),
+                token => 5f
+            ),
+            new ContentRetriever<IArticle, int>(
+                article => new PreBrokenContent<int>(article.Id, article.Content),
+                token => 1f
+            )
+        }),
+        article => new IndexBuilder<IArticle, int>.SourceDataSummary(
+            article.Id,
+            article.LastModified
+        ),
+        new IntEqualityComparer(),
+        new WhiteSpaceTokenBreaker(),
+        new DefaultStringNormaliser(),
+        weightedValues => weightedValues.Sum(),
+        new NullLogger()
+    );
+
+Instead of instantiating an IndexGenerator directly we're going to use the IndexBuilder that I'm describing, and we'll pass data to it thusly:
+
+    var articles = new[]
+    {
+        new Article(1, new DateTime(2012, 7, 21, 0, 0, 1), "One", "One Content"),
+        new Article(2, new DateTime(2012, 8, 21, 0, 0, 1), "Two", "Two Content"),
+        new Article(3, new DateTime(2012, 9, 21, 0, 0, 1), "Three", "Three Content")
+    };
+    var index = indexBuilder.UpdateIndex(new NonNullImmutableList<IArticle>(articles));
+
+The source data types are not very interesting and are here only for completeness of the example, to be honest! 
+
+    public class Article : IArticle
+    {
+        public Article(int id, DateTime lastModified, string title, string content)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+                throw new ArgumentException("Null/blank title specified");
+            if (string.IsNullOrWhiteSpace(content))
+                throw new ArgumentException("Null/blank content specified");
+
+            Id = id;
+            LastModified = lastModified;
+            Title = title.Trim();
+            Content = content.Trim();
+        }
+
+        public int Id { get; private set; }
+
+        public DateTime LastModified { get; private set; }
+            
+        /// <summary>
+        /// This will never be null or blank
+        /// </summary>
+        public string Title { get; private set; }
+
+        /// <summary>
+        /// This will never be null or blank
+        /// </summary>
+        public string Content { get; private set; }
+    }
+
+    public interface IArticle
+    {
+        int Id { get; }
+
+        DateTime LastModified { get; }
+
+        /// <summary>
+        /// This will never be null or blank
+        /// </summary>
+        string Title { get; }
+
+        /// <summary>
+        /// This will never be null or blank
+        /// </summary>
+        string Content { get; }
+    }
+
+And finally (_finally!_) the IndexBuilder itself. The constructor takes up a chunk of space, validating all of the input. Then there's a few lines taken up by the definition of the SourceItemStatusRetriever and SourceDataSummary class. At the end there's the UpdateIndex method which determines what work needs to be done to get its IndexData instance to match the new source data - and _it_ uses the Remove and Combine methods to synchronise the index with the data:
+
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using Common.Lists;
+    using Common.Logging;
+    using FullTextIndexer.Indexes;
+    using FullTextIndexer.Indexes.TernarySearchTree;
+    using FullTextIndexer.IndexGenerators;
+    using FullTextIndexer.TokenBreaking;
+
+    namespace FullTextIndexerDemo
+    {
+        public class IndexBuilder<TSource, TKey> where TSource : class
+        {
+            private List<ContentRetriever<TSource, TKey>> _contentRetrievers;
+            private SourceItemStatusRetriever _sourceItemStatusRetriever;
+            private IEqualityComparer<TKey> _keyComparer;
+            private ITokenBreaker _tokenBreaker;
+            private IStringNormaliser _stringNormaliser;
+            private IndexGenerator.WeightedEntryCombiner _weightedEntryCombiner;
+            private IIndexGenerator<TSource, TKey> _indexGenerator;
+            private IIndexData<TKey> _index;
+            private Dictionary<TKey, DateTime> _sourceDataSummary;
+            private object _writeLock;
+            public IndexBuilder(
+                NonNullImmutableList<ContentRetriever<TSource, TKey>> contentRetrievers,
+                SourceItemStatusRetriever sourceItemStatusRetriever,
+                IEqualityComparer<TKey> keyComparer,
+                ITokenBreaker tokenBreaker,
+                IStringNormaliser stringNormaliser,
+                IndexGenerator.WeightedEntryCombiner weightedEntryCombiner,
+                ILogger logger)
+            {
+                if (contentRetrievers == null)
+                    throw new ArgumentNullException("contentRetrievers");
+                if (!contentRetrievers.Any())
+                    throw new ArgumentException("No contentRetrievers specified");
+                if (sourceItemStatusRetriever == null)
+                    throw new ArgumentNullException("sourceItemStatusRetriever");
+                if (keyComparer == null)
+                    throw new ArgumentNullException("keyComparer");
+                if (tokenBreaker == null)
+                    throw new ArgumentNullException("tokenBreaker");
+                if (stringNormaliser == null)
+                    throw new ArgumentNullException("stringNormaliser");
+                if (weightedEntryCombiner == null)
+                    throw new ArgumentNullException("weightedEntryCombiner");
+                if (logger == null)
+                    throw new ArgumentNullException("logger");
+
+                var contentRetrieversTidied = new List<ContentRetriever<TSource, TKey>>();
+                foreach (var contentRetriever in contentRetrievers)
+                {
+                    if (contentRetriever == null)
+                        throw new ArgumentException("Null encountered in contentRetrievers set");
+                    contentRetrieversTidied.Add(contentRetriever);
+                }
+                if (!contentRetrieversTidied.Any())
+                    throw new ArgumentException("No contentRetrievers specified");
+
+                _contentRetrievers = contentRetrieversTidied;
+                _sourceItemStatusRetriever = sourceItemStatusRetriever;
+                _keyComparer = keyComparer;
+                _tokenBreaker = tokenBreaker;
+                _stringNormaliser = stringNormaliser;
+                _weightedEntryCombiner = weightedEntryCombiner;
+                _sourceDataSummary = new Dictionary<TKey, DateTime>(keyComparer);
+                _writeLock = new object();
+
+                _indexGenerator = new IndexGenerator<TSource, TKey>(
+                    contentRetrieversTidied.ToNonNullImmutableList(),
+                    keyComparer,
+                    stringNormaliser,
+                    tokenBreaker,
+                    weightedEntryCombiner,
+                    logger
+                );
+                _index = _indexGenerator.Generate(new NonNullImmutableList<TSource>());
+            }
+
+            /// <summary>
+            /// This will never be called with a null source reference, it must never return null
+            /// </summary>
+            public delegate SourceDataSummary SourceItemStatusRetriever(TSource source);
+            public class SourceDataSummary
+            {
+                public SourceDataSummary(TKey key, DateTime lastModified)
+                {
+                    if (key == null)
+                        throw new ArgumentNullException("key");
+
+                    Key = key;
+                    LastModified = lastModified;
+                }
+                public TKey Key { get; private set; }
+                public DateTime LastModified { get; private set; }
+            }
+
+            /// <summary>
+            /// This will never return null
+            /// </summary>
+            public IIndexData<TKey> Index
+            {
+                get
+                {
+                    // Since the index is an immutable data type we don't need to worry about
+                    // locking it for read access
+                    return _index;
+                }
+            }
+
+            /// <summary>
+            /// This will never return null, it will throw an exception for null input
+            /// </summary>
+            public IIndexData<TKey> UpdateIndex(NonNullImmutableList<TSource> values)
+            {
+                if (values == null)
+                    throw new ArgumentNullException("values");
+
+                var newIndexSummary = values
+                    .Select(value => _sourceItemStatusRetriever(value))
+                    .GroupBy(
+                        summary => summary.Key,
+                        _keyComparer
+                    )
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.Max(summary => summary.LastModified),
+                        _keyComparer
+                    );
+            
+                lock (_writeLock)
+                {
+                    // No source data, so just generate an empty index
+                    if (!newIndexSummary.Any())
+                    {
+                        _sourceDataSummary = newIndexSummary;
+                        _index = _indexGenerator.Generate(new NonNullImmutableList<TSource>());
+                        return _index;
+                    }
+
+                    // There will (probably) be some keys to remove entirely, some that have to
+                    // be removed so that they can be replaced with updated content and some that
+                    // are not present in the existing data. First determine which keys fall into
+                    // which category (if any).
+                    var keysToRemove = new HashSet<TKey>(
+                        _sourceDataSummary
+                            .Select(summary => summary.Key)
+                            .Except(newIndexSummary.Select(summary => summary.Key)),
+                        _keyComparer
+                    );
+                    var keysToUpdate = new HashSet<TKey>(
+                        _sourceDataSummary
+                            .Where(summary =>
+                            {
+                                DateTime newSummaryLastModified;
+                                if (!newIndexSummary.TryGetValue(
+                                    summary.Key, out newSummaryLastModified))
+                                {
+                                    return false;
+                                }
+                                return newSummaryLastModified > summary.Value;
+                            })
+                            .Select(summary => summary.Key),
+                        _keyComparer
+                    );
+                    var keysToAdd = new HashSet<TKey>(
+                        newIndexSummary.Keys.Except(_sourceDataSummary.Keys),
+                        _keyComparer
+                    );
+                    if (!keysToAdd.Any() && !keysToRemove.Any() && !keysToUpdate.Any())
+                    {
+                        // If there are no actions to take then don't do any work!
+                        return _index;
+                    }
+                
+                    // Prepare the new data to insert
+                    var indexDataToUpdate = _indexGenerator.Generate(
+                        values
+                            .Where(value =>
+                            {
+                                var key = _sourceItemStatusRetriever(value).Key;
+                                return keysToUpdate.Contains(key) || keysToAdd.Contains(key);
+                            })
+                            .ToNonNullImmutableList()
+                    );
+                
+                    // Update the index content by removing keys and combining in the newly
+                    // generated content
+                    _index = _index
+                        .Remove(key => keysToRemove.Contains(key) || keysToUpdate.Contains(key))
+                        .Combine(
+                            new[] { indexDataToUpdate }.ToNonNullImmutableList(),
+                            _weightedEntryCombiner
+                        );
+                
+                    // All that's left is to update the source data summary and return the
+                    // new data!
+                    _sourceDataSummary = newIndexSummary;
+                    return _index;
+                }
+            }
+        }
+    }
+
+In case this class needs to be used in a multi-threaded environment there is a write-lock used for any calls to UpdateIndex but requests for the Index property for reading only will require no locks since the IndexData is an immutable structure! (This includes the case where index data may be cached in memory and shared between web requests which is an implicit multi-threading scenario rather than an explicit situation where you may dealing with Threads / ThreadPools / whatever yourself).
+
+(If we were nitpicking then we could be concerned that there's no way to ensure that the TKey type is immutable and so the weighted entries described by the IndexData could feasibly change - but in this case they're ints, so there's nothing to worry about, and in other cases I would strongly suggest an immutable type be used for TKey at all times. Next time I'm going to cover more complex TKey possibilities in [The Full Text Indexer - Going International!](Post32)).
+
+**Update (17th December 2012):** This has been included as part of a later [Full Text Indexer Round-up Post](Post40) that brings together several Posts into one series, incorporating code and techniques from each of them.

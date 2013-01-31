@@ -1,0 +1,55 @@
+## Check, check it out
+
+Just a quickie since I've not got anything particularly new or unique today, just something I came across that was convenient for some code I was writing that I thought I'd share!
+
+I was looking up online the correct pattern for the "Double-Checked Locking Pattern" since I was looking into writing something that would use lazy evaluation while being type-safe (note: its application was probably overkill, but it's fun to look into these things!). I've used it before and generally use it along these lines (after *much* research one bored afternoon).
+
+    public class ExpensiveDataRetriever
+    {
+        private volatile ExpensiveToGenerateDataType _data;
+        private object _lock;
+        public ExpensiveDataRetriever()
+        {
+            _data = null;
+            _lock = new object();
+        }
+        public ExpensiveToGenerateDataType Get()
+        {
+            if (_data == null)
+            {
+                lock (_lock)
+                {
+                    if (_data == null)
+                        _data = doWorkToGenerateData();
+                }
+            }
+            return _data;
+        }
+        private ExpensiveToGenerateDataType doWorkToGenerateData()
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+But now .Net 4.0 has an easier solution! I suppose I shouldn't be all that surprised since 4.0 has brought solutions for a lot of threading "stuff" but I hadn't heard of this particular one. The above can be re-written as the below, which I think is a lot clearer.
+
+    public class ExpensiveDataRetriever
+    {
+        private Lazy<ExpensiveToGenerateDataType> _data;
+        public ExpensiveDataRetriever()
+        {
+            _data = new Lazy<ExpensiveToGenerateDataType>(doWorkToGenerateData, true);
+        }
+        public ExpensiveToGenerateDataType Get()
+        {
+            return _data.Value;
+        }
+        private ExpensiveToGenerateDataType doWorkToGenerateData()
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+I read about it at [http://csharpindepth.com/Articles/General/Singleton.aspx](http://csharpindepth.com/Articles/General/Singleton.aspx) which - if I'm not mistaken - is where I got the original locking pattern from (though from an older version of the article).
+
+And - oh yes, that article title *is* a terrible pun on "Double-Checked" vs Beastie Boys. You know you love it :)

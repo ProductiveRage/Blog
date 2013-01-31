@@ -1,0 +1,101 @@
+body
+{
+	.SidebarContainer()
+	{
+		border: 3px solid #bf7c52;
+		.RounderBorders(8px);
+		background: url("/Content/Images/SidebarBackground.jpg") top right repeat-x #595959;
+		padding: 8px;
+		margin: 8px 0;
+
+		> h2
+		{
+			color: white;
+			font-weight: bold;
+		}
+	}
+
+	.SidebarContainerWithParagraphs()
+	{
+		.SidebarContainer();
+		> p
+		{
+			color: white;
+			padding: 8px 0;
+			line-height: 21px;
+		}
+	}
+
+	.SidebarContainerWithLinkListItems()
+	{
+		.SidebarContainer();
+		> ul
+		{
+			margin: 8px 0 4px 8px;
+			> li
+			{
+				text-indent: -8px; // Indent any wrapped lines
+				line-height: 20px;
+				> a
+				{
+					color: #f1f1f1;
+					display: block;
+					&:hover { color: #c0c0c0; }
+				}
+			}
+		}
+	}
+
+	div.About
+	{
+		.SidebarContainerWithParagraphs();
+	}
+	
+	div.Recent,
+	div.Featured,
+	{
+		.SidebarContainerWithLinkListItems();
+		> ul > li { padding: 0 0 8px 0; }
+	}
+
+	div.History
+	{
+		.SidebarContainerWithLinkListItems()
+	}
+
+	div.Search
+	{
+		.SidebarContainer();
+		text-align: right;
+		@media screen and (max-width: 70em) { text-align: left; }
+		input.SiteSearch
+		{
+			font-size: 12px;
+			width: 147px;
+		}
+		input.SiteSearchSubmit
+		{
+			font-size: 12px;
+			margin: 0 3px 0 0;
+			padding: 3px 6px;
+		}
+	}
+
+	div.ac_results
+	{
+		background: #f8f8f8;
+		font-size: 12px;
+		width: 151px !important; // Have to use "!important" to override the element styling applied by the plugin javascript
+
+		> ul > li
+		{
+			padding: 3px 5px;
+			&.ac_even { background: #f1f1f1; }
+			& li.ac_over
+			{
+				background: #c0c0c0;
+				color: White;
+			}
+		}
+	}
+}

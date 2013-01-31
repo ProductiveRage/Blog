@@ -1,0 +1,134 @@
+## The joys of AutoMapper
+
+Earlier this year I was introduced by someone I work with to [AutoMapper](http://automapper.codeplex.com/). At a very convenient time it turned out since I was in the middle of a couple of projects that I had to do a lot of run-of-the-mill gluing together of request between web services where there were very similar object models in play but which came from different services - so I was looking at writing a load of code that basically took a request from one side and re-formed it into a very similar request to push elsewhere. Not particularly fun, and I find one of the places I'm most like to make stupid mistakes are when I'm not 100% mentally switched on because the task at hand makes me feel like I'm being a robot!
+
+So, for one of these projects I was getting stuck into; AutoMapper to the rescue!
+
+AutoMapper is an "object-to-object" mapper which, well.. maps from one object to another! :) If the source and destination objects have identical structure but different namespaces then most times AutoMapper will be able to translate from one to another as-if-by-magic, and there are several conventions that are applied by the default mapper that perform simple object flattening and other tricks.
+
+There's loads of introductory tutorials out there for AutoMapper so this is just a dead simple example to get across the gist - I can use one call to a CreateMap method and use a nice fluent coding style to tweak it how I want, then conversion between lists or arrays or enumerables of mappable types are automatically handled:
+
+    var data = new Employee()
+    {
+      Name = new Employee.EmployeeName()
+      {
+        Title = "Mr",
+        First = "Andrew",
+        Last = "Test",
+      },
+      DateOfBirth = new DateTime(1990, 6, 14)
+    };
+
+    Mapper.CreateMap<Employee, Person>()
+      .ForMember(d => d.Name, o => o.MapFrom(s => s.Name.Title + " " + s.Name.First + " " + s.Name.Last));
+
+    var dataList = new Employee[] { data };
+    var translated = Mapper.Map<Employee[], List<Person>>(dataList);
+
+    public class Employee
+    {
+      public EmployeeName Name { get; set; }
+      public DateTime DateOfBirth { get; set; }
+      public class EmployeeName
+      {
+        public string Title { get; set; }
+        public string First { get; set; }
+        public string Last { get; set; }
+      }
+    }
+
+    public class Person
+    {
+      public string Name { get; set; }
+      public DateTime DateOfBirth { get; set; }
+    }
+
+This doesn't even scratch the surface; it can handle nested types and complex object models, you can define custom naming conventions for property mappings, specify properties to ignore or map other than to the conventions, map onto existing instances rather than creating new, create distinct configuration instances, .. loads and loads of stuff.
+
+An example of its use out-in-the-field is in the MVC [Nerd Dinner](http://www.nerddinner.com/) demo project and Jimmy Bogard (who wrote AutoMapper) mentions how he uses it in his article "[How we do MVC](http://lostechies.com/jimmybogard/2009/04/24/how-we-do-mvc/)" -
+
+> AutoMapper to go from Domain -> ViewModel and Domain -> EditModel.  This is again because the view and controller put constraints on our model that we didn't want in our domain.  AutoMapper flattened our domain into very discrete ViewModel objects, containing only the data for our view, and only in the shape we want.
+
+.. which sounds like a very sensible application for it to me! (The rest of that article's definitely worth a read, btw).
+
+### Whoops!
+
+There *was* one gotcha using it that caught me out, but it made perfect sense when I reasoned it through afterward.
+
+I was mapping from one large, most-flat object into another where the first was a subset of the second; it was an old legacy webservice where the interface accepted every property for several types of bookings, where maybe 60% of the properties were shared between types and then the rest were specific to different booking types. So a booking made through the web interface resulted in an HotelBooking being instantiated, for example, and this was mapped onto the "super" booking object of the legacy service interface.
+
+    var source = new Hotel(
+      Guid.NewGuid(),
+
+      // .. other properties
+      
+      "Test"
+
+      // .. other properties
+    );
+
+    Mapper.CreateMap<Hotel, Booking>();
+    var dest = Mapper.Map<Hotel, Booking>(source);
+
+
+    public class Hotel
+    {
+      public Hotel(Guid id, /* .. other properties .. */ string network)
+      {
+        if ((network ?? "").Trim() == "")
+          throw new ArgumentException("Null/empty network specified");
+
+        // .. other validation ..
+
+        Id = id;
+
+        //.. other properties..
+
+        Network = network;
+
+        //.. other properties..
+      }
+      
+      public Guid Id { get; private set; }
+      
+      // .. other properties ..
+      
+      /// <summary>
+      /// This will never be null
+      /// </summary>
+      public string Network { get; private set; }
+      
+      // .. other properties ..
+    }
+
+    public class Booking
+    {
+      public Guid Id { get; set; }
+      
+      // .. other properties
+      
+      public string NetworkType { get; set; }
+      
+      // .. other properties
+    }
+
+On the translated "dest" instance, the NetworkType property is "System.String" - er, what??
+
+Well it turns out that AutoMapper finds that there is no NetworkType property to map from Hotel to Booking but sees that there *is* a "Network" value. It then tries to see if it can perform some object flattening by checking whether the Network value has a Type property which, being a string, it doesn't. But it *then* consider a property retrieval method rather than a standard property getter so it looks for a GetType() method which, since string inherits from objects, it does! So it takes the .Network.GetType() value and assumes we want this for the Booking.NetworkType value!
+
+Like I said, it all makes perfect sense but it took me a little while to work out what was happening in this case :)
+
+Did I mention AutoMapper is open source? This is great cos it let me have a poke around the source code and get a feel for what magic seemed to be going on!
+
+### Something rotten in Denmark
+
+My biggest problem is with scenarios where I want to do the opposite of the above - instead of translating from an "always-valid" internal object to a webservice class I'd like to be able to instantiate a class through its constructor, using data from a source class.
+
+Now, AutoMapper *does* have some sort of support for using constructors for mapping - eg.
+
+    Mapper.CreateMap<Booking, Hotel>()
+      .ConstructUsing(src => new Hotel(src.Id, /* .. other properties .. */));
+
+But here I've got to manually map all of the properties from the source to arguments in destination's constructor! What I really want is all of that clever name convention malarkey done in AutoMapper to be applied to constructor arguments of destination types. I mean, argument names are always present in compiled C# code so it's not like that data is unavailable for examination by AutoMapper. And having conversions like this would save me having to write a lot of boring code at webservice boundaries!
+
+Now, since I seem to think it's so easy - [How Hard Can It Be?](http://www.youtube.com/watch?v=nVE09yyznfc) :) - I'm going to have a bit of a play around and see if I can slap something together to do this. If I don't end up reduced to tears (and maybe even if I do!) I'll see what I can do about posting the results!
