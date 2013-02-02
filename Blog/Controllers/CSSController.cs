@@ -128,23 +128,26 @@ namespace Blog.Controllers
 				throw new ArgumentNullException("logger");
 
 			var scopeRestrictingBodyTagReplaceName = "REPLACEME";
-			return new ContentReplacingTextFileLoader(
-				new DotLessCssCssLoader(
-					new SameFolderImportFlatteningCssLoader(
-						new LessCssOpeningBodyTagRenamer(
-							individualFileLoader,
-							scopeRestrictingBodyTagReplaceName
+			return new MediaQueryGroupingCssLoader(
+				new ContentReplacingTextFileLoader(
+					new DotLessCssCssLoader(
+						new SameFolderImportFlatteningCssLoader(
+							new LessCssOpeningBodyTagRenamer(
+								individualFileLoader,
+								scopeRestrictingBodyTagReplaceName
+							),
+							SameFolderImportFlatteningCssLoader.ContentLoaderCommentRemovalBehaviourOptions.ContentIsUnprocessed,
+							SameFolderImportFlatteningCssLoader.ErrorBehaviourOptions.DisplayWarningAndIgnore,
+							SameFolderImportFlatteningCssLoader.ErrorBehaviourOptions.DisplayWarningAndIgnore,
+							logger
 						),
-						SameFolderImportFlatteningCssLoader.ContentLoaderCommentRemovalBehaviourOptions.ContentIsUnprocessed,
-						SameFolderImportFlatteningCssLoader.ErrorBehaviourOptions.DisplayWarningAndIgnore,
-						SameFolderImportFlatteningCssLoader.ErrorBehaviourOptions.DisplayWarningAndIgnore,
+						DotLessCssCssLoader.LessCssMinificationTypeOptions.Minify,
+						DotLessCssCssLoader.ReportedErrorBehaviourOptions.LogAndRaiseException,
 						logger
 					),
-					DotLessCssCssLoader.LessCssMinificationTypeOptions.Minify,
-					logger
-				),
-				scopeRestrictingBodyTagReplaceName + " ",
-				""
+					scopeRestrictingBodyTagReplaceName + " ",
+					""
+				)
 			);
 		}
 
