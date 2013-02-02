@@ -7,11 +7,11 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
 	<title>Productive Rage - @ViewBag.Title</title>
-	<link rel="stylesheet" type="text/css" media="all" href="../../Content/Styles.less" />
+	<link rel="stylesheet" type="text/css" media="all" href="@Url.Content("~/Content/Styles.less")" />
 	<!--[if lt IE 9]>
-	<link rel="stylesheet" type="text/css" href="../../Content/IEBefore9.css" />
+	<link rel="stylesheet" type="text/css" href="@Url.Content("~/Content/IEBefore9.css")" />
 	<![endif]-->
-	<link rel="stylesheet" type="text/css" media="print" href="../../Content/PrintOverrides.css" />
+	<link rel="stylesheet" type="text/css" media="print" href="@Url.Content("~/Content/PrintOverrides.css")" />
 	<link rel="shortcut icon" href="/favicon.ico" />
 @if ((Model != null) && (Model.OptionalGoogleAnalyticsId != null)) {
 	<script type="text/javascript">
@@ -47,13 +47,13 @@
 	</div>
 
 	<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js"></script>
-	<script type="text/javascript" src="/Scripts/jquery.autocomplete.min.js"></script>
-	<script type="text/javascript" src="/Scripts/prettify.js"></script>
+	<script type="text/javascript" src="@Url.Content("~/Scripts/jquery.autocomplete.min.js")"></script>
+	<script type="text/javascript" src="@Url.Content("~/Scripts/prettify.js")"></script>
 	<script type="text/javascript">
 		var $search = $("input.SiteSearch");
 		if ($search.length > 0) {
 			$.ajax({
-				url: "/AutoComplete.json",
+				url: "@Url.Content("~/AutoComplete.json")",
 				dataType: 'json',
 				success: function (data) {
 					$search.autocomplete(data);
