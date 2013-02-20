@@ -1,0 +1,494 @@
+## IDispatch (IWastedTimeOnThis but ILearntLots)
+
+For something I've been working on it looked like I was going to have to interact with COM objects from a legacy system without type libraries and where the internals were written in VBScript. Ouch. It seemed like a restriction of the environment meant that .Net 4 wouldn't be available and so the dynamic keyword wouldn't be available.
+
+It would seem that the [COMInteraction](https://bitbucket.org/DanRoberts/cominteraction) code that I wrote in the past would be ideal for this since it should wrap access to generic COM objects but I encountered a problem with that (which I'll touch briefly on later in this post).
+
+So the next step was to find out about the mysterious IDispatch interface that I've heard whispered about in relation to dealings with generic COM objects! Unfortunately, I think in the end I found a way to get .Net 4 into play for my original problem so this might all have been a bit of a waste of time.. but not only was it really interesting but I also found nowhere else on the internet that was doing this with C#. And I read up *a lot*. (There's articles that touch on most of it, but not all - read on to find out more! :)
+
+### What is IDispatch
+
+From [IDispatch on Wikipedia](http://en.wikipedia.org/wiki/IDispatch):
+
+> IDispatch is the interface that exposes the OLE Automation protocol. It is one of the standard interfaces that can be exposed by COM objects .. IDispatch derives from IUnknown and extends its set of three methods (AddRef, Release and QueryInterface) with four more methods - GetTypeInfoCount, GetTypeInfo, GetIDsOfNames and Invoke.
+
+> Each property and method implemented by an object that supports the IDispatch interface has what is called a Dispatch ID, which is often abbreviated DISPID. The DISPID is the primary means of identifying a property or method and must be supplied to the Invoke function for a property or method to be invoked, along with an array of Variants containing the parameters. The _GetIDsOfNames_ function can be used to get the appropriate DISPID from a property or method name that is in string format.
+
+It's basically a way to determine what methods can be called on an object and how to call them.
+
+### How to use it
+
+I got most of the useful information first from these links:
+
+1. [Calling a member of IDispatch COM interface from C#](http://stackoverflow.com/questions/8068449/calling-a-member-of-idispatch-com-interface-from-c-sharp) (Stack Overflow)
+1. [Setting a Property by IDispatch Invoke](http://limbioliong.wordpress.com/2011/11/02/setting-a-property-by-idispatch-invoke/) (particularly section 3.4)
+1. [Using VARIANTs in Managed Code Part 3](http://limbioliong.wordpress.com/2011/09/06/using-variants-in-managed-code-part-3/) (section 2.4)
+
+The first thing to do is to cast the object reference to the IDispatch interface (this will only work if the object implements IDispatch, for the COM components I was targetting this was the case). The interface isn't available in the framework but can be hooked up with
+
+    [ComImport()]
+    [Guid("00020400-0000-0000-C000-000000000046")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IDispatch
+    {
+      [PreserveSig]
+      int GetTypeInfoCount(out int Count);
+
+      [PreserveSig]
+      int GetTypeInfo
+      (
+        [MarshalAs(UnmanagedType.U4)] int iTInfo,
+        [MarshalAs(UnmanagedType.U4)] int lcid,
+        out System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo
+      );
+
+      [PreserveSig]
+      int GetIDsOfNames
+      (
+        ref Guid riid,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPWStr)]
+        string[] rgsNames,
+        int cNames,
+        int lcid,
+        [MarshalAs(UnmanagedType.LPArray)] int[] rgDispId
+      );
+
+      [PreserveSig]
+      int Invoke
+      (
+        int dispIdMember,
+        ref Guid riid,
+        uint lcid,
+        ushort wFlags,
+        ref System.Runtime.InteropServices.ComTypes.DISPPARAMS pDispParams,
+        out object pVarResult,
+        ref System.Runtime.InteropServices.ComTypes.EXCEPINFO pExcepInfo,
+        out UInt32 pArgErr
+      );
+    }
+
+Then the GetIDsofNames is called to determine whether a given method is present:
+
+    private const int LOCALE_SYSTEM_DEFAULT = 2048;
+
+    // rgDispId will be populated with the DispId of the named member (if available)
+    var rgDispId = new int[1] { 0 };
+
+    // IID_NULL must always be specified for the "riid" argument
+    // (see http://msdn.microsoft.com/en-gb/library/windows/desktop/ms221306(v=vs.85).aspx)
+    var IID_NULL = new Guid("00000000-0000-0000-0000-000000000000");
+
+    var hrRet = ((IDispatch)source).GetIDsOfNames
+    (
+      ref IID_NULL, // 
+      new string[1] { name },
+      1, // number of names to get ids for
+      LOCALE_SYSTEM_DEFAULT,
+      rgDispId
+    );
+    if (hrRet != 0)
+      throw new Exception("Uh-oh!");
+
+    return rgDispId[0];
+
+Then the Invoke method is called with the Disp Id, the type of call (eg. execute method, set property, etc..), a "local context" ("applications that do not support multiple national languages can ignore this parameter" - [IDispatch::Invoke method (Automation) at MSDN](http://msdn.microsoft.com/en-gb/library/windows/desktop/ms221479(v=vs.85).aspx)) and the parameters.
+
+### Calling a argument-less method
+
+    private const int LOCALE_SYSTEM_DEFAULT = 2048;
+    private const ushort DISPATCH_METHOD = 1;
+
+    var dispId = 19; // Or whatever the above code reported
+
+    // This DISPPARAMS structure describes zero arguments
+    var dispParams = new System.Runtime.InteropServices.ComTypes.DISPPARAMS()
+    {
+      cArgs = 0,
+      cNamedArgs = 0,
+      rgdispidNamedArgs = IntPtr.Zero,
+      rgvarg = IntPtr.Zero
+    };
+
+    var IID_NULL = new Guid("00000000-0000-0000-0000-000000000000");
+    UInt32 pArgErr = 0;
+    object varResult;
+    var excepInfo = new System.Runtime.InteropServices.ComTypes.EXCEPINFO();
+    var hrRet = ((IDispatch)source).Invoke
+    (
+      dispId,
+      ref IID_NULL,
+      LOCALE_SYSTEM_DEFAULT,
+      DISPATCH_METHOD,
+      ref dispParams,
+      out varResult,
+      ref excepInfo,
+      out pArgErr
+    );
+    if (hrRet != 0)
+      throw new Exception("FAIL!");
+    return varResult;
+
+The DISPPARAMS structure (which _is_ part of the framework) enables the specification of both "named" and "unnamed" arguments. When calling a method, unnamed arguments may be passed in but when setting a property, the value that the property is to be set to must be passed as a named argument with the special constant DISPID_PROPERTYPUT (-3).
+
+The above code could also be used to retrieve a property value (a non-indexed property) by replacing the DISPATCH\_METHOD value with DISPATCH\_PROPERTYGET (2).
+
+### Calling a single-argument method
+
+    [DllImport(@"oleaut32.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
+    static extern Int32 VariantClear(IntPtr pvarg);
+
+    private const int LOCALE_SYSTEM_DEFAULT = 2048;
+    private const ushort DISPATCH_METHOD = 1;
+    private const int SizeOfNativeVariant = 16;
+
+    var dispId = 19; // Or whatever the above code reported
+    var arg = "Value";
+
+    // This DISPPARAMS describes a single (unnamed) argument
+    var pVariant = Marshal.AllocCoTaskMem(SizeOfNativeVariant);
+    Marshal.GetNativeVariantForObject(arg, pVariant);
+    var dispParams = new System.Runtime.InteropServices.ComTypes.DISPPARAMS()
+    {
+      cArgs = 1,
+      cNamedArgs = 0,
+      rgdispidNamedArgs = IntPtr.Zero,
+      rgvarg = pVariant
+    };
+
+    try
+    {
+      var IID_NULL = new Guid("00000000-0000-0000-0000-000000000000");
+      UInt32 pArgErr = 0;
+      object varResult;
+      var excepInfo = new System.Runtime.InteropServices.ComTypes.EXCEPINFO();
+      var hrRet = ((IDispatch)source).Invoke
+      (
+        dispId,
+        ref IID_NULL,
+        LOCALE_SYSTEM_DEFAULT,
+        DISPATCH_METHOD,
+        ref dispParams,
+        out varResult,
+        ref excepInfo,
+        out pArgErr
+      );
+      if (hrRet != 0)
+        throw new Exception("FAIL!");
+      return varResult;
+    }
+    finally
+    {
+      VariantClear(pVariant);
+      Marshal.FreeCoTaskMem(pVariant);
+    }
+
+As mentioned above, when calling methods there is no need to named arguments so cNamedArgs is still 0 and rgdispidNamedArgs is still IntPtr.Zero (a managed version of a null pointer).
+
+From what I understand (and I'd never used Marshal.AllocCoTaskMem or Marshal.GetNativeVariantForObject before a couple of days ago!), the AllocCoTaskMem call allocates a chunk of unmanaged memory and then GetNativeVariantForObject copies a managed reference into that memory. A variant is always 16 bytes. This is the same variant type used for all VBScript calls, for example, and used for method arguments for IDispatch. More about the VARIANT structure can be found at this [MSDN article](http://msdn.microsoft.com/en-gb/library/windows/desktop/ms221627(v=vs.85).aspx).
+
+The framework does some sort of clever manipulation to copy the contents of the managed reference into unmanaged memory, the internals of which I'm not going to worry _too_ much about. But there's a couple of things to note; this is a _copy_ operation so if I was getting involved with unmanaged memory for performance reasons then I'd probably want to avoid this. But it does mean that this copied memory is "safe" from the garbage collector doing anything with it. When you peel it back a layer, managed memory can't be expected to work as predictably as unmanaged memory as the garbage collector is free to be doing all manner of clever things to stay on top of memory usage and references and, er.. stuff. Which is a good thing because (for the large part) _I_ don't have to worry about it! But it would be no good if the garbage collector moved memory around that the COM component was in the middle of accessing. Bad things would happen. Bad _intermittent_ things (the worst kind). But this does have one important consequence; since the GC is not in control of this memory, I need to explicitly release it myself when I'm done with it.
+
+Another side note on this: The system also needs to be sure that the GC doesn't do anything interesting with memory contents while it's performing to copy to the variant. The framework uses something called "automatic pinning" to ensure that the reference being considered by the Marshal.GetNativeVariantForObject doesn't move during this operation (ie. it is "pinned" in place in memory). There is also a way to manually pin data where a particular reference can be marked such that its memory not be touched by the GC until it's freed (using GCHandle.Alloc and the GCHandleType.Pinned option, and later calling .Free on the handle returned by Alloc) which may be used in the passing-by-reference approach I alluded to above, but I won't need it here.
+
+### Setting a (non-indexed) property
+
+    [DllImport(@"oleaut32.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
+    static extern Int32 VariantClear(IntPtr pvarg);
+
+    private const int LOCALE_SYSTEM_DEFAULT = 2048;
+    private const ushort DISPATCH_PROPERTYPUT = 4;
+    private const int DISPID_PROPERTYPUT = -3;
+    private const int SizeOfNativeVariant = 16;
+
+    var dispId = 19; // Or whatever the above code reported
+    var arg = "Value";
+
+    // This DISPPARAMS describes a single named (DISPID_PROPERTYPUT) argument
+    var pNamedArg = Marshal.AllocCoTaskMem(sizeof(Int64));
+    Marshal.WriteInt64(pNamedArg, DISPID_PROPERTYPUT);
+    var pVariant = Marshal.AllocCoTaskMem(SizeOfNativeVariant);
+    Marshal.GetNativeVariantForObject(arg, pVariant);
+    var dispParams = new System.Runtime.InteropServices.ComTypes.DISPPARAMS()
+    {
+      cArgs = 1,
+      cNamedArgs = 1,
+      rgdispidNamedArgs = pNamedArg,
+      rgvarg = pVariant
+    };
+
+    try
+    {
+      var IID_NULL = new Guid("00000000-0000-0000-0000-000000000000");
+      UInt32 pArgErr = 0;
+      object varResult;
+      var excepInfo = new System.Runtime.InteropServices.ComTypes.EXCEPINFO();
+      var hrRet = ((IDispatch)source).Invoke
+      (
+        dispId,
+        ref IID_NULL,
+        LOCALE_SYSTEM_DEFAULT,
+        DISPATCH_PROPERTYPUT,
+        ref dispParams,
+        out varResult,
+        ref excepInfo,
+        out pArgErr
+      );
+      if (hrRet != 0)
+        throw new Exception("FAIL!");
+    }
+    finally
+    {
+      VariantClear(pVariant);
+      Marshal.FreeCoTaskMem(pVariant);
+      VariantClear(pNamedArg);
+      Marshal.FreeCoTaskMem(pNamedArg);
+    }
+
+The example code in section 3.4 of the [Setting a Property by IDispatch Invoke](http://limbioliong.wordpress.com/2011/11/02/setting-a-property-by-idispatch-invoke/) post I linked to earlier uses a manual pinning approach to specifying the named arguments data but as I understand it we can copy the DISPID_PROPERTYPUT value into unmanaged memory instead, in the same way as the property value is passed over the COM boundary.
+
+### Specifying multiple arguments
+
+The final step is to support multiple arguments, whether this be for calling methods or for dealing with indexed properties. *This* is the step that I've been unable to find any examples for in C#.
+
+The problem is that there need to be multiple variant arguments passed to the Invoke call but no built-in way to allocate an array of variants to unmanaged memory. This Stack Overflow question on [IntPtr arithmetics](http://stackoverflow.com/questions/1318682/intptr-arithmetics) looked promising but didn't quite cover it. And it revealed that I didn't know very much about the unsafe and fixed keywords :(
+
+The final code I've ended up with doesn't seem that complicated in and of itself, but I feel like I've gone through the wringer a bit trying to confirm that it's actually correct! The biggest question was how to go allocating a single variant
+
+    var rgvarg = Marshal.AllocCoTaskMem(SizeOfNativeVariant);
+    Marshal.GetNativeVariantForObject(arg, rgvarg);
+
+    // Do stuff..
+
+    VariantClear(rgvarg);
+    Marshal.FreeCoTaskMem(rgvarg);
+
+to allocating multiple. I understood that the array of variants should be laid out sequentially in memory but the leap took me some time to get to
+
+    var rgvarg = Marshal.AllocCoTaskMem(SizeOfNativeVariant * args.Length);
+    var variantsToClear = new List<IntPtr>();
+    for (var index = 0; index < args.Length; index++)
+    {
+      var arg = args[(args.Length - 1) - index]; // Explanation below..
+      var pVariant = new IntPtr(
+        rgvarg.ToInt64() + (SizeOfNativeVariant * index)
+      );
+      Marshal.GetNativeVariantForObject(arg, pVariant);
+      variantsToClear.Add(pVariant);
+    }
+
+    // Do stuff..
+
+    foreach (var variantToClear in variantsToClear)
+      VariantClear(variantToClear);
+    Marshal.FreeCoTaskMem(rgvarg);
+
+Particularly the concerns about the pointer arithmetic which I wasn't sure C# would like, especially after trying to digest all of the Stack Overflow question. But another [Add offset to IntPtr](http://stackoverflow.com/questions/1866236/add-offset-to-intptr) _did_ give me some hope thought it led me get thrown by this MSDN page for the .Net 4 [IntPtr.Add method](http://msdn.microsoft.com/en-us/library/system.intptr.add%28VS.100%29.aspx), with its usage of unsafe and fixed!
+
+    public static void Main()
+    {
+      int[] arr = { 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 };
+      unsafe {
+        fixed(int* parr = arr) {
+          IntPtr ptr = new IntPtr(parr);   
+          for (int ctr = 0; ctr < arr.Length; ctr++)
+          {
+            IntPtr newPtr = IntPtr.Add(ptr, ctr * sizeof(Int32));
+            Console.Write("{0}   ", Marshal.ReadInt32(newPtr));
+          }
+        }      
+      }
+    }
+
+So the good news; pointer arithmetic would, dealt with properly, not end the world. Ok, good. And apparently it's safe to always manipulate them using the ToInt64 method
+
+    IntPtr ptr = new IntPtr(oldptr.ToInt64() + 2);
+
+whether on a 32 or 64 bit machine. With overhead on 32 bit systems, but I'm not looking for ultimate performance here, I'm looking for functionality! (This last part is one of the answers on Stack Overflow: [Add offset to IntPtr](http://stackoverflow.com/a/1866268).
+
+From what I've learnt about pinning and its effects on the garbage collector, the "fixed" call in the MSDN example is to lock the array in place while it's being iterated over. Since at each insertion into the unmanaged memory I've allocated I'm using Marshal.GetNativeVariantForObject then I don't need to worry about this as that method is copying the data and automatic pinning is holding the data in place while it does so. So I'm all good - I just need to keep track of the variants I've copied so they can be cleared when I'm done _and_ keep tracking of the one area of unmanaged memory I allocated which will need freeing.
+
+One more thing! And this took me a while to track down - I wasn't getting errors but I wasn't getting the results I was expecting. According to the MSDN [IDispatch::Invoke method (Automation)](http://msdn.microsoft.com/en-us/library/windows/desktop/ms221479(v=vs.85).aspx) page, arguments are stored in the DISPPARAMS structure in reverse order. *Reverse order!!* Why??! Ah, who cares, I'm over it.
+
+So, without further ado, here's an Invoke method that wraps up all of the above code so that any variety of call - method, indexed-or-not property get, indexed-or-not property set - can be made with all of the complications hidden away. If you don't want it to try to cast the return value then specify "object" as the type param. Anything that has a void return type will return null. This throws the named-argument requirement for property-setting into the mix but should be easy enough to follow if you're fine with everything up til now. (Where an indexed property is set, the last value in the args array should be the value to set it to and the preceeding args elements be the property indices).
+
+    public static T Invoke<T>(object source, InvokeFlags invokeFlags, int dispId, params object[] args)
+    {
+      if (source == null)
+        throw new ArgumentNullException("source");
+      if (!Enum.IsDefined(typeof(InvokeFlags), invokeFlags))
+        throw new ArgumentOutOfRangeException("invokeFlags");
+      if (args == null)
+        throw new ArgumentNullException("args");
+
+      var memoryAllocationsToFree = new List<IntPtr>();
+      IntPtr rgdispidNamedArgs;
+      int cNamedArgs;
+      if (invokeFlags == InvokeFlags.DISPATCH_PROPERTYPUT)
+      {
+        // There must be at least one argument specified; only one if it is a non-indexed property and
+        // multiple if there are index values as well as the value to set to
+        if (args.Length < 1)
+          throw new ArgumentException("At least one argument must be specified for DISPATCH_PROPERTYPUT");
+
+        var pdPutID = Marshal.AllocCoTaskMem(sizeof(Int64));
+        Marshal.WriteInt64(pdPutID, DISPID_PROPERTYPUT);
+        memoryAllocationsToFree.Add(pdPutID);
+
+        rgdispidNamedArgs = pdPutID;
+        cNamedArgs = 1;
+      }
+      else
+      {
+        rgdispidNamedArgs = IntPtr.Zero;
+        cNamedArgs = 0;
+      }
+
+      var variantsToClear = new List<IntPtr>();
+      IntPtr rgvarg;
+      if (args.Length == 0)
+        rgvarg = IntPtr.Zero;
+      else
+      {
+        // We need to allocate enough memory to store a variant for each argument (and then populate this
+        // memory)
+        rgvarg = Marshal.AllocCoTaskMem(SizeOfNativeVariant * args.Length);
+        memoryAllocationsToFree.Add(rgvarg);
+        for (var index = 0; index < args.Length; index++)
+        {
+          // Note: The "IDispatch::Invoke method (Automation)" page
+          // (http://msdn.microsoft.com/en-us/library/windows/desktop/ms221479(v=vs.85).aspx) states that
+          // "Arguments are stored in pDispParams->rgvarg in reverse order" so we'll reverse them here
+          var arg = args[(args.Length - 1) - index];
+
+          // According to http://stackoverflow.com/a/1866268 it seems like using ToInt64 here will be valid
+          // for both 32 and 64 bit machines. While this may apparently not be the most performant approach,
+          // it should do the job.
+          // Don't think we have to worry about pinning any references when we do this manipulation here
+          // since we are allocating the array in unmanaged memory and so the garbage collector won't be
+          // moving anything around (and GetNativeVariantForObject copies the reference and automatic
+          // pinning will prevent the GC from interfering while this is happening).
+          var pVariant = new IntPtr(
+            rgvarg.ToInt64() + (SizeOfNativeVariant * index)
+          );
+          Marshal.GetNativeVariantForObject(arg, pVariant);
+          variantsToClear.Add(pVariant);
+        }
+      }
+
+      var dispParams = new ComTypes.DISPPARAMS()
+      {
+        cArgs = args.Length,
+        rgvarg = rgvarg,
+        cNamedArgs = cNamedArgs,
+        rgdispidNamedArgs = rgdispidNamedArgs
+      };
+
+      try
+      {
+        var IID_NULL = new Guid("00000000-0000-0000-0000-000000000000");
+        UInt32 pArgErr = 0;
+        object varResult;
+        var excepInfo = new ComTypes.EXCEPINFO();
+        var hrRet = ((IDispatch)source).Invoke
+        (
+          dispId,
+          ref IID_NULL,
+          LOCALE_SYSTEM_DEFAULT,
+          (ushort)invokeFlags,
+          ref dispParams,
+          out varResult,
+          ref excepInfo,
+          out pArgErr
+        );
+        if (hrRet != 0)
+        {
+          var message = "Failing attempting to invoke method with DispId " + dispId + ": ";
+          if ((excepInfo.bstrDescription ?? "").Trim() == "")
+            message += "Unspecified error";
+          else
+            message += excepInfo.bstrDescription;
+          var errorType = GetErrorMessageForHResult(hrRet);
+          if (errorType != CommonErrors.Unknown)
+            message += " [" + errorType.ToString() + "]";
+          throw new ArgumentException(message);
+        }
+        return (T)varResult;
+      }
+      finally
+      {
+        foreach (var variantToClear in variantsToClear)
+          VariantClear(variantToClear);
+
+        foreach (var memoryAllocationToFree in memoryAllocationsToFree)
+          Marshal.FreeCoTaskMem(memoryAllocationToFree);
+      }
+    }
+
+    public static int GetDispId(object source, string name)
+    {
+      if (source == null)
+        throw new ArgumentNullException("source");
+      if (string.IsNullOrEmpty(name))
+        throw new ArgumentNullException("Null/blank name specified");
+
+      // This will be populated with a the DispId of the named member (if available)
+      var rgDispId = new int[1] { 0 };
+      var IID_NULL = new Guid("00000000-0000-0000-0000-000000000000");
+      var hrRet = ((IDispatch)source).GetIDsOfNames
+      (
+        ref IID_NULL,
+        new string[1] { name },
+        1, // number of names to get ids for
+        LOCALE_SYSTEM_DEFAULT,
+        rgDispId
+      );
+      if (hrRet != 0)
+      {
+        var message = "Invalid member \"" + name + "\"";
+        var errorType = GetErrorMessageForHResult(hrRet);
+        if (errorType != CommonErrors.Unknown)
+          message += " [" + errorType.ToString() + "]";
+        throw new ArgumentException(message);
+      }
+      return rgDispId[0];
+    }
+
+    public enum InvokeFlags : ushort
+    {
+      DISPATCH_METHOD = 1,
+      DISPATCH_PROPERTYGET = 2,
+      DISPATCH_PROPERTYPUT = 4
+    }
+
+    private static CommonErrors GetErrorMessageForHResult(int hrRet)
+    {
+      if (Enum.IsDefined(typeof(CommonErrors), hrRet))
+        return (CommonErrors)hrRet;
+
+      return CommonErrors.Unknown;
+    }
+
+    public enum CommonErrors
+    {
+      Unknown = 0,
+
+      // A load of values from http://blogs.msdn.com/b/eldar/archive/2007/04/03/a-lot-of-hresult-codes.aspx
+    }
+
+Included is a GetDispId method and an "InvokeFlags" enum to wrap up those values. If an error is encountered, it will try to look up the hresult value in an enum that I've trimmed out here but you can find the values at [http://blogs.msdn.com/b/eldar/archive/2007/04/03/a-lot-of-hresult-codes.aspx](http://blogs.msdn.com/b/eldar/archive/2007/04/03/a-lot-of-hresult-codes.aspx).
+
+### A waste of my time?
+
+It's looking like the environment restriction against using .Net 4 is going to go away (I think it was just me being a bit dense with configuration to be honest but I'm not quite convinced yet!) so I should be able to replace all of this code I was thinking of using with the "dynamic" keyword again.
+
+But it's certainly been interesting getting to the bottom of this, and it's given me a greater appreciation of the "dynamic" implementation! Until now I was under the impression that it did much of what it does with fairly straight forward reflection and some sort of caching for performance. But after looking into this I've looked into it more and realised that it does a lot more, varying its integration method depending upon what it's talking to (like if it's a .Net object, a IDispatch-implementing reference, an Iron Python object and whatever else). I have a much greater respect for it now! :)
+
+### The COMInteraction Project
+
+One thing it _has_ got me thinking about, though, is the [COMInteraction](https://bitbucket.org/DanRoberts/cominteraction) code I wrote. The current code uses reflection and IL generation to sort of force method and property calls onto COM objects, which worked great for the components I was targetting at the time (VBScript WSC components) but which failed when I tried to use it with a Classic ASP Server reference that got passed through the chain. It didn't like the possibly hacky approach I used _at all_. But it _is_ happy with being called by the Invoke method above since it implements IDispatch. So I'm contemplating now whether I can extend the work to generate different IL depending upon the source type; leaving it using reflection where possible and alternately using IDispatch where reflection won't work but IDispatch may. Sort of like "dynamic" much on a more conservative scale :)
+
+### A little bit more about dynamic's magic
+
+Now that I understand more about how IDispatch enables the implementing type to be queried it answers a question I've wondered about before: how can the debugger show properties and data for a dynamic reference that's pointing at a COM object? The GetTypeInfo and GetIDsOfNames of the IDispatch interface can expose this information.
+
+There's some example code on this blog post (by the same guy who wrote some of the other posts I linked earlier): [Obtain Type Information of IDispatch-Based COM Objects from Managed Code.](http://limbioliong.wordpress.com/2011/10/18/obtain-type-information-of-idispatch-based-com-objects-from-managed-code/). I've played with it a bit and it looks interesting, but I've not gone any further than his method querying code (he retrieves a list of methods but doesn't examine the arguments that the methods take, for example).
