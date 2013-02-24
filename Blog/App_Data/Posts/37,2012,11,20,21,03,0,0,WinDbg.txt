@@ -1,6 +1,6 @@
 ﻿## The WinDbg Blues
 
-To investigate some cpu-off-the-charts haning issue that refuses to reproduce itself in a local environment in a project I'm involved with I've had to use WinDbg to interrogate a process dump for clues. On the one hand, that all is information is available can seem amazing at times. Other times it's frustrating how primitive it feels compared to poking around with the Visual Studio debugger!
+To investigate some cpu-off-the-charts hanging issue that refuses to reproduce itself in a local environment in a project I'm involved with I've had to use WinDbg to interrogate a process dump for clues. On the one hand, that all is information is available can seem amazing at times. Other times it's frustrating how primitive it feels compared to poking around with the Visual Studio debugger!
 
 One of the problems I have is that I only do this kind of investigation infrequently so I never quite internalise all the tricks that I need from one time to the next. The first that for some minidumps there seems to be a version mismatch problem with I try to ".loadby sos mscorwks", resulting in the following error:
 

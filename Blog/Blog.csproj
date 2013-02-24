@@ -159,11 +159,16 @@
     <Content Include="App_Data\Posts\42,2013,1,8,23,04,0,0,CSS,Optimisation.txt" />
     <Content Include="App_Data\Posts\43,2013,1,19,13,15,0,0.txt" />
     <Content Include="App_Data\Posts\44,2013,2,18,20,54,0,0,COM.txt" />
+    <Content Include="App_Data\Posts\45,2013,02,23,16,26,0,0,WinDbg.txt" />
     <Content Include="App_Data\Posts\5,2011,4,25,17,58,0,0,AutoMapper,Reflection.txt" />
     <Content Include="App_Data\Posts\6,2011,5,2,21,24,0,0.txt" />
     <Content Include="App_Data\Posts\7,2011,7,13,20,11,0,0,AutoMapper,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM.txt" />
     <Content Include="Content\Content.less" />
+    <Content Include="Content\Images\Posts\WinDbgASPError1.png" />
+    <Content Include="Content\Images\Posts\WinDbgASPError2.png" />
+    <Content Include="Content\Images\Posts\WinDbgASPError3.png" />
+    <Content Include="Content\Images\Posts\WinDbgASPError4.png" />
     <Content Include="Content\Sidebar.less" />
     <Content Include="Content\Footer.less" />
     <Content Include="Content\Header.less" />
