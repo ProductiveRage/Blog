@@ -63,12 +63,16 @@
 		var $content = $("div.Main div.Content");
 		$content.find("pre").addClass("prettyprint");
 		prettyPrint();
-		$content.find("img").each(function() {
-			var $this = $(this);
-			if ($this.width() > 500) {
-				$this.addClass("WideImage");
-			}
-		});
+		function ApplyWideImageClassAsRequired() {
+			$content.find("img").each(function() {
+				var $this = $(this);
+				if ($this.width() > 500) {
+					$this.addClass("WideImage");
+				}
+			});
+		}
+		ApplyWideImageClassAsRequired();
+		$(ApplyWideImageClassAsRequired);
 	</script>
 
 </body>
