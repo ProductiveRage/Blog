@@ -1,0 +1,102 @@
+﻿## WinDbg Rides Again
+
+I've been trying to get a .Net COM component working in a Classic ASP site and was consistently getting an error the first time it was accessed:
+
+> Active Server Pages error 'ASP 0115'
+>
+> Unexpected error
+>
+> /engine/default.asp
+>
+> A trappable error (E0434352) occurred in an external object. The script cannot continue running.
+>
+> Active Server Pages error 'ASP 0240'
+>
+> Script Engine Exception
+>
+> /engine/default.asp
+>
+> A ScriptEngine threw exception 'C0000005' in 'IActiveScript::Close()' from 'CActiveScriptEngine::FinalRelease()'.
+
+Pretty vague. But at least it's _consistently_ happening..
+
+Since it's not long since I've had to try to use WinDbg to investigate an issue on a live server (see [The WinDbg Blues](Post37)), I thought maybe I could apply it to this problem. So I wanted to go through the motions of attaching to the w3wp.exe process where the exception occured so that I could look into it.
+
+The first problem was that IIS is running in 32 bit mode for this site so I needed to use the 32 bit version of WinDbg. These can be obtained as part of the [Windows Software Development Kit (SDK) for Windows 8](http://msdn.microsoft.com/en-US/windows/hardware/hh852363). It doesn't matter if you're not running Windows 8, it doesn't matter if you don't want anything else in that download, it doesn't matter if you don't have .Net 4.5 installed and it warns you about it when you run the setup executable - select "Debugging Tools for Windows" when you're offered features to install and leave everything else unselected. This will install both the 64 and 32 bit versions of the tool.
+
+The next problem was that ".loadby sos mscorwks" returned the error
+
+> Unable to find module 'mscorwks'
+
+The answer to this was found at this MSDN blog post [Error loading sos.dll](http://blogs.msdn.com/b/rihamselim/archive/2012/03/04/error-loading-clr.aspx); to use ".loadby sos clr"
+
+### Now we're cooking!
+
+![WinDbg .loadby sos clr](/Content/Images/Posts/WinDbgASPError1.png "WinDbg .loadby sos clr")
+
+So now some progress is being made! The next step is to view all of the managed threads in the process with the command "!threads":
+
+![WinDbg viewing managed threads](/Content/Images/Posts/WinDbgASPError2.png "WinDbg viewing managed threads")
+
+Of these, one reports an exception. It's a bit vague-sounding, a "System.Reflection.TargetInvocationException" but more information can be gleaned with the PrintException command ("!pe"), specifying the address of the exception:
+
+![WinDbg PrintException TargetInvocationException](/Content/Images/Posts/WinDbgASPError3.png "WinDbg PrintException TargetInvocationException")
+
+Not *that* helpful-looking yet, but there's a hint to dig deeper and look at the InnerException:
+
+![WinDbg PrintException InnterException](/Content/Images/Posts/WinDbgASPError4.png "WinDbg PrintException InnerException")
+
+Well *now* we're getting somewhere! When the component tries to access the System.Web.HttpRuntime.Cache an exception is being raised. This message is a little cryptic and I have no idea why it would only be happening on first access but at least I have something to search for and it's not directly *my* code that's causing it!
+
+### Stack Overflowing..
+
+Google brings me to this Stack Overflow question as the most promising lead: [Attempted to read or write protected memory at System.Web.Hosting.UnsafeIISMethods.MgdGetSiteNameFromId](http://stackoverflow.com/questions/583932/attempted-to-read-or-write-protected-memory-at-system-web-hosting-unsafeiismetho). While there are no actual explanations, someone suggests that having encountered this they changed the build parameters to target "x86" specifically and the problem went away. Unfortunately, this was not the case for me. Instead, the HttpRuntime.Cache was only being used if the site didn't provide the COM component with a cache reference that it could stash things in - it was being used as a default cache mechanism. I changed the integration to remove this default and require a cache reference and now the problem has gone. Granted, I didn't *strictly-speaking* solve the underlying problem.. but I identified it and removed it with a solution I'm happier with overall, so I'm considering this a success! :)
+
+### WinDbg dumps in Visual Studio
+
+While I was investigating this, I came across this post from WinDbg guru Tess Ferrandez [First look at debugging .NET 4.0 dumps in Visual Studio 2010](http://blogs.msdn.com/b/tess/archive/2009/06/16/first-look-at-debugging-net-4-0-dumps-in-visual-studio-2010.aspx). Essentially saying that you can debug .Net 4 dumps direct in Visual Studio! Amazing!
+
+There are a couple of caveats:
+
+1. It must be a .Net 4 dump, 3.5 and earlier won't work
+1. It must be a debug build, release builds won't work
+1. This doesn't appear to be supported by Visual Studio Express
+
+**Side note:** Because I'm curious, I wanted to know what specifically about a release build it was that prevented it from working. From playing around with the settings, there are two things that appear to make the difference - in the project properties, under the Build tab, "Optimize code" must be unchecked and "Debug Info" must be set to "full" (rather than the default "pdb-only" in the "Advanced Build Settings" (accessed by cliking the "Advanced" button). Obviously, disabling optimisations means you're disabling the benefits of generating a release build..
+
+To try this out, I created the simplest program I could think of investigating:
+
+    using System;
+
+    namespace WinDbgDumpTest
+    {
+      class Program
+      {
+        static void Main(string[] args)
+        {
+          var a = 123;
+          Console.WriteLine(a);
+          Console.ReadLine();
+        }
+      }
+    }
+
+I built this and ran the executable direct from the build location in explorer (if I ran it from within Visual Studio then "WinDbgDumpTest.vshost.exe" appears in the process list, not "WinDbgDumpTest.exe", and this will be VS running the code rather than the code running on its own).
+
+I then attached WinDbg to the process and ran the command
+
+> .dump /ma c:\WinDbgDump.dmp
+
+which will "dump complete memory image" (according to the very useful [WinDbg / SOS Cheat Sheet](http://geekswithblogs.net/.NETonMyMind/archive/2006/03/14/72262.aspx)). If you don't specify "/ma" then only a "small memory image" will be dumped which will mean that Visual Studio tells you "The value of the local or argument {whatever} is unobtainable at this time" when you try to inspect variables. This caught me out for quite a while and started driving me mad until I realised what I'd done!
+
+### Loading the dump file
+
+As described in that post ([First look at debugging .NET 4.0 dumps in Visual Studio 2010](http://blogs.msdn.com/b/tess/archive/2009/06/16/first-look-at-debugging-net-4-0-dumps-in-visual-studio-2010.aspx)), the default symbol server can be enabled by going to Tools / Options / Debgging / Symbols and enabling the microsoft symbol server location.
+
+Then open the dump file in Visual Studio (nothing more complicated than going to File / Open and selecting the file).
+
+This should display some summary information but what we want to do from here is click on the "Debug with Mixed" link which will load the state into Visual Studio as if we'd run the code and it had stopped at the point at which the dump was taken. You'll like get a warning at this point such as "Windows has triggered a breakpoint in WinDbgDump.dmp", just click "Break".
+
+If you're examining a dump generated from code such as the example above, you'll want to select the Main Thread from the Threads window and then can jump to the current frame by clicking on the top entry in the Call Stack window.
+
+At this point, you can examine values or jump around the call stack or do pretty much anything (not including clicking continuing execution - you'll get an error "The debugger cannot continue running the process. This operation is not supported when debugging dump files.") you could do if you were in the middle of pausing execution of code executed by Visual Studio - much easier than trying to poke around values in WinDbg! In the example here, I could hover over "a" and see that its value was 123 (similarly, this information is visible in the "Locals" window). 
