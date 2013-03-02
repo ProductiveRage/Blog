@@ -1,0 +1,205 @@
+﻿## Extending the CSS Minifier
+
+I have a [CSS Minifier project hosted on Bitbucket](https://bitbucket.org/DanRoberts/cssminifier) which I've used for some time to compile and minify the stylesheet contents for this blog but I've recently extended its functionality after writing the [Non-cascading CSS: A revolution!](Post42) post.
+
+The original, fairly basic capabilities were to flatten imports into a single request and then to remove comments and minify the content to reduce bandwidth requirements in delivery. The CSSMinifierDemo project in solution above also illustrated implementing support for 304 responses (for when the Client already has the latest content in their browser cache) and compression (gzip or deflate) handling. I wrote about this in the [On-the-fly CSS Minification](Post20) post.
+
+Some time after that I incorporated LESS support by including a reference to [dotLess](http://www.dotlesscss.org/).
+
+However, now I think it has some features which aren't quite as bog standard and so it's worth talking about again!
+
+### Source Mapping
+
+One of the difficulties with "debugging" styles in large and complex sheets when they've been combined and minified (and compiled, in the case of LESS content) is tracking down precisely where a given still originated from when you're looking at it in Firebug or any of the other web developer tools in the browsers.
+
+With javascript - whether it be minified, compiled from CoffeeScript or otherwise manipulated before being delivered the Client - there is support in modern browsers for "Source Mapping" where metadata is made available that can map anywhere in the processed content back to the original. Clever stuff. (There's a decent started article on HTML5 Rocks: [Introduction to Javascript Source Maps](http://www.html5rocks.com/en/tutorials/developertools/sourcemaps/)).
+
+However, there's (currently, if I'm being optimistic) no such support for CSS.
+
+So I've come up with a workaround!
+
+If I have a file Test1.css
+
+    @import "Test2.css";
+
+    body
+    {
+      margin: 0;
+      padding: 0;
+    }
+
+and Test2.css
+
+    h2
+    {
+      color: blue;
+
+      a:hover
+      {
+        text-decoration: none;
+      }
+    }
+
+then these would be compiled (since Test2.css uses LESS nested selectors) down to
+
+    body{margin:0;padding:0}
+    h2{color:blue}
+    h2 a:hover{text-decoration:none}
+
+(I've added line breaks between style blocks for readability);
+
+My approach is to inject additional pseudo selectors into the content that indicate which file and line number a style block came from in the pre-processed content. The selectors will be valid for CSS but shouldn't relate to any real elements in the markup.
+
+    #Test1.css_3,body{margin:0;padding:0}
+    #Test2.css_1,h2{color:blue}
+    #Test2.css_5,h2 a:hover{text-decoration:none}
+
+Now, when you look at any given style in the web developer tools you can immediately tell where in the source content to look!
+
+The **LessCssLineNumberingTextFileLoader** class takes two constructor arguments; one is the file loader reference to wrap and the second is a delegate which takes a relative path (string) and a line number (int) and returns a string that will be injected into the start of the selector.
+
+This isn't quite without complications, unfortunately, when dealing with nested styles in LESS content. For example, since this
+
+    #Test2.css_1,h2
+    {
+      color: blue;
+
+      #Test2.css_5,a:hover
+      {
+        text-decoration: none;
+      }
+    }
+
+is translated by the compiler into (disabling minification)
+
+    #Test2.css_1, h2
+    {
+      color: blue;
+    }
+
+    #Test2.css_1 #Test2.css_5,
+    #Test2.css_1 a:hover,
+    h2 #Test2.css_5
+    h2 a:hover
+    {
+      text-decoration: none;
+    }
+
+The LESS translator has had to multiply out the comma separated selectors "#Test2.css\_1" and "h2" across the nested selectors "#Test2.css\_5" and "a:hover" since this is the only way it *can* be translated into CSS and be functionality equivalent.
+
+But this isn't as helpful when it comes to examining the styles to trace back to the source. So additional work is required to add another processing step to remove any unnecessary markers. This can be dealt with by the **InjectedIdTidyingTextFileLoader** but it requires that you keep track of all of the markers inserted with the **LessCssLineNumberingTextFileLoader** (which isn't a massive deal if the delegate that is passed to the **LessCssLineNumberingTextFileLoader** also records the markers it has provided).
+
+The good news is that the class **CSSMinifier.FileLoaders.Factories.EnhancedNonCachedLessCssLoaderFactory** in the [CSS Minifier repo](https://bitbucket.org/DanRoberts/cssminifier) will instantiate a LESS file loader / processor that will apply all of the functionality that I'm going to cover in this post (including this source mapping) so if it's not clear from what I've described here how to implement it, you can either use that directly or look at the code to see how to configure it.
+
+### Body-scope overhead removing
+
+Rule 5 in [Non-cascading CSS](Post42) states that
+
+> All files other than the reset and theme sheets should be wrapped in a body "scope"
+
+This is so that LESS values and mixins can be declared in self-contained files that can be safely included alongside other content, safe in the knowledge that the values and mixins are restricted in the scope to the containing file. (See that post for more details).
+
+The disadvantage of this is the overhead of the additional body tag included in all of the resulting selectors. If we extend the earlier example
+
+    body
+    {
+      h2
+      {
+        color: blue;
+
+        a:hover
+        {
+          text-decoration: none;
+        }
+      }
+    }
+
+it will compile down to
+
+    body h2{color:blue}
+    body h2 a:hover{text-decoration:none}
+
+The **LessCssOpeningBodyTagRenamer** will parse the file's content to determine if it is wrapped in a body tag (meaning that the only content outside of the body tag is whitespace or comments) and replace the text "body" of the tag with a given value. So we may get it translated into
+
+    REPLACEME
+    {
+      h2
+      {
+        color: blue;
+
+        a:hover
+        {
+          text-decoration: none;
+        }
+      }
+    }
+
+and consequently
+
+    REPLACEME h2{color:blue}
+    REPLACEME h2 a:hover{text-decoration:none}
+
+This allows the **ContentReplacingTextFileLoader** to remove all references to "REPLACEME " when the LESS processing and minification has been completed. Leaving just
+
+    h2{color:blue}
+    h2 a:hover{text-decoration:none}
+
+The string "REPLACEME" and "REPLACEME " (with the trailing space) are specified as constructor arguments for the **LessCssOpeningBodyTagRenamer** and **ContentReplacingTextFileLoader** so different values may be used if you think something else would be more appropriate.
+
+### Media Query Grouping
+
+In order to follow [Non-cascading CSS](Post42) Rule 3
+
+> No bare selectors may occur in the non-reset-or-theme rules (a bare selector may occur within a nested selector so long as child selectors are strictly used)
+
+media queries must be nested inside style blocks rather than existing in separate files that rearrange elements for different breakpoints (which is a common pattern I've seen used). This makes the maintenance of the styles much easier as the styles for a given element are arranged together but it means that there may end up being many media-query-wrapped sections in the final content where many sections have the same criteria (eg. "@media screen and (max-width:35em)").
+
+I'm sure that I've read somewhere that on some devices, having many such sections can be expensive since they all have to evaluated. I think it mentioned a particular iPhone model but I can't for the life of me find the article now! But if this is a concern then we can take all styles that are media-query-wrapped and merge any media queries whose criteria are identical using the **MediaQueryGroupingCssLoader**.
+
+Note that this will move all of the media query sections to the end of the style content. If your styles rely on them appearing in the final output in the same order as they appear in the source then this may pose a problem. But this is one of the issues addressed by the [Non-cascading CSS](Post42) rules, so if they're followed then this manipulation will always be safe.
+
+### More to come!
+
+As part of this work, I've written a CSS / LESS parser which can be found on Bitbucket: [CSS Parser](https://bitbucket.org/DanRoberts/cssparser). It will lazily evaluate the content, so if you only need to examine the first few style declarations of a file then only the work required to parse those styles will be performed. It's used by the **LessCssOpeningBodyTagRenamer** and I intend to use it to write a validator that will check which of my Non-cascading CSS rules are or aren't followed by particular content. I might write more about the parser then.
+
+In the meantime, if you want to give it a go for any reason then clone that repository and call
+
+    CSSParser.Parser.ParseLESS(content);
+
+giving it a string of content and getting back an IEnumerable&lt;CategorisedCharacterString&gt;.
+
+    public class CategorisedCharacterString
+    {
+      public CategorisedCharacterString(
+        string value,
+        int indexInSource, 
+        CharacterCategorisationOptions characterCategorisation);
+
+      public CharacterCategorisationOptions CharacterCategorisation { get; }
+
+      // Summary: This is the location of the start of the string in the source data
+      public int IndexInSource { get; }
+
+      // Summary: This will never be null or an empty string
+      public string Value { get; }
+    }
+
+    public enum CharacterCategorisationOptions
+    {
+      Comment,
+      CloseBrace,
+      OpenBrace,
+      SemiColon,
+
+      // Summary: Either a selector (eg. "#Header h2") or a style property (eg. "display")
+      SelectorOrStyleProperty,
+    
+      // Summary: This is the colon between a Style Property and Value (not any colons that may exist in a
+      // media query, for example)
+      StylePropertyColon,
+    
+      Value,
+      Whitespace
+    }
+
+The content is parsed as that enumerable set is iterated through, so when you stop enumerating it stops processing.
