@@ -303,3 +303,5 @@ That explains the gzip error - the content is being reported as compressed when 
 I presume that the compression settings in IIS are somehow interfering here but unfortunately I've not been able to definitively find the cause or if I should do anything in configuration. My Google-fu is failing me today :(
 
 However, the solution in the above code is to handle the response compression in the CSSController. In the SetResponseCacheHeadersForSuccess method the "Accept-Encoding" request header is tested for gzip and deflate and will return content accordingly by setting the Response.Filter to be either a GZipStream or DeflateStream. This has solved the problem! And so I'm going to leave my root-cause investigation for another day :)
+
+**Note:** You can find the source code to this in one of my repositories at Bitbucket: [The CSS Minifier](https://bitbucket.org/DanRoberts/cssminifier).
