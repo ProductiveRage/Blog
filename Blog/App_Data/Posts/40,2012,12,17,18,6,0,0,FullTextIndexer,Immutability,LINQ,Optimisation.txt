@@ -7,7 +7,7 @@ I wrote about the basic building blocks of the Index Generator, went off on a fe
 * [The Full Text Indexer](Post30)
 * [The Full Text Indexer - Adding and Subtracting](Post31)
 * [The Full Text Indexer - Going International!](Post32)
-* [The Full Text Indexer - Token Breaker and String Normaliser variations](Post36)
+* [The Full Text Indexer - Token Breaker and String Normaliser variations (+AutoComplete)](Post36)
 
 Along the journey, I got to learn a few new things, take advantage of other's research and have fun trying to improve the performance of some of the bottlenecks in the index generation process.
 
