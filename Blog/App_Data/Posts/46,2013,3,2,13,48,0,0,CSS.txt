@@ -1,0 +1,47 @@
+﻿## Non-cascading CSS: The follow-up
+
+This is related to the post [Non-cascading CSS: A revolution](Post42). In that I talked about 9 proposed rules to write genuinely reusable and maintainable CSS (inspired by [www.lispcast.com/cascading-separation-abstraction](http://www.lispcast.com/cascading-separation-abstraction)):
+
+1. A standard (html5-element-supporting) reset sheet is compulsory, only bare selectors may be specified in it
+1. A single "common" or "theme" sheet will be included with a minimum of default styles, only bare selectors may be specified in it
+1. No bare selectors may occur in the non-reset-or-theme rules (a bare selector may occur within a nested selector so long as child selectors are strictly used)
+1. Stylesheets are broken out into separate files, each with a well-defined purpose
+1. All files other than the reset and theme sheets should be wrapped in a body "scope"
+1. No selector may be repeated in the rules
+1. All measurements are described in pixels
+1. Margins, where specified, must always be fully-defined
+1. Border and Padding may not be combined with Width
+
+Shortly after that I re-wrote the styling for this blog to ensure that the principles held sound (since I've started keeping my blog in BitBucket, you can find it [here](https://bitbucket.org/DanRoberts/blog)). And I'm happy to say that they did! In fact, after a very short adjustment period, it felt very natural and somewhat reassuring with its structure. It felt like writing good code rather than the CSS I've written before that left functional but somewhat lacking.. something. (And trust me, I've written a *lot* over the years).
+
+Each file felt comfortably self-contained and logical. I was particularly happy with how simple the layout.less file was, despite handling the media queries to render the content differently on smaller screens.
+
+### Amendments
+
+Having talked to more people and considered the uses in the context of particular scenarios I still feel confident that they nearly all hold firm. With one exception..
+
+> All measurements are described in pixels
+
+This rule has so much promise and is able to deliver so much if it can be applied everywhere. As outlined in the [original post](Post42), it solves the compound issue with percentages or ems being applied to multiple layers (so a paragraph's font-size of 80% will be affected by its parent div element's font-size of 90%, for example).
+
+It has the potential to make some responsive designs I've seen easier to implement. Some current accepted wisdom is that all dimensions should be specified in percentages so that the design is "fluid". Using the example of a page split into two columns such that there's a main content area and a side bar, in many cases it's entirely possible to have the sidebar be fixed width and then leave the main content area to fill the remaining width.
+
+![Fixed Width Sidebar Fluid Design](/Content/Images/Posts/FluidLayouts.png "Fixed Width Sidebar Fluid Design")
+
+This has the benefit that the narrower side bar controls can be styled more predictably - they don't have to deal with as much jiggling about as the available horizontal resolution varies. And often in scenarios like this, the space and element arrangement of side bars can be quite tight. If there is a search image button, for example, you must make sure that it can't become too wide to fit into the available width as the width is reduced with a fluid-width side bar. The content area, on the other hand, is more likely to lend itself to flexibility due to its wider nature.
+
+For common breakpoints less-than-480px, up-to-600px, up-to-768px, up-to-900px and greater-than-900px, there may be a fluid layout between 600px and 900px. Below 600px the design may have most elements full width (similar to this blog in reduced-width formatting) and above 900px it's common to be fixed width to prevent content areas from becoming too wide and lines of text becoming too long. If the side bar is 250px wide, say, the the content area will vary between 350px and and 650px but the formatting of the side bar need not vary. There may be an argument to have a mid-way point for the side bar to be 300px wide when the horizontal resolution is greater than 768px whilst 200px wide between 600px and 768px. Now there are two variations for the side bar formatting but the content width only varies between 400px and 600px.
+
+I think there's a lot of mileage to be had from this joint fixed-width / fluid-layout combination.
+
+However, there is one point at which I've become stuck. I've seen designs which have a horizontal gallery of items: imagine a row of images with captions beneath them. In a similar design to that shown above, these would appear below the content area - so within the 400-600px wide region. The design requires that four items be displayed within the gallery at all times. The current approach I've seen to implementing this is for a wrapper around the gallery to effectively be 100% of the available width and then for each of the four items to have a width of 25%. This means that they resize as the available width changes. The image for each item has a width of 100% which ensures that it fills the space it has *within* the 25% section.
+
+![Fluid Width Gallery Problem](/Content/Images/Posts/FluidLayoutsGallery.png "Fluid Width Gallery Problem")
+
+I don't really like this because in order for the image to fit within its gallery item container, it *has* to specify this 100% width. But I can't see any way other than this approach to make it work. I'd like a way to specify a fixed width for the gallery items and for them to arrange themselves with horizontal whitespace to stretch across the whole width, possibly with a change to the fixed width at the 768px breakpoint as suggested for side bar above. This would make styling the items much simpler and predictable. But unfortunately I haven't quite managed to come up with a way to do this in CSS yet! So I might have to admit to relaxing this rule in some cases. That's not to say that I've completely given up on a way to work round this, at which point maybe the rule can be promoted again!
+
+One other note about "pixels everywhere"; I'm definitely onboard with the idea with the principle of specifying media queries in ems, as mentioned in my first post about this (and as taken straight from here: [The EMs have it: Proportional Media Queries FTW!](http://blog.cloudfour.com/the-ems-have-it-proportional-media-queries-ftw/)). I've done that with the breakpoint in my blog formatting so that it's not a pixel width that I break at but 35em. This means that if the browser font size is increased sufficiently that the breakpoint will be passed and the formatting changed. I've noticed that Firefox will do this immediately when the font size becomes large enough but with Chrome the page has to be refreshed after increasing the font the blog, then the reduced-width layout would be used).
+
+### Return of the CSS Minifier
+
+I'm going to write another post now about some changes to the CSS Minifier project that I've written about before ([On-the-fly CSS Minification](Post20)). Some time ago I included a reference to [dotLess](http://www.dotlesscss.org/) to enable the compilation of LESS but I've now added further functionality such as a form of source mapping (indicating where styles in compiled output originated from), a way to address the overhead of Rule 5: *All files other than the reset and theme sheets should be wrapped in a body "scope"* and a way to automatically group media queries. See [Extending the CSS Minifier](Post47).
