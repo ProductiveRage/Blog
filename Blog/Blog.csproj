@@ -160,11 +160,15 @@
     <Content Include="App_Data\Posts\43,2013,1,19,13,15,0,0.txt" />
     <Content Include="App_Data\Posts\44,2013,2,18,20,54,0,0,COM.txt" />
     <Content Include="App_Data\Posts\45,2013,02,23,16,26,0,0,WinDbg.txt" />
+    <Content Include="App_Data\Posts\46,2013,3,2,13,48,0,0,CSS.txt" />
+    <Content Include="App_Data\Posts\47,2013,3,2,15,02,0,0,CSS.txt" />
     <Content Include="App_Data\Posts\5,2011,4,25,17,58,0,0,AutoMapper,Reflection.txt" />
     <Content Include="App_Data\Posts\6,2011,5,2,21,24,0,0.txt" />
     <Content Include="App_Data\Posts\7,2011,7,13,20,11,0,0,AutoMapper,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM.txt" />
     <Content Include="Content\Content.less" />
+    <Content Include="Content\Images\Posts\FluidLayouts.png" />
+    <Content Include="Content\Images\Posts\FluidLayoutsGallery.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError1.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError2.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError3.png" />
