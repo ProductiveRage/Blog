@@ -3,9 +3,9 @@
 In this final part of this mini series there are two enhancements I want to add:
 
 1. For cases where the same interface may be applied to multiple objects, I want to replace the WrapObject method (which applies the interface to a single reference) with a GenerateInterfaceApplier method which returns an object that applies a specified interface to any given reference but only generating the IL once
-1. The ability to recursively wrap returned data - eg.
+1. The ability to recursively wrap returned data
 
-be able to apply ITest to the ExampleObject reference:
+eg. be able to apply ITest to the ExampleObject reference:
 
     public interface ITest
     {
