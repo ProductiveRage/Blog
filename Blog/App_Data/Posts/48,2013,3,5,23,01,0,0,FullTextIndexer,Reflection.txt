@@ -1,0 +1,86 @@
+﻿## The Full Text Indexer - Automating Index Generation
+
+In the introductory [Full Text Indexer](Post30) post I showed how to build an Index Generator by defining "Content Retrievers" for each property of the source data type. I didn't think that, in itself, this was a huge amount of code to get started but it did have a generous spattering of potentially-cryptic class instantiations that implied a large assumed knowledge before you could use it.
+
+With that in mind, I've added a project to the [Full Text Indexer (Bitbucket)](https://bitbucket.org/DanRoberts/full-text-indexer/) solution that can automate this step by applying a combination of reflection, to examine the source type, and default values for the various dependencies (eg. the string normaliser, token breaker, etc..).
+
+This means that indexing data can now be as simple as:
+
+    var indexGenerator = (new AutomatedIndexGeneratorFactoryBuilder<Post, int>()).Get().Get();
+    var index = indexGenerator.Generate(posts.ToNonNullImmutableList());
+
+where data is a set of Post instances (the ToNonNullImmutableList call is not required if the set is already a NonNullImmutableList&lt;Post&gt;).
+
+    public class Post
+    {
+      public int Id { get; set; }
+      public string Title { get; set; }
+      public string Content { get; set; }
+      public IEnumerable<Comment> Comments { get; set; }
+    }
+
+    public class Comment
+    {
+      public string Author { get; set; }
+      public string Content { get; set; }
+    }
+
+The two "Get" calls are because the example uses an **AutomatedIndexGeneratorFactoryBuilder** which is able to instantiate an **AutomatedIndexGeneratorFactory** using a handful of default (explained below). The **AutomatedIndexGeneratorFactory** is the class that processes the object model to determine how to extract text data. Essentially it runs through the object graph and looks for text properties, working down through nested types or sets of nested types (like the IEnumerable&lt;Comment&gt; in the Post above).
+
+So an AutomatedIndexGeneratorFactory is returned from the first "Get" call and this returns an IIndexGenerator&lt;Post, int&gt; from the second "Get".
+
+    // This means we can straight away query data like this!
+    var results = index.GetMatches("potato");
+
+*(Note: Ignore the fact that I'm using mutable types for the source data here when I'm always banging on about immutability - it's just for brevity of example source code :)*
+
+### Tweaking the defaults
+
+This may be enough to get going (because once you have an IIndexGenerator you can start call GetMatches and retrieving search results straight away, and if your data changes then you can update the index reference with another call to "indexGenerator.Generate(posts.ToNonNullImmutableList());").
+
+But there are a few simple methods built in to adjust some of the common parameters - eg. to give greater weight to text matched in Post Titles I can specify:
+
+    var indexGenerator = (new AutomatedIndexGeneratorFactoryBuilder<Post, int>())
+      .SetWeightMultiplier("DemoApp.Post", "Title", 5)
+      .Get()
+      .Get();
+
+If, for some reason, I decide that the Author field of the Comment set type shouldn't be included in the index I can specify:
+
+    var indexGenerator = (new AutomatedIndexGeneratorFactoryBuilder<Post, int>())
+      .SetWeightMultiplier("DemoApp.Post.Title", 5)
+      .Ignore("DemoApp.Comment.Author")
+      .Get()
+      .Get();
+
+If I didn't want *any* comments content then I could ignore the Comments property of the Post object entirely:
+
+    var indexGenerator = (new AutomatedIndexGeneratorFactoryBuilder<Post, int>())
+      .SetWeightMultiplier("DemoApp.Post.Title", 5)
+      .Ignore("DemoApp.Post.Comments")
+      .Get()
+      .Get();
+
+(There are overloads for SetWeightMultiplier and Ignore that take a PropertyInfo argument instead of the strings if that's more appropriate for the case in hand).
+
+### Explaining the defaults
+
+The types that the **AutomatedIndexGeneratorFactory** requires are a **Key Retriever** delegate, a **Key Comparer**, a **String Normaliser**, a **Token Breaker**, a **Weighted Entry Combiner** and a **Token Weight Determiner**.
+
+The first is the most simple - it needs a way to extract a Key for each source data instance. In this example, that's the int "Id" field. We have to specify the type of the source data (Post) and type of Key (int) in the generic type parameters when instantiating the **AutomatedIndexGeneratorFactoryBuilder**. The default behaviour is to look for fields named "Key" or "Id" on the data type that are assignable to the type of the key. So in this example, it just grabs the "Id" field from each Post. If alternate behaviour was required then the **SetKeyRetriever** method may be called on the factory builder to explicitly define a Func&lt;TSource, TKey&gt; to do the job.
+
+The default **Key Comparer** uses the **DefaultEqualityComparer&lt;TKey&gt;** class, which just checks for equality using the Equals class of TKey. If this needs overriding for any reason, then the **SetKeyComparer** method will take IEqualityComparer&lt;TKey&gt; to do the job.
+
+The **String Normaliser** used is the **EnglishPluralityStringNormaliser** wrapping a **DefaultStringNormaliser**. I've written about these in detail before (see [The Full Text Indexer - Token Breaker and String Normaliser variations](Post36)). The gist is that punctuation, accented characters, character casing and pluralisation are all flattened so that common expected matches can be made. If this isn't desirable, there's a **SetStringNormaliser** method that takes an IStringNormaliser. There's a pattern developing! :)
+
+The **Token Breaker** dissects text content into individual tokens. The default will break on any whitespace, brackets (round, triangular, square or curly) and other punctuation that tends to define word breaks such as commas, colons, full stops, exclamation marks, etc.. (but not apostrophes, for example, which mightn't mark word breaks). There's a **SetTokenBreaker** which takes an ITokenBreak reference if you want it!
+
+The **Weighted Entry Combiner** describes the calculation for combined match weight when multiple tokens for the same Key are found. If, for example, I have the word "article" once in the Title of a Post (with weight multipler 5 for Title, as in the examples above) and the same word twice in the Content, then how should these be combined into the final match weight for that Post when "article" is searched for? Should it be the greatest value (5)? Should it be the sum of all of the weights (5 + 1 + 1 = 7)? The **Weighted Entry Combiner** takes a set of match weights and must return the final combined value. The default is to sum them together, but there's always the **SetWeightedEntryCombiner** method if you disagree!
+
+Nearly there.. the **Token Weight Determiner** specifies what weight each token that is taken extracted from the text content should be given. By default, tokens (ie. individual words from the content) are given a weight of 1 for each match unless they are from a property to ignore (in which they are skipped) or they are from a property that was specified by the **SetWeightCombiner** method, in which case they will take the value provided there. Any English stop words (common and generally irrelevant words such as "a", "an" and "the") have their weights divided by 100 (so they're not removed entirely, but matches against them count much less than matches for anything else). This entire process can be replaced by calling **SetTokenWeightDeterminer** with an alternate implementation (the property that the data has been extracted from will be provided so different behaviour per-source-property can be supported, if required).
+
+### Phew!
+
+Well done if you got drawn in with the introductory this-will-make-it-really-easy promise and then actually got through the detail as well! :)
+
+I probably went deeper off into a tangent on the details than I really needed to for this post. But if you're somehow desperate for more then I compiled my previous posts on this topic into a [Full Text Indexer Round-up](Post40) where there's plenty more to be found!

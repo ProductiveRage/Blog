@@ -162,6 +162,7 @@
     <Content Include="App_Data\Posts\45,2013,02,23,16,26,0,0,WinDbg.txt" />
     <Content Include="App_Data\Posts\46,2013,3,2,13,48,0,0,CSS.txt" />
     <Content Include="App_Data\Posts\47,2013,3,2,15,02,0,0,CSS.txt" />
+    <Content Include="App_Data\Posts\48,2013,3,5,23,01,0,0,FullTextIndexer,Reflection.txt" />
     <Content Include="App_Data\Posts\5,2011,4,25,17,58,0,0,AutoMapper,Reflection.txt" />
     <Content Include="App_Data\Posts\6,2011,5,2,21,24,0,0.txt" />
     <Content Include="App_Data\Posts\7,2011,7,13,20,11,0,0,AutoMapper,LINQ,Reflection.txt" />
