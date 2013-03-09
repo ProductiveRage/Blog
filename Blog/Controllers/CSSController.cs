@@ -5,8 +5,9 @@ using System.Linq;
 using System.Web;
 using System.Web.Caching;
 using System.Web.Mvc;
-using CSSMinifier;
+using CSSMinifier.Caching;
 using CSSMinifier.FileLoaders;
+using CSSMinifier.FileLoaders.Factories;
 using CSSMinifier.FileLoaders.LastModifiedDateRetrievers;
 using CSSMinifier.Logging;
 using CSSMinifier.PathMapping;
@@ -54,7 +55,11 @@ namespace Blog.Controllers
 		/// will be identified as stale and re-generated. The cached content will likewise be invalidated and updated if any files in the folder have changed since the
 		/// date recorded for the cached data. GZip and Deflate compression of the response are supported where specified in Accept-Encoding request headers.
 		/// </summary>
-		private ActionResult Process(string relativePath, IRelativePathMapper relativePathMapper, ICache cache, DateTime? lastModifiedDateFromRequest)
+		private ActionResult Process(
+			string relativePath,
+			IRelativePathMapper relativePathMapper,
+			ICacheThingsWithModifiedDates<TextFileContents> cache,
+			DateTime? lastModifiedDateFromRequest)
 		{
 			if (string.IsNullOrWhiteSpace(relativePath))
 				throw new ArgumentException("Null/blank relativePath specified");
@@ -75,16 +80,14 @@ namespace Blog.Controllers
 				return Content("", "text/css");
 			}
 
-			var individualFileLoader = new SimpleTextFileContentLoader(relativePathMapper);
-
-			ITextFileLoader combiningStyleLoader;
-			if (relativePath.EndsWith(".less", StringComparison.InvariantCultureIgnoreCase))
-				combiningStyleLoader = GetLESSLoader(individualFileLoader, new NullLogger());
-			else
-				combiningStyleLoader = GetCSSLoader(individualFileLoader, new NullLogger());
+			var cssLoader = (new EnhancedNonCachedLessCssLoaderFactory(
+				relativePathMapper,
+				ErrorBehaviourOptions.LogAndRaiseException,
+				new NullLogger()
+			)).Get();
 			
 			var modifiedDateCachingStyleLoader = new CachingTextFileLoader(
-				combiningStyleLoader,
+				cssLoader,
 				lastModifiedDateRetriever,
 				cache
 			);
@@ -100,55 +103,6 @@ namespace Blog.Controllers
 			}
 			SetResponseCacheHeadersForSuccess(content.LastModified);
 			return Content(content.Content, "text/css");
-		}
-
-		private ITextFileLoader GetCSSLoader(ITextFileLoader individualFileLoader, ILogEvents logger)
-		{
-			if (individualFileLoader == null)
-				throw new ArgumentNullException("individualFileLoader");
-			if (logger == null)
-				throw new ArgumentNullException("logger");
-
-			return new MinifyingCssLoader(
-				new SameFolderImportFlatteningCssLoader(
-					individualFileLoader,
-					SameFolderImportFlatteningCssLoader.ContentLoaderCommentRemovalBehaviourOptions.ContentIsUnprocessed,
-					SameFolderImportFlatteningCssLoader.ErrorBehaviourOptions.DisplayWarningAndIgnore,
-					SameFolderImportFlatteningCssLoader.ErrorBehaviourOptions.DisplayWarningAndIgnore,
-					logger
-				)
-			);
-		}
-
-		private ITextFileLoader GetLESSLoader(ITextFileLoader individualFileLoader, ILogEvents logger)
-		{
-			if (individualFileLoader == null)
-				throw new ArgumentNullException("individualFileLoader");
-			if (logger == null)
-				throw new ArgumentNullException("logger");
-
-			var scopeRestrictingBodyTagReplaceName = "REPLACEME";
-			return new MediaQueryGroupingCssLoader(
-				new ContentReplacingTextFileLoader(
-					new DotLessCssCssLoader(
-						new SameFolderImportFlatteningCssLoader(
-							new LessCssOpeningBodyTagRenamer(
-								individualFileLoader,
-								scopeRestrictingBodyTagReplaceName
-							),
-							SameFolderImportFlatteningCssLoader.ContentLoaderCommentRemovalBehaviourOptions.ContentIsUnprocessed,
-							SameFolderImportFlatteningCssLoader.ErrorBehaviourOptions.DisplayWarningAndIgnore,
-							SameFolderImportFlatteningCssLoader.ErrorBehaviourOptions.DisplayWarningAndIgnore,
-							logger
-						),
-						DotLessCssCssLoader.LessCssMinificationTypeOptions.Minify,
-						DotLessCssCssLoader.ReportedErrorBehaviourOptions.LogAndRaiseException,
-						logger
-					),
-					scopeRestrictingBodyTagReplaceName + " ",
-					""
-				)
-			);
 		}
 
 		/// <summary>
@@ -228,7 +182,7 @@ namespace Blog.Controllers
 			}
 		}
 
-		private class NonExpiringASPNetCacheCache : ICache
+		private class NonExpiringASPNetCacheCache : ICacheThingsWithModifiedDates<TextFileContents>
 		{
 			private Cache _cache;
 			public NonExpiringASPNetCacheCache(Cache cache)
@@ -240,23 +194,35 @@ namespace Blog.Controllers
 			}
 
 			/// <summary>
-			/// This will return null if the entry is not present in the cache. It will throw an exception for null or blank cacheKey.
+			/// This will return null if the entry is not present in the cache. It will throw an exception for null or blank cacheKey. If data was found in the cache for the
+			/// specified cache key that was not of type T then null will be returned, but whether the invalid entry is removed from the cache depends upon the implementation.
 			/// </summary>
-			public object this[string cacheKey]
+			public TextFileContents this[string cacheKey]
 			{
 				get
 				{
 					if (string.IsNullOrWhiteSpace(cacheKey))
 						throw new ArgumentException("Null/blank cacheKeys specified");
 
-					return _cache[cacheKey];
+					var cachedData = _cache[cacheKey];
+					if (cachedData == null)
+						return null;
+
+					var cachedTextFileContentsData = cachedData as TextFileContents;
+					if (cachedTextFileContentsData != null)
+						return cachedTextFileContentsData;
+				
+					// If something's inserted invalid data into the cache then remove it, since whatever's call this getter will probably want to insert its own data
+					// after it does the work to generate it (and the Add method won't overwrite data already in the cache)
+					Remove(cacheKey);
+					return null;
 				}
 			}
 
 			/// <summary>
 			/// The caching mechanism (eg. cache duration) is determine by the ICache implementation. This will throw an exception for null or blank cacheKey or null value.
 			/// </summary>
-			public void Add(string cacheKey, object value)
+			public void Add(string cacheKey, TextFileContents value)
 			{
 				if (string.IsNullOrWhiteSpace(cacheKey))
 					throw new ArgumentException("Null/blank cacheKeys specified");
