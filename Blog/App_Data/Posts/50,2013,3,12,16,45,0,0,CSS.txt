@@ -1,0 +1,321 @@
+﻿## CSS Minifier - Caching
+
+A week or so ago I wrote about [Extending the CSS Minifier](Post47) and some new facilities in my project on Bitbucket (the imaginatively-named [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier)). Particularly the **EnhancedNonCachedLessCssLoaderFactory** which you can use to get up and running with all of the fancy new features in no time!
+
+However, I didn't mention anything about the caching mechanisms, which are important when there's potentially so much processing required.
+
+This won't take long, but it's worth blasting through. It's also worth noting that the example code in the CSSMinifierDemo is the solution does all of this, so if you want to see it all one place then that's a good place to start (in the CSSController).
+
+### Last-modified-dates
+
+The **EnhancedNonCachedLessCssLoaderFactory** utilises the **SameFolderImportFlatteningCssLoader** which will run through the CSS / LESS files and pull in any content fom "import" statements inline - effectively flattening them all into one chunk of stylesheet content.
+
+A built-in (and intentional) limitation of this class is that all imports must come from the same folder as the source file. This means you can't import stylesheets from any other folder or any server (if you were going to load a resets sheet from a CDN, perhaps).
+
+The benefit of this restriction is that there is a cheap "short cut" that can be taken to determine when any cached representations of the data should be expired; just take the most recent last-modified-date of any file in that folder.
+
+This has the disadvantage that a file in that folder may be updated that isn't related to the stylesheet being loaded but that a cache expiration will still be performed. The advantage, though, is that we don't have to fully process a file (and all of its imports) in order to determine when any of the files that it imports actually *was* updated!
+
+This last-modified-date can be used for returning 304 responses when the Client already has the up-to-date content and may also be used to cache stylesheet processing results on the server for Clients without the content in their browser caches.
+
+### In-memory caching
+
+The simplest caching mechanism uses the **CachingTextFileLoader** which wraps a content loader (that returned by the **EnhancedNonCachedLessCssLoaderFactory**, for example) and takes references to an **ILastModifiedDateRetriever** and **ICanCacheThingsWithModifiedDates&lt;TextFileContents&gt;**.
+
+    public interface ILastModifiedDateRetriever
+    {
+      DateTime GetLastModifiedDate(string relativePath);
+    }
+    
+    // Type param must be a class (not a value type) so that null may be returned from the getter to indicate
+    // that the item is not present in the cache
+    public interface ICacheThingsWithModifiedDates<T> where T : class, IKnowWhenIWasLastModified
+    {
+      T this[string cacheKey] { get; }
+      void Add(string cacheKey, T value);
+      void Remove(string cacheKey);
+    }
+    
+    public interface IKnowWhenIWasLastModified
+    {
+      DateTime LastModified { get;  }
+    }
+
+If you're using the **SameFolderImportFlatteningCssLoader** then the **SingleFolderLastModifiedDateRetriever** will be ideal for the first reference. It requires an **IRelativePathMapper** reference, but so does the **EnhancedNonCachedLessCssLoaderFactory**, and an ASP.Net implementation is provided below. An example ICacheThingsWithModifiedDates implementation for ASP.Net is also provided:
+
+    // The "server" reference passed to the constructor may be satisfied with the Server reference available
+    // in an ASP.Net MVC Controller or a WebForms Page's Server reference may be passed if it's wrapped
+    // in an HttpServerUtilityWrapper instance - eg. "new HttpServerUtilityWrapper(Server)"
+    public class ServerUtilityPathMapper : IRelativePathMapper
+    {
+      private HttpServerUtilityBase _server;
+      public ServerUtilityPathMapper(HttpServerUtilityBase server)
+      {
+        if (server == null)
+          throw new ArgumentNullException("server");
+
+        _server = server;
+      }
+
+      public string MapPath(string relativePath)
+      {
+        if (string.IsNullOrWhiteSpace(relativePath))
+          throw new ArgumentException("Null/blank relativePath specified");
+
+        return _server.MapPath(relativePath);
+      }
+    }
+
+    // The "cache" reference passed to the constructor may be satisfied with the Cache reference available
+    // in an ASP.Net MVC Controller or a WebForms Page's Cache reference. There is no time-based expiration
+    // of cache items (DateTime.MaxValue is passed for the cache's Add method's absoluteExpiration argument
+    // since the CachingTextFileLoader will call Remove to expire entries if their source files have been
+    // modified since the cached data was recorded.
+    public class NonExpiringASPNetCacheCache : ICacheThingsWithModifiedDates<TextFileContents>
+    {
+      private Cache _cache;
+      public NonExpiringASPNetCacheCache(Cache cache)
+      {
+        if (cache == null)
+          throw new ArgumentNullException("cache");
+
+        _cache = cache;
+      }
+
+      public TextFileContents this[string cacheKey]
+      {
+        get
+        {
+          var cachedData = _cache[cacheKey];
+          if (cachedData == null)
+            return null;
+
+          var cachedTextFileContentsData = cachedData as TextFileContents;
+          if (cachedTextFileContentsData == null)
+          {
+            Remove(cacheKey);
+            return null;
+          }
+        
+          return cachedTextFileContentsData;
+        }
+      }
+
+      public void Add(string cacheKey, TextFileContents value)
+      {
+        _cache.Add(
+          cacheKey,
+          value,
+          null,
+          DateTime.MaxValue,
+          Cache.NoSlidingExpiration,
+          CacheItemPriority.Normal,
+          null
+        );
+      }
+
+      public void Remove(string cacheKey)
+      {
+        _cache.Remove(cacheKey);
+      }
+    }
+
+The **CachingTextFileLoader** will look in the cache to see if it has data for the specified relativePath. If so then it will try to get the last-modified-date for any of the source files. If the last-modified-date on the cached entry is current then the cached data is returned. Otherwise, the cached data is removed from the cache, the request is processed as normal, the new content stored in cache and then returned.
+
+### Disk caching
+
+The **DiskCachingTextFileLoader** class is slightly more complicated, but not much. It works on the same principle of storing cache data then retrieving it and returning it for requests if none of the source files have changed since it was cached, and rebuilding and storing new content before returning if the source files *have* changed.
+
+Like the **CachingTextFileLoader**, it requires a content loader to wrap and an **ILastModifiedDateRetriever**. It also requires a **CacheFileLocationRetriever** delegate which instructs it where to store cached data on disk. A simple approach is to specify
+
+    relativePath => new FileInfo(relativePathMapper.MapPath(relativePath) + ".cache")
+
+which will create a file alongside the source file with the ".cache" extension (for when "Test1.css" is processed, a file will be created alongside it called "Test1.css.cache").
+
+This means that we need to ignore these cache files when looking at the last-modified-dates of files, but the **SingleFolderLastModifiedDateRetriever** conveniently has an optional constructor parameter to specify which extensions should be considered. So it can be instantiated with
+
+    var lastModifiedDateRetriever = new SingleFolderLastModifiedDateRetriever(
+      relativePathMapper,
+      new[] { "css", "less" }
+    );
+
+and then you needn't worry about the cache files interfering.
+
+There are some additional options that must be specified for the **DiskCachingTextFileLoader**; whether exceptions should be raised or swallowed (after logging) for IO issues and likewise if the cache file has invalid content (the cached content will have a CSS comment injected into the start of the content that records the relative path of the original request and the last-modified-date, without these a TextFileContents instance could not be accurately recreated from the cached stylesheets - the TextFileContents could have been binary-serialised and written out as the cached data but I prefered that the cached data be CSS).
+
+### Bringing it all together
+
+This is the updated version of the CSSController from the post last year: [On-the-fly CSS Minification](Post20). It incorporates functionality to deal with 304 responses, to cache in-memory and on disk, to flatten imports, compile LESS, minify the output and all of the other advanced features covered in [Extending the CSS Minifier](Post47).
+
+This code is taken from the CSSMinifiedDemo project in the [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier) repository, the only difference being that I've swapped out the **DefaultNonCachedLessCssLoaderFactory** for the **EnhancedNonCachedLessCssLoaderFactory**. If you don't want the source mapping, the media-query grouping and the other features then you might stick with the **DefaultNonCachedLessCssLoaderFactory**. If you wanted something in between then you could just take the code from either factory and tweak to meet your requirements!
+
+    using System;
+    using System.IO;
+    using System.IO.Compression;
+    using System.Linq;
+    using System.Web;
+    using System.Web.Mvc;
+    using CSSMinifier.Caching;
+    using CSSMinifier.FileLoaders;
+    using CSSMinifier.FileLoaders.Factories;
+    using CSSMinifier.FileLoaders.LastModifiedDateRetrievers;
+    using CSSMinifier.Logging;
+    using CSSMinifier.PathMapping;
+    using CSSMinifierDemo.Common;
+
+    namespace CSSMinifierDemo.Controllers
+    {
+      public class CSSController : Controller
+      {
+        public ActionResult Process()
+        {
+          var relativePathMapper = new ServerUtilityPathMapper(Server);
+          var relativePath = Request.FilePath;
+          var fullPath = relativePathMapper.MapPath(relativePath);
+          var file = new FileInfo(fullPath);
+          if (!file.Exists)
+          {
+            Response.StatusCode = 404;
+            Response.StatusDescription = "Not Found";
+            return Content("File not found: " + relativePath, "text/css");
+          }
+
+          try
+          {
+            return Process(
+              relativePath,
+              relativePathMapper,
+              new NonExpiringASPNetCacheCache(HttpContext.Cache),
+              TryToGetIfModifiedSinceDateFromRequest()
+            );
+          }
+          catch (Exception e)
+          {
+            Response.StatusCode = 500;
+            Response.StatusDescription = "Internal Server Error";
+            return Content("Error: " + e.Message);
+          }
+        }
+
+        private ActionResult Process(
+          string relativePath,
+          IRelativePathMapper relativePathMapper,
+          ICacheThingsWithModifiedDates<TextFileContents> memoryCache,
+          DateTime? lastModifiedDateFromRequest)
+        {
+          if (string.IsNullOrWhiteSpace(relativePath))
+            throw new ArgumentException("Null/blank relativePath specified");
+          if (memoryCache == null)
+            throw new ArgumentNullException("memoryCache");
+          if (relativePathMapper == null)
+            throw new ArgumentNullException("relativePathMapper");
+
+          var lastModifiedDateRetriever = new SingleFolderLastModifiedDateRetriever(
+            relativePathMapper,
+            new[] { "css", "less" }
+          );
+          var lastModifiedDate = lastModifiedDateRetriever.GetLastModifiedDate(relativePath);
+          if ((lastModifiedDateFromRequest != null)
+          && AreDatesApproximatelyEqual(lastModifiedDateFromRequest.Value, lastModifiedDate))
+          {
+            Response.StatusCode = 304;
+            Response.StatusDescription = "Not Modified";
+            return Content("", "text/css");
+          }
+
+          var errorBehaviour = ErrorBehaviourOptions.LogAndContinue;
+          var logger = new NullLogger();
+          var cssLoader = (new EnhancedNonCachedLessCssLoaderFactory(
+            relativePathMapper,
+            errorBehaviour,
+            logger
+          )).Get();
+      
+          var diskCachingCssLoader = new DiskCachingTextFileLoader(
+            cssLoader,
+            relativePathRequested => new FileInfo(relativePathMapper.MapPath(relativePathRequested) + ".cache"),
+            lastModifiedDateRetriever,
+            DiskCachingTextFileLoader.InvalidContentBehaviourOptions.Delete,
+            errorBehaviour,
+            logger
+          );
+          var memoryAndDiskCachingCssLoader = new CachingTextFileLoader(
+            diskCachingCssLoader,
+            lastModifiedDateRetriever,
+            memoryCache
+          );
+
+          var content = memoryAndDiskCachingCssLoader.Load(relativePath);
+          if (content == null)
+            throw new Exception("Received null response from Css Loader - this should not happen");
+          if ((lastModifiedDateFromRequest != null)
+          && AreDatesApproximatelyEqual(lastModifiedDateFromRequest.Value, lastModifiedDate))
+          {
+            Response.StatusCode = 304;
+            Response.StatusDescription = "Not Modified";
+            return Content("", "text/css");
+          }
+          SetResponseCacheHeadersForSuccess(content.LastModified);
+          return Content(content.Content, "text/css");
+        }
+
+        /// <summary>
+        /// Try to get the If-Modified-Since HttpHeader value - if not present or not valid (ie. not
+        /// interpretable as a date) then null will be returned
+        /// </summary>
+        private DateTime? TryToGetIfModifiedSinceDateFromRequest()
+        {
+          var lastModifiedDateRaw = Request.Headers["If-Modified-Since"];
+          if (lastModifiedDateRaw == null)
+            return null;
+
+          DateTime lastModifiedDate;
+          if (DateTime.TryParse(lastModifiedDateRaw, out lastModifiedDate))
+            return lastModifiedDate;
+
+          return null;
+        }
+
+        /// <summary>
+        /// Dates from HTTP If-Modified-Since headers are only precise to whole seconds while files'
+        /// LastWriteTime are granular to milliseconds, so when
+        /// comparing them a small grace period is required
+        /// </summary>
+        private bool AreDatesApproximatelyEqual(DateTime d1, DateTime d2)
+        {
+          return Math.Abs(d1.Subtract(d2).TotalSeconds) < 1;
+        }
+
+        /// <summary>
+        /// Mark the response as being cacheable and implement content-encoding requests such that gzip is
+        /// used if supported by requester
+        /// </summary>
+        private void SetResponseCacheHeadersForSuccess(DateTime lastModifiedDateOfLiveData)
+        {
+          // Mark the response as cacheable
+          // - Specify "Vary" "Content-Encoding" header to ensure that if cached by proxies that different
+          //   versions are stored for different encodings (eg. gzip'd vs non-gzip'd)
+          Response.Cache.SetCacheability(System.Web.HttpCacheability.Public);
+          Response.Cache.SetLastModified(lastModifiedDateOfLiveData);
+          Response.AppendHeader("Vary", "Content-Encoding");
+
+          // Handle requested content-encoding method
+          var encodingsAccepted = (Request.Headers["Accept-Encoding"] ?? "")
+            .Split(',')
+            .Select(e => e.Trim().ToLower())
+            .ToArray();
+          if (encodingsAccepted.Contains("gzip"))
+          {
+            Response.AppendHeader("Content-encoding", "gzip");
+            Response.Filter = new GZipStream(Response.Filter, CompressionMode.Compress);
+          }
+          else if (encodingsAccepted.Contains("deflate"))
+          {
+            Response.AppendHeader("Content-encoding", "deflate");
+            Response.Filter = new DeflateStream(Response.Filter, CompressionMode.Compress);
+          }
+        }
+      }
+    }
+
+Following a few bug fixes which I've made recently to the [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier) and [CSSParser](https://bitbucket.org/DanRoberts/cssparser), I don't have any other major features to add to these projects until I make time to complete a rules validator so that the [Non-cascading CSS](Post42) guidelines can optionally be enforced. I'm still working on these and trying to get them into as much use as possible since I still believe they offer a real turning point for the creation of maintainable stylesheets!
