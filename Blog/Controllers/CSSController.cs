@@ -239,9 +239,7 @@ namespace Blog.Controllers
 					throw new ArgumentNullException("value");
 
 				// Since the CSSController will push cached data in with a LastModifiedDate and then replace those cache items (with a Remove followed by Add) then we can
-				// use DateTime.MaxValue for AbsoluteExpiration and effectivel disable time-based expiration
-				// file's LastModifiedDate we don't want this cache entry to expire
-				// on a separate time based scheme)
+				// use DateTime.MaxValue for AbsoluteExpiration and effectively disable time-based expiration
 				_cache.Add(
 					cacheKey,
 					value,
