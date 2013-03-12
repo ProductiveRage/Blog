@@ -58,20 +58,20 @@ namespace Blog.Controllers
 		private ActionResult Process(
 			string relativePath,
 			IRelativePathMapper relativePathMapper,
-			ICacheThingsWithModifiedDates<TextFileContents> cache,
+			ICacheThingsWithModifiedDates<TextFileContents> memoryCache,
 			DateTime? lastModifiedDateFromRequest)
 		{
 			if (string.IsNullOrWhiteSpace(relativePath))
 				throw new ArgumentException("Null/blank relativePath specified");
-			if (cache == null)
-				throw new ArgumentNullException("cache");
+			if (memoryCache == null)
+				throw new ArgumentNullException("memoryCache");
 			if (relativePathMapper == null)
 				throw new ArgumentNullException("relativePathMapper");
 
 			// Using the SingleFolderLastModifiedDateRetriever means that we can determine whether cached content (either in the ASP.Net cache or in the browser cache)
 			// is up to date without having to perform the complete import flattening process. It may lead to some unnecessary work if an unrelated file in the folder
 			// is updated but for the most common cases it should be an efficient approach.
-			var lastModifiedDateRetriever = new SingleFolderLastModifiedDateRetriever(relativePathMapper);
+			var lastModifiedDateRetriever = new SingleFolderLastModifiedDateRetriever(relativePathMapper, new[] { "css", "less" });
 			var lastModifiedDate = lastModifiedDateRetriever.GetLastModifiedDate(relativePath);
 			if ((lastModifiedDateFromRequest != null) && AreDatesApproximatelyEqual(lastModifiedDateFromRequest.Value, lastModifiedDate))
 			{
@@ -85,11 +85,20 @@ namespace Blog.Controllers
 				ErrorBehaviourOptions.LogAndRaiseException,
 				new NullLogger()
 			)).Get();
-			
+
+			// Ignore any errors from the DiskCachingTextFileLoader - if the file contents become invalid then allow them to be deleted and rebuilt instead of blowing
+			// up. The EnhancedNonCachedLessCssLoaderFactory should raise exceptionns since it will indicate invalid source content, which should be flagged up.
 			var modifiedDateCachingStyleLoader = new CachingTextFileLoader(
-				cssLoader,
+				new DiskCachingTextFileLoader(
+					cssLoader,
+					relativePathRequested => new FileInfo(relativePathMapper.MapPath(relativePathRequested) + ".cache"),
+					lastModifiedDateRetriever,
+					DiskCachingTextFileLoader.InvalidContentBehaviourOptions.Delete,
+					ErrorBehaviourOptions.LogAndContinue,
+					new NullLogger()
+				),
 				lastModifiedDateRetriever,
-				cache
+				memoryCache
 			);
 			
 			var content = modifiedDateCachingStyleLoader.Load(relativePath);
