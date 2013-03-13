@@ -15,6 +15,7 @@ namespace Blog
 		{
 			routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
 			routes.IgnoreRoute("{*favicon}", new { favicon = @"(.*/)?favicon.ico(/.*)?" });
+			routes.IgnoreRoute("{*staticcontent}", new { staticcontent = @".*\.(bmp|gif|jpg|js|png)(/.*)?" });
 
 			routes.RouteExistingFiles = true; // We have to set this to true so that stylesheets (for example) get processed rather than returned direct
 
@@ -73,10 +74,13 @@ namespace Blog
 			  new { controller = "ViewPost", action = "ArchiveByMonthMostRecent" }
 			);
 
+			// Even with this rule, I still had to do some configuration with my hosting environment to allow 404s to be processed here
+			// (the default behaviour was to assume it was an unintentional response and to show a standard error page, these needed
+			// redirecting back to here - by telling to display content from /NotFound in my case - to display the custom 404)
 			routes.MapRoute(
-			  "GenericError",
-			  "Error",
-			  new { controller = "StaticContent", action = "ErrorPage" }
+			  "404Error",
+			  "{*url}",
+			  new { controller = "StaticContent", action = "ErrorPage404" }
 			);
 		}
 
