@@ -12,4 +12,11 @@
 					</p>
 					<h2>What are you doing here??</h2>
 					<p>Uh oh! The requested page doesn't seem to be available - I hope you weren't following an internal link 'cos that means it must be broke!</p>
+					@using (Html.BeginForm("Search", "Search", FormMethod.Get))
+					{
+						<div>
+							<input type="text" class="SiteSearch" name="term" />
+							<input type="submit" class="SiteSearchSubmit" value="Search" />
+						</div>
+					}
 				</div>
