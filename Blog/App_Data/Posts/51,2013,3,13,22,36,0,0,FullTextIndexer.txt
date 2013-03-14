@@ -1,0 +1,241 @@
+﻿## The Full Text Indexer - Structured Queries
+
+I've considered in the past extending the way in which searches can be defined for use with the Full Text Indexer. The current approaches are:
+
+1. A simple one-word query
+1. A multi-word query using GetPartialMatches
+1. A multi-word query where all of the words must appear
+
+The first doesn't need much explaining, most of the examples have been based around this. The use of GetPartialMatches was outlined in the first [Full Text Indexer post](Post30); the method takes a search term, a Token Breaker (to break the multi-word term into single-word terms) and a "MatchCombiner" delegate which describes how to combine the weighted matches for each broken-down word (this delegate will include the logic that determines whether *all* of the words in the original term must be matched or if it's just that a greater combined weight should be given to results that do match them all). This is the method that the search facility on this blog uses.
+
+The third approach makes use of the **ConsecutiveTokenCombiningTokenBreaker** and is a bit different; when the index is being generated, the content is not only broken down into individual words but also runs of multiple words. This is explained in more detail in the [Token Breaker and String Normaliser variations](Post36) post, but that's the gist. In this scenario, the search term is *not* broken down and treated as a single token to search for. If you want to perform searches for multi-word terms where those words must appear in the order specified (rather than just appearing in any order, anywhere throughout the source content - possibly spanning multiple fields) then this is what you'd use.
+
+### Structured Querying
+
+I wanted to introduce a consolidated query method but I'd been putting off writing a parser to take a search string and work out what to do with the various components. However, having recently written a CSS / LESS parser ([CSSParser on Bitbucket](https://bitbucket.org/DanRoberts/cssparser)) I was inspired to use the same recursive parsing technique and piece together something for the Full Text Indexer.
+
+I went into it wanting something vaguely like GetPartialMatches but with.. more. The first assumption I wanted to make was that where multiple terms are specified then they should be considered an OR combination; so a match will be found if any one of the terms is found. If a particular term absolutely must be present then it can be prefixed with a "+". If a term must *not* be present then it can be prefixed with a "-". These ideas are directly influenced by Google query format! :)
+
+This would allow us straight away to specify
+
+> apples pears bananas +fruit +nuts -lunatics
+
+so that we could match articles (or whatever the source content may be) that have "fruit" and "nuts" in the content (but not "lunatics", we don't want those kinds of nuts!) and apply a greater match weigh to results that contain the words "apples", "pears" and / or "bananas". If an article doesn't contain the word "apples" then it may still be returned so long as it contains the word "fruit" (and not "lunatics").
+
+The same logic about word matching would be applied as normal, so if an index is built with an **EnglishPluralityStringNormaliser** then the word "fruits" would be matched as it was "fruit".
+
+There are a few more refinements that I wanted to add, the first also straight from Google search's interface! I wanted to allow words or phrases to be quoted such that they should appear precisely as specified. So, if our example became
+
+> "apples" pears bananas +fruit +nuts -lunatics
+
+then the word "apple" should *not* be considered a match for "apples". This is also applicable to phrases so
+
+> "apples and pears"
+
+should only match articles that contain the string "apples and pears", not ones that contain the words "apples" / "and" / "pears" present but in a different order.
+
+These should be combinable such that we could specify
+
+> -"apples and pears" apples pears bananas +fruit
+
+which would return articles that definitely contained "fruit" (or a word that is considered equivalent by the string normaliser), with additional weight given to articles that contained "apples" / "pears" / "bananas", so long as they don't contain the phrase "apples and pears". I think I've contorted this example a bit far now :)
+
+The final aspect to throw in the mix is the ability to bracket terms. Let's stretch the example on step further:
+
+> +(apples pears bananas) +fruit +nut -lunatic
+
+This will return articles that contain *at least one* of "apples" / "pears" / "bananas" *and* "fruit" *and* "nut" and *not* "lunatic".
+
+The bracketing and compulsory / excluding (the "+" and "-") operators should be combinable and nestable in any manner. They can't be nested within quoted sections as they would be considered to be part of the content, but quoted sections can be nested with brackets or combined with the other operators, as already seen. (If a quote is required within a quoted section that it may be escaped with a backslash).
+
+### Show me the code!
+
+In case you're not that interested in stepping through the internals*, there's a complete working example at the end of this post that demonstrates how to use this! Just change the string passed to the querier.GetMatches method to play around with it.
+
+\* _(Yet.. optimistically :)_
+
+### Content Analysers
+
+The first step is to break down a search term into the various **IQuerySegment** types in the Querier project (in the [Full Text Indexer Bitbucket repository](https://bitbucket.org/DanRoberts/full-text-indexer)): the **StandardMatchQuerySegment**, **PreciseMatchQuerySegment**, **CompulsoryQuerySegment**, **ExcludingQuerySegment**, **CombiningQuerySegment** and **NoMatchContentQuerySegment** (used, for example, when brackets surround empty content).
+
+To illustrate, the example
+
+> +(apples pears bananas) +fruit +nut -lunatic
+
+would be translated into
+
+    CombiningQuerySegment
+    {
+      CompulsoryQuerySegment
+      {
+        CombiningQuerySegment
+        {
+          StandardMatchQuerySegment: apples
+          StandardMatchQuerySegment: pears
+          StandardMatchQuerySegment: bananas
+        }
+      },
+      CompulsoryQuerySegment
+      {
+        StandardMatchQuerySegment: fruit
+      },
+      CompulsoryQuerySegment
+      {
+        StandardMatchQuerySegment: nut
+      },
+      ExcludingQuerySegment
+      {
+        StandardMatchQuerySegment: lunatic
+      }
+    }
+
+The outermost **CombiningQuerySegment** is required since a Content Analyser should only return a single query segment, and since there were multiple in the search term they have to be wrapped up in the **CombiningQuerySegment**.
+
+To translate an arbitrary search term into an **IQuerySegment**, we use
+
+    var querySegment = (new BreakPointCharacterAnalyser()).Process(new StringNavigator(searchTerm));
+
+That's quite a mouthful, but if you read on you'll see that the **Querier** class means that you should never need to call that directly.
+
+It breaks tokens on whitespace unless inside a quoted section, so the only way to specify particular multi-word phrases is to quote them (as with "apples and pears" above).
+
+### Two Indexes
+
+One thing I haven't addressed so far is how quoted sections can be processed differently to none-quoted sections. Unfortunately, there's no clever facility to introduce and the bad news is that to deal with this, *two* indexes will have to be generated for the source content. The first index, the "default", uses the most common construction parameters and will be more forgiving on matches. It would be appropriate to use the **EnglishPluralityStringNormaliser** for this index, for example (assuming that it *is* English language content!). It will only need to deal with single word matches (as only quoted sections in the content are parsed into query segments with multiple words).
+
+The second index, the "precise match" index, should be less forgiving (using a **DefaultStringNormaliser**, perhaps, which will normalise casing and ignore punctuation but not consider singular and plural versions of words to be equivalent). It will also need to make use of the **ConsecutiveTokenCombiningTokenBreaker** if quoted phrases are to be matchable (as opposed to only supporting quoting individual words).
+
+### Query Translator
+
+The two indexes (and a MatchCombiner, see beloW) are used to instantiate a **QueryTranslator** whose method GetMatches will take an **IQuerySegment** and return an immutable set of WeighedEntry results, just like the the **IIndexData* class.
+
+The MatchCombiner is used whenever multiple matches need be combined together into one - this will happen if there are multiple words in the initial query and will happen any times multiple terms are bracketed together. For the search term
+
+> apples +(pears bananas +(pomegranate tomato))
+
+there will be three match weight combinations:
+
+1. pomegranate / tomato
+2. pears / bananas / combined-pomegranate-tomato
+3. apples / combined-bananas-combined-pomegranate-tomato
+
+This could be a simple summing or averaging of the match weights. One variation is to sum the weights but then always divide by a particular value, this reduces the weight of nested terms - so if terms are several bracketing levels deep then they will impart a lower weight on the final weight of the result. Whether this seems appropriate or not is up to you!
+
+### The Querier
+
+The **Querier** class tidies up access to the Content Analysers and the Query Translator to try to make life easier. The **Querier** is instantiated with the two indexes and the MatchCombiner that the **QueryTranslator** requires and exposes a method GetMatches which takes a search term, translates it into an **IQuerySegment**, passes it through the **QueryTranslator** and returns the weighted results.
+
+### Example code
+
+Below is a complete example that has a simple "Post" source type. I've used the **AutomatedIndexGeneratorFactoryBuilder** (see [The Full Text Indexer - Automating Index Generation](Post48)) to kick things off. I've taken the first content from a couple of Posts on my blog as example content. The largest piece of setup code is the instantiation of the generator for the "precise match" index, and that's most due to the explanatory comments!
+
+    using System;
+    using System.Linq;
+    using FullTextIndexer.Common.Lists;
+    using FullTextIndexer.Core.Indexes.TernarySearchTree;
+    using FullTextIndexer.Core.TokenBreaking;
+    using FullTextIndexer.Helpers;
+    using FullTextIndexer.Querier;
+
+    namespace Tester
+    {
+      class Program
+      {
+        static void Main(string[] args)
+        {
+          var posts = new NonNullImmutableList<Post>(new[]
+          {
+            new Post(30, "The Full Text Indexer", "I started out on a journey a few months ago being " +
+              "frustrated by the Lucene.net integration we had with one of our products at work (I'm not " +
+              "badmouthing the Lucene project, I'm wholeheartedly blaming the integration I inherited!)"),
+            new Post(31, "The Full Text Indexer - Adding and Subtracting", "The Full Text Indexer that I " +
+              "talked about last time took a definition for an Index Generator for a specific TSource type " +
+              "and produced an IndexData instance, using that generator, for a TSource set."),
+            new Post(32, "The Full Text Indexer - Going International!", "Pushing on with the Full Text " +
+              "Indexer series I'm been posting about (see Full Text Indexer and Full Text Indexer - Adding " +
+              "and Subtracting) I want to demonstrate how it can work with multi-lingual content")
+          });
+
+          var defaultIndexGenerator = (new AutomatedIndexGeneratorFactoryBuilder<Post, int>()).Get().Get();
+          var preciseMatchIndexGenerator = (new AutomatedIndexGeneratorFactoryBuilder<Post, int>())
+            .SetTokenBreaker(
+              new ConsecutiveTokenCombiningTokenBreaker(
+                // The ConsecutiveTokenCombiningTokenBreaker wraps another token breaker and then creates new
+                // tokens by stringing runs of broken tokens together
+                new WhiteSpaceExtendingTokenBreaker(
+                  new ImmutableList<char>(new[] { '<', '>', '[', ']', '(', ')', '{', '}', '.', ',' }),
+                  new WhiteSpaceTokenBreaker()
+                ),
+
+                // This is the maximum number of words that are strung together, if quoted sections have more
+                // words than this then they won't be matched. A way to work around this may be hashed out
+                // one day (but not today :)
+                12,
+
+                // Tokens may be given an additional weight multiplier (between 0 and 1) when content is
+                // is broken down, when multiple tokens are combined a multiplier for the combined token
+                // must be provider. Commonly it is stop words that have a fractional multiplier, but
+                // when words are combined into a phrase, it makes sense to remove any fractional
+                // multiplier and give the combined token the full value of 1.
+                weightMultipliersOfCombinedTokens => 1
+              )
+            )
+            .SetStringNormaliser(new DefaultStringNormaliser())
+            .Get()
+            .Get();
+
+          var querier = new Querier<Post, int>(
+            defaultIndexGenerator.Generate(posts),
+            preciseMatchIndexGenerator.Generate(posts),
+            (matchWeights, sourceQuerySegments) => matchWeights.Sum()
+          );
+
+          var matches = querier.GetMatches("Generator");
+        }
+      }
+
+      public class Post
+      {
+        public Post(int id, string title, string content)
+        {
+          if (string.IsNullOrWhiteSpace(title))
+            throw new ArgumentException("Null/blank title specified");
+          if (string.IsNullOrWhiteSpace(content))
+            throw new ArgumentException("Null/blank content specified");
+
+          Id = id;
+          Title = title;
+          Content = content;
+        }
+
+        public int Id { get; set; }
+        public string Title { get; set; }
+        public string Content { get; set; }
+      }
+    }
+
+To try different search terms, just replace the string "Generator" with something else.
+
+> Generator
+
+will indicate one result, as only Post 31 is matched (it contains the word "generators").
+
+> Indexer Generators
+
+will indicate that all three Posts match. With the configuration here, Posts 31 and 32 are found to have an identical match weight of 4 - as Post 31 matches "Indexer" twice and "Generators" twice while Post 32 matches "Indexer" four times. (Post 30 matches "Indexer" once and "Generator" zero times).
+
+> Indexer +"multi-lingual"
+
+will only match Post 31, since that is the only one that contains "multi-lingual".
+
+> "Full Text Indexer" -adding
+
+will only match Post 30 since, while they all have contain the phrase "Full Text Indexer", both Posts 31 and 32 also contain the word "adding".
+
+> "Full Text Indexers"
+
+matches zero Posts. Since none of them contain that precise phrase. They will contain "Full Text Indexer", singular "Indexer", but not the plural "Full Text Indexers".
+
+I don't think any more examples are required, really, hopefully it's clear enough how to construct the queries and understand how they're applied :)
+
+I wouldn't necessarily expect this structured querying to be exposed through a simple site search - at least I have no immediate intentions of enabling it on this blog (but now that I think more about it, there's a reasonable chance that I might change my mind at some point) but it could certainly have a place elsewhere in application logic for performing a variety of full text searches against data.
