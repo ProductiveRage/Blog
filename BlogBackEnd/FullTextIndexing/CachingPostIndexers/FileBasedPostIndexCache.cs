@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
 
 namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
@@ -26,9 +27,12 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 				if (!_dataFile.Exists)
 					return null;
 
-				using (var stream = File.Open(_dataFile.FullName, FileMode.Open))
+				using (var stream = File.Open(_dataFile.FullName, FileMode.Open, FileAccess.Read, FileShare.Read))
 				{
-					return new BinaryFormatter().Deserialize(stream) as CachedPostIndexContent;
+					using (var decompressedStream = new GZipStream(stream, CompressionMode.Decompress))
+					{
+						return new BinaryFormatter().Deserialize(decompressedStream) as CachedPostIndexContent;
+					}
 				}
 			}
 			catch
@@ -50,7 +54,10 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 			{
 				using (var stream = File.Open(_dataFile.FullName, FileMode.Create))
 				{
-					new BinaryFormatter().Serialize(stream, data);
+					using (var compressedStream = new GZipStream(stream, CompressionMode.Compress))
+					{
+						new BinaryFormatter().Serialize(compressedStream, data);
+					}
 				}
 			}
 			catch
