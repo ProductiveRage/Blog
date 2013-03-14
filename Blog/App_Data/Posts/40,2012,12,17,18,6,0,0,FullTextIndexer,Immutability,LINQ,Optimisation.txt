@@ -24,4 +24,6 @@ I also had a chance to revisit the basic immutable list structure that I used fr
 
 The code can be found in the [Full Text Indexer BitBucket Repository](https://bitbucket.org/DanRoberts/full-text-indexer/). I've still got a few ideas I'm contemplating toying with - but I've also got other projects I want to investigate! So we'll just have to see what happens with this next..
 
-**Update [5th March 2013]:** I just can't seem to let this lie! :) I've added another post [The Full Text Indexer - Automating Index Generation](Post48) which demonstrates some new code that will examine your source data type and generate an index for you, all on its own! Easy!
+**Update (5th March 2013):** I just can't seem to let this lie! :) I've added another post [The Full Text Indexer - Automating Index Generation](Post48) which demonstrates some new code that will examine your source data type and generate an index for you, all on its own! Easy!
+
+**Update (14th March 2013):** And another! This time about support for structured querying, a way to combine terms with AND, OR, NOT operators. See [The Full Text Indexer - Structured Queries](Post51).
