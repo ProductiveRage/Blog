@@ -50,9 +50,7 @@ The bracketing and compulsory / excluding (the "+" and "-") operators should be 
 
 ### Show me the code!
 
-In case you're not that interested in stepping through the internals*, there's a complete working example at the end of this post that demonstrates how to use this! Just change the string passed to the querier.GetMatches method to play around with it.
-
-\* _(Yet.. optimistically :)_
+In case you're not that interested in stepping through the internals, there's a complete working example at the end of this post that demonstrates how to use this! Just change the string passed to the querier.GetMatches method to play around with it.
 
 ### Content Analysers
 
@@ -238,4 +236,6 @@ matches zero Posts. Since none of them contain that precise phrase. They will co
 
 I don't think any more examples are required, really, hopefully it's clear enough how to construct the queries and understand how they're applied :)
 
-I wouldn't necessarily expect this structured querying to be exposed through a simple site search - at least I have no immediate intentions of enabling it on this blog (but now that I think more about it, there's a reasonable chance that I might change my mind at some point) but it could certainly have a place elsewhere in application logic for performing a variety of full text searches against data.
+I wouldn't necessarily expect this structured querying to be exposed through a simple site search (I have no immediate intentions of enabling it on this blog at the moment*) but it could certainly have a place elsewhere in application logic for performing a variety of full text searches against data.
+
+\* _(The site search configuration here makes it compulsory that every word in the search term is matched in order for a Post to be returned, for cases where multiple words are specified. Changing over to use the Querier would mean that Posts would come back that don't match all of the words unless the "+" compulsory operator precedes each of them which, for now, I don't want to do)._
