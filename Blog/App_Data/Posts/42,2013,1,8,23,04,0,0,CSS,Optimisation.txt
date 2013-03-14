@@ -249,7 +249,7 @@ One pattern that I've seen used is to combine "float: left;" and "width: 100%;" 
 
 So there's a chance that some allowances will have to be made for 100% widths, but I'm going to start off optimistic and hope that it's not the case until I'm proven wrong (either by myself or someone else trying these rules!).
 
-**Update [22nd January]**: Although I'm currently still aiming for all-pixel measurements for elements, after reading this article [The EMs have it: Proportional Media Queries FTW!](http://blog.cloudfour.com/the-ems-have-it-proportional-media-queries-ftw/) I think I might get sold on the idea of using em's in media queries.. it seems like it would be an ideal to work with browsers that have been zoomed in sufficiently that they'd look better moving the next layout break point. I need to do some testing with mobile or tablet devices, but it sounds intriguing!
+**Update (22nd January)**: Although I'm currently still aiming for all-pixel measurements for elements, after reading this article [The EMs have it: Proportional Media Queries FTW!](http://blog.cloudfour.com/the-ems-have-it-proportional-media-queries-ftw/) I think I might get sold on the idea of using em's in media queries.. it seems like it would be an ideal to work with browsers that have been zoomed in sufficiently that they'd look better moving the next layout break point. I need to do some testing with mobile or tablet devices, but it sounds intriguing!
 
 #### Margins, where specified, must always be fully-defined
 

@@ -204,4 +204,4 @@ giving it a string of content and getting back an IEnumerable&lt;CategorisedChar
 
 The content is parsed as that enumerable set is iterated through, so when you stop enumerating it stops processing.
 
-**Update [12th March]:** I've posted a follow-up to this about various caching mechanism so that all of this processing need be performed as infrequently as possible! See [CSS Minifier - Caching](Post50).
+**Update (12th March):** I've posted a follow-up to this about various caching mechanism so that all of this processing need be performed as infrequently as possible! See [CSS Minifier - Caching](Post50).
