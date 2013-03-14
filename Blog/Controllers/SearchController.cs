@@ -7,9 +7,9 @@ using Blog.Misc;
 using Blog.Models;
 using BlogBackEnd.Caching;
 using BlogBackEnd.FullTextIndexing;
-using Common.Lists;
-using FullTextIndexer.Indexes;
-using FullTextIndexer.TokenBreaking;
+using FullTextIndexer.Core.Indexes;
+using FullTextIndexer.Core.TokenBreaking;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Controllers
 {

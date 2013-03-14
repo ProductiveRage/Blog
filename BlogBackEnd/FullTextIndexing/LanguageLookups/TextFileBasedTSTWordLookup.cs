@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using FullTextIndexer.Indexes.TernarySearchTree;
+using FullTextIndexer.Core.Indexes.TernarySearchTree;
 
 namespace BlogBackEnd.FullTextIndexing.LanguageLookups
 {

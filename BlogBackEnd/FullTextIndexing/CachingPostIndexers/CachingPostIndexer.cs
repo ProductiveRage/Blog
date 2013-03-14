@@ -1,7 +1,7 @@
 ﻿using System;
 using BlogBackEnd.Models;
-using Common.Lists;
-using FullTextIndexer.Indexes;
+using FullTextIndexer.Core.Indexes;
+using FullTextIndexer.Common.Lists;
 
 namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 {

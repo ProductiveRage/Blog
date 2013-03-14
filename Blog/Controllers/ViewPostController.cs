@@ -5,7 +5,7 @@ using System.Web.Mvc;
 using Blog.Helpers.Timing;
 using Blog.Models;
 using BlogBackEnd.Caching;
-using Common.Lists;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Controllers
 {

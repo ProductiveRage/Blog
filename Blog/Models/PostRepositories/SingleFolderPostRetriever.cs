@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using BlogBackEnd.Models;
-using Common.Lists;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
