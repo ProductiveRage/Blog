@@ -20,16 +20,10 @@ namespace Blog
 			routes.RouteExistingFiles = true; // We have to set this to true so that stylesheets (for example) get processed rather than returned direct
 
 			routes.MapRoute(
-				"StandardStylesheets",
-				"{*allwithextension}",
+				"Stylesheets",
+				"{*sylesheetextensions}",
 				new { controller = "CSS", action = "Process" },
-				new { allwithextension = @".*\.css(/.*)?" }
-			);
-			routes.MapRoute(
-				"LESSCSSStylesheets",
-				"{*allwithextension}",
-				new { controller = "CSS", action = "Process" },
-				new { allwithextension = @".*\.less(/.*)?" }
+				new { sylesheetextensions = @".*\.(css|less)(/.*)?" }
 			);
 
 			routes.MapRoute(
