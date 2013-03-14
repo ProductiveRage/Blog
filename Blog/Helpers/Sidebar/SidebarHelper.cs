@@ -5,7 +5,7 @@ using System.Web.Mvc;
 using System.Web.Mvc.Html;
 using Blog.Models;
 using BlogBackEnd.Models;
-using Common.Lists;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Helpers.Sidebar
 {

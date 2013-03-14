@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Linq;
 using BlogBackEnd.Models;
-using Common.Lists;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {

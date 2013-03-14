@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using BlogBackEnd.Caching;
 using BlogBackEnd.Models;
-using Common.Lists;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {

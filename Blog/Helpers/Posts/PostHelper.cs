@@ -8,7 +8,7 @@ using System.Web.Mvc;
 using System.Web.Mvc.Html;
 using BlogBackEnd.Caching;
 using BlogBackEnd.Models;
-using Common.Lists;
+using FullTextIndexer.Common.Lists;
 using HtmlAgilityPack;
 
 namespace Blog.Helpers.Posts

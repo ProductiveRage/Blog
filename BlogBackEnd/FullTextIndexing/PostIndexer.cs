@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web;
 using BlogBackEnd.Models;
-using Common.Lists;
-using Common.Logging;
-using FullTextIndexer.Indexes;
-using FullTextIndexer.Indexes.TernarySearchTree;
-using FullTextIndexer.IndexGenerators;
-using FullTextIndexer.TokenBreaking;
+using FullTextIndexer.Core.Indexes;
+using FullTextIndexer.Core.Indexes.TernarySearchTree;
+using FullTextIndexer.Core.IndexGenerators;
+using FullTextIndexer.Core.TokenBreaking;
+using FullTextIndexer.Common.Lists;
+using FullTextIndexer.Common.Logging;
 
 namespace BlogBackEnd.FullTextIndexing
 {
@@ -22,15 +22,25 @@ namespace BlogBackEnd.FullTextIndexing
 			if (posts == null)
 				throw new ArgumentNullException("post");
 
-			// The Search Index data uses a DefaultStringNormaliser which removes a lot of content from strings but the token set will never be
-			// visible to a site user, they will pass a string into the index to match and only see the results
-			var indexDataForSearching = GenerateIndexData(
+			// The Search Index data uses an EnglishPluralityStringNormaliser which removes a lot of content from strings but the token set will never
+			// be visible to a site user, they will pass a string into the index to match and only see the results
+			var whitespaceTokenBreaker = new WhiteSpaceExtendingTokenBreaker(
+				new ImmutableList<char>(new[] {
+					'<', '>', '[', ']', '(', ')', '{', '}',
+					'.', ',', ':', ';', '"', '?', '!',
+					'/', '\\',
+					'@', '+', '|', '='
+				}),
+				new WhiteSpaceTokenBreaker()
+			);
+			var defaultIndexDataForSearching = GenerateIndexData(
 				posts,
 				new EnglishPluralityStringNormaliser(
 					new DefaultStringNormaliser(),
 					EnglishPluralityStringNormaliser.PreNormaliserWorkOptions.PreNormaliserLowerCases
 					| EnglishPluralityStringNormaliser.PreNormaliserWorkOptions.PreNormaliserTrims
-				)
+				),
+				whitespaceTokenBreaker
 			);
 
 			// The AutoComplete content WILL be visible to the user and so we can't be as aggressive with the token normalisation. We'll start
@@ -40,25 +50,31 @@ namespace BlogBackEnd.FullTextIndexing
 			// Distinct values (ignoring case) will be taken and a final pass through the Search Index data will be done in case the difference in
 			// token normalisation resulted in any AutoComplete words being produced that don't match anything when searched on (these are removed
 			// from the results). The results are ordered alphabetically (again, ignoring case) to give the final content.
-			var indexDataForAutoCompleteExtended = GenerateIndexData(posts, new NonAlteringStringNormaliser());
+			var indexDataForAutoCompleteExtended = GenerateIndexData(
+				posts,
+				new NonAlteringStringNormaliser(),
+				whitespaceTokenBreaker
+			);
 			var autoCompleteContent = new NonNullOrEmptyStringList(
 				indexDataForAutoCompleteExtended.GetAllTokens()
 				.Select(token => token.Trim())
 				.Where(token =>(token.Length >= 3) && !char.IsPunctuation(token[0]) && !token.Any(c => char.IsNumber(c)))
 				.Distinct(StringComparer.InvariantCultureIgnoreCase)
-				.Where(token => indexDataForSearching.GetMatches(token).Any())
+				.Where(token => defaultIndexDataForSearching.GetMatches(token).Any())
 				.OrderBy(token => token.ToLower())
 			);
 
-			return new PostIndexContent(indexDataForSearching, autoCompleteContent);
+			return new PostIndexContent(defaultIndexDataForSearching, autoCompleteContent);
 		}
 
-		private IIndexData<int> GenerateIndexData(NonNullImmutableList<Post> posts, IStringNormaliser sourceStringComparer)
+		private IIndexData<int> GenerateIndexData(NonNullImmutableList<Post> posts, IStringNormaliser sourceStringComparer, ITokenBreaker tokenBreaker)
 		{
 			if (posts == null)
 				throw new ArgumentNullException("posts");
 			if (sourceStringComparer == null)
 				throw new ArgumentNullException("sourceStringComparer");
+			if (tokenBreaker == null)
+				throw new ArgumentNullException("tokenBreaker");
 
 			var contentRetrievers = new List<ContentRetriever<Post, int>>();
 			contentRetrievers.Add(new ContentRetriever<Post, int>(
@@ -79,17 +95,9 @@ namespace BlogBackEnd.FullTextIndexing
 			// need to be treated similarly.
 			return new IndexGenerator<Post, int>(
 				contentRetrievers.ToNonNullImmutableList(),
-				new IntEqualityComparer(),
+				new DefaultEqualityComparer<int>(),
 				sourceStringComparer,
-				new WhiteSpaceExtendingTokenBreaker(
-					new ImmutableList<char>(new[] {
-						'<', '>', '[', ']', '(', ')', '{', '}',
-						'.', ',', ':', ';', '"', '?', '!',
-						'/', '\\',
-						'@', '+', '|', '='
-					}),
-					new WhiteSpaceTokenBreaker()
-				),
+				tokenBreaker,
 				weightedValues => weightedValues.Sum(),
 				new NullLogger()
 			).Generate(posts.ToNonNullImmutableList());
@@ -102,20 +110,7 @@ namespace BlogBackEnd.FullTextIndexing
 			if (sourceStringComparer == null)
 				throw new ArgumentNullException("sourceStringComparer");
 
-			return token => multiplier * (FullTextIndexer.Constants.GetStopWords("en").Contains(token, sourceStringComparer) ? 0.01f : 1f);
-		}
-
-		[Serializable]
-		private class IntEqualityComparer : IEqualityComparer<int>
-		{
-			public bool Equals(int x, int y)
-			{
-				return (x == y);
-			}
-			public int GetHashCode(int obj)
-			{
-				return obj;
-			}
+			return token => multiplier * (FullTextIndexer.Core.Constants.GetStopWords("en").Contains(token, sourceStringComparer) ? 0.01f : 1f);
 		}
 
 		[Serializable]

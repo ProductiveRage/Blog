@@ -1,6 +1,6 @@
 ﻿using System;
-using Common.Lists;
-using FullTextIndexer.Indexes;
+using FullTextIndexer.Core.Indexes;
+using FullTextIndexer.Common.Lists;
 
 namespace BlogBackEnd.FullTextIndexing
 {
@@ -10,7 +10,7 @@ namespace BlogBackEnd.FullTextIndexing
 		public PostIndexContent(IIndexData<int> searchIndex, NonNullOrEmptyStringList autoCompleteContent)
 		{
 			if (searchIndex == null)
-				throw new ArgumentNullException("searchIndex");
+				throw new ArgumentNullException("defaultSearchIndex");
 			if (autoCompleteContent == null)
 				throw new ArgumentNullException("autoCompleteContent");
 

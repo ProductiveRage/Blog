@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Linq;
-using Common.Lists;
+using FullTextIndexer.Common.Lists;
 
 namespace BlogBackEnd.Models
 {

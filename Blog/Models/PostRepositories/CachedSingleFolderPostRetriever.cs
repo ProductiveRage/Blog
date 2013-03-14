@@ -2,7 +2,7 @@
 using System.IO;
 using BlogBackEnd.Caching;
 using BlogBackEnd.Models;
-using Common.Lists;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
