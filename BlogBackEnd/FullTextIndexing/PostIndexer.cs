@@ -21,9 +21,9 @@ namespace BlogBackEnd.FullTextIndexing
 		{
 			if (posts == null)
 				throw new ArgumentNullException("post");
-
+			
 			// The Search Index data uses an EnglishPluralityStringNormaliser which removes a lot of content from strings but the token set will never
-			// be visible to a site user, they will pass a string into the index to match and only see the results
+			// be visible to a site user, they will pass a string into the index to match and only see the results.
 			var whitespaceTokenBreaker = new WhiteSpaceExtendingTokenBreaker(
 				new ImmutableList<char>(new[] {
 					'<', '>', '[', ']', '(', ')', '{', '}',
@@ -110,7 +110,8 @@ namespace BlogBackEnd.FullTextIndexing
 			if (sourceStringComparer == null)
 				throw new ArgumentNullException("sourceStringComparer");
 
-			return token => multiplier * (FullTextIndexer.Core.Constants.GetStopWords("en").Contains(token, sourceStringComparer) ? 0.01f : 1f);
+			//return token => multiplier * (FullTextIndexer.Core.Constants.GetStopWords("en").Contains(token, sourceStringComparer) ? 0.01f : 1f);
+			return token => multiplier * (FullTextIndexer.Core.Constants.GetStopWords("en").Contains(token) ? 0.01f : 1f);
 		}
 
 		[Serializable]

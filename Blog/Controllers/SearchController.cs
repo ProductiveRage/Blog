@@ -3,12 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web.Mvc;
 using Blog.Helpers.Timing;
-using Blog.Misc;
 using Blog.Models;
 using BlogBackEnd.Caching;
 using BlogBackEnd.FullTextIndexing;
-using FullTextIndexer.Core.Indexes;
-using FullTextIndexer.Core.TokenBreaking;
 using FullTextIndexer.Common.Lists;
 
 namespace Blog.Controllers
@@ -46,16 +43,7 @@ namespace Blog.Controllers
 			else
 			{
 				var allPosts = _postRepository.GetAll();
-				var index = _postIndexer.GenerateIndexContent(allPosts).SearchIndex;
-				var matches = index.GetPartialMatches(
-					term,
-					new WhiteSpaceExtendingTokenBreaker(
-						new ImmutableList<char>(new[] { '<', '>', '[', ']', '(', ')', '{', '}', '.', ',' }),
-						new WhiteSpaceTokenBreaker()
-					),
-					(tokenMatches, allTokens) => (tokenMatches.Count < allTokens.Count) ? 0 : tokenMatches.SelectMany(m => m.Weights).Sum()
-				);
-				results = matches.Select(
+				results = _postIndexer.GenerateIndexContent(allPosts).Search(term).Select(
 					m => new SearchResult(allPosts.First(p => p.Id == m.Key), m.Weight)
 				);
 			}

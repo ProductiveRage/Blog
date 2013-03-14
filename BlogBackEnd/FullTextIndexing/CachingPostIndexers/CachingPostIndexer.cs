@@ -28,7 +28,7 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 			if (posts == null)
 				throw new ArgumentNullException("posts");
 
-			return GetData(posts);
+			return GetData(posts).Index;
 		}
 
 		private CachedPostIndexContent GetData(NonNullImmutableList<Post> posts)
@@ -42,8 +42,7 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 
 			var postIndexData = _postIndexer.GenerateIndexContent(posts);
 			var liveData = new CachedPostIndexContent(
-				postIndexData.SearchIndex,
-				postIndexData.AutoCompleteContent,
+				postIndexData,
 				posts
 			);
 			_cache.Store(liveData);
