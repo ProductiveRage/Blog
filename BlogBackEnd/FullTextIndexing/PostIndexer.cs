@@ -110,8 +110,12 @@ namespace BlogBackEnd.FullTextIndexing
 			if (sourceStringComparer == null)
 				throw new ArgumentNullException("sourceStringComparer");
 
-			//return token => multiplier * (FullTextIndexer.Core.Constants.GetStopWords("en").Contains(token, sourceStringComparer) ? 0.01f : 1f);
-			return token => multiplier * (FullTextIndexer.Core.Constants.GetStopWords("en").Contains(token) ? 0.01f : 1f);
+			// Constructing a HashSet of the normalised versions of the stop words means that looking up whether normalised tokens are stop
+			// words can be a lot faster (as neither the stop words nor the token need to be fed through the normaliser again)
+			var hashSetOfNormalisedStopWords = new HashSet<string>(
+				FullTextIndexer.Core.Constants.GetStopWords("en").Select(word => sourceStringComparer.GetNormalisedString(word))
+			);
+			return normalisedToken => multiplier * (hashSetOfNormalisedStopWords.Contains(normalisedToken) ? 0.01f : 1f);
 		}
 
 		[Serializable]
