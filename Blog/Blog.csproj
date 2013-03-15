@@ -85,6 +85,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Controllers\AbstractContentDeliveringController.cs" />
+    <Compile Include="Controllers\RSSController.cs" />
     <Compile Include="Controllers\SearchController.cs" />
     <Compile Include="Factories\ControllerFactory.cs" />
     <Compile Include="Controllers\AbstractErrorLoggingController.cs" />
@@ -102,6 +103,7 @@
     <Compile Include="Helpers\Timing\StopwatchAttribute.cs" />
     <Compile Include="Misc\Constants.cs" />
     <Compile Include="Models\ArchiveMonthLink.cs" />
+    <Compile Include="Models\RSSFeedModel.cs" />
     <Compile Include="Models\ISideBarContentModel.cs" />
     <Compile Include="Models\ICommonSiteConfigModel.cs" />
     <Compile Include="Models\PostRepositories\IPostRepository_Extensions.cs" />
@@ -239,6 +241,7 @@
   <ItemGroup>
     <None Include="App_Data\SearchIndex.dat" />
     <Content Include="Views\Shared\SiteMasterWithSearchOnlySidebar.cshtml" />
+    <Content Include="Views\RSS\Feed.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\BlogBackEnd\BlogBackEnd.csproj">

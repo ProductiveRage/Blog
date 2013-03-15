@@ -17,6 +17,8 @@ namespace Blog.Helpers.Posts
 	{
 		public static IHtmlString RenderPost(this HtmlHelper helper, Post post, ICache cache)
 		{
+			if (helper == null)
+				throw new ArgumentNullException("helper");
 			if (post == null)
 				throw new ArgumentNullException("post");
 			if (cache == null)
@@ -32,12 +34,50 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			var markdownContent = handlePostLinks(
+			var content = GetRenderableContent(helper, post, null, true, true);
+			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
+			return (IHtmlString)MvcHtmlString.Create(content);
+		}
+
+		public static IHtmlString RenderPostForRSS(this HtmlHelper helper, Post post, string protocolForAbsoluteUrls, ICache cache)
+		{
+			if (helper == null)
+				throw new ArgumentNullException("helper");
+			if (post == null)
+				throw new ArgumentNullException("post");
+			if (string.IsNullOrWhiteSpace(protocolForAbsoluteUrls))
+				throw new ArgumentException("Null/blank protocolForAbsoluteUrls specified");
+			if (cache == null)
+				throw new ArgumentNullException("cache");
+
+			var cacheKey = "PostHelper-RenderPostForRSS-" + post.Id;
+			var cachedData = cache[cacheKey];
+			if (cachedData != null)
+			{
+				var cachedPostContent = cachedData as CachablePostContent;
+				if ((cachedPostContent != null) && (cachedPostContent.LastModified >= post.LastModified))
+					return (IHtmlString)MvcHtmlString.Create(cachedPostContent.RenderableContent);
+				cache.Remove(cacheKey);
+			}
+
+			var content = GetRenderableContent(helper, post, protocolForAbsoluteUrls, false, false);
+			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
+			return (IHtmlString)MvcHtmlString.Create(content);
+		}
+
+		private static string GetRenderableContent(HtmlHelper helper, Post post, string optionalProtocolForAbsoluteUrls, bool includeTitle, bool includeTags)
+		{
+			if (helper == null)
+				throw new ArgumentNullException("helper");
+			if (post == null)
+				throw new ArgumentNullException("post");
+			if ((optionalProtocolForAbsoluteUrls != null) && string.IsNullOrWhiteSpace(optionalProtocolForAbsoluteUrls))
+				throw new ArgumentException("optionalProtocolForAbsoluteUrls must not be blank if it is non-null");
+
+			var markdownContent = HandlePostLinks(
 				helper,
-				replaceFirstLineHashHeaderWithPostLink(
-					post.MarkdownContent,
-					post.Id
-				)
+				includeTitle ? ReplaceFirstLineHashHeaderWithPostLink(post.MarkdownContent, post.Id) : RemoveTitle(post.MarkdownContent),
+				optionalProtocolForAbsoluteUrls
 			);
 
 			var content = new StringBuilder();
@@ -46,31 +86,36 @@ namespace Blog.Helpers.Posts
 				MarkdownHelper.TransformIntoHtml(markdownContent)
 			);
 			content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
-			if (post.Tags.Count() > 0)
+			if (includeTags && (post.Tags.Any()))
 			{
 				content.Append("<div class=\"Tags\">");
 				content.Append("<label>Tags:</label>");
 				content.Append("<ul>");
 				foreach (var tag in post.Tags)
-					content.AppendFormat("<li>{0}</li>", LinkExtensions.ActionLink(helper, tag, "ArchiveByTag", new { Tag = tag }));
+				{
+					content.AppendFormat(
+						"<li>{0}</li>",
+						helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag }, optionalProtocolForAbsoluteUrls)
+					);
+				}
 				content.Append("</ul>");
 				content.Append("</div>");
 			}
 
-			var renderableContent = content.ToString();
-			cache[cacheKey] = new CachablePostContent(renderableContent, post.LastModified);
-			return (IHtmlString)MvcHtmlString.Create(renderableContent);
+			return content.ToString();
 		}
 
 		/// <summary>
 		/// Update any markdown links where the target is of the form "Post{0}" to replace with the real url
 		/// </summary>
-		private static string handlePostLinks(HtmlHelper helper, string content)
+		private static string HandlePostLinks(HtmlHelper helper, string content, string optionalProtocolForAbsoluteUrls)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
 			if (string.IsNullOrEmpty(content))
 				return content;
+			if ((optionalProtocolForAbsoluteUrls != null) && string.IsNullOrWhiteSpace(optionalProtocolForAbsoluteUrls))
+				throw new ArgumentException("optionalProtocolForAbsoluteUrls must not be blank if it is non-null");
 
 			var url = new UrlHelper(helper.ViewContext.RequestContext);
 			return Regex.Replace(
@@ -80,7 +125,7 @@ namespace Blog.Helpers.Posts
 				{
 					return String.Format(
 						"]({0})",
-						url.Action("ArchiveById", new { Id = int.Parse(match.Groups[1].Value) })
+						url.Action("ArchiveById", "ViewPost", new { Id = int.Parse(match.Groups[1].Value) }, optionalProtocolForAbsoluteUrls)
 					);
 				},
 				RegexOptions.Multiline
@@ -449,17 +494,19 @@ namespace Blog.Helpers.Posts
 			return content;
 		}
 
+		private const string FirstLineTitleIdentifierPattern = @"^(#+)\s*(.*?)(\n|\r)";
+
 		/// <summary>
 		/// If the first line of the content is a header (defined by a number of "#" characters) then wrap this in a link to the post it is part of
 		/// </summary>
-		private static string replaceFirstLineHashHeaderWithPostLink(string content, int postId)
+		private static string ReplaceFirstLineHashHeaderWithPostLink(string content, int postId)
 		{
 			if (string.IsNullOrEmpty(content))
 				return content;
 
 			return Regex.Replace(
 				content.Trim(),
-				@"^(#+)\s*(.*?)(\n|\r)",
+				FirstLineTitleIdentifierPattern,
 				delegate(Match match)
 				{
 					// 2012-11-10: Also add an anchor so that we can create hash tags to link to Posts - this would only cause an issue if
@@ -471,6 +518,22 @@ namespace Blog.Helpers.Posts
 						postId
 					);
 				},
+				RegexOptions.Singleline
+			);
+		}
+
+		/// <summary>
+		/// If the first line of the content is a header (defined by a number of "#" characters) then remove this first line
+		/// </summary>
+		private static string RemoveTitle(string content)
+		{
+			if (string.IsNullOrEmpty(content))
+				return content;
+
+			return Regex.Replace(
+				content.Trim(),
+				FirstLineTitleIdentifierPattern,
+				"",
 				RegexOptions.Singleline
 			);
 		}

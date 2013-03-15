@@ -31,6 +31,13 @@ namespace Blog.Factories
 						GetLongTermCache(requestContext)
 					);
 
+				case "RSS":
+					return new RSSController(
+						new PostRepositoryFactory(requestContext.HttpContext).Get(),
+						10, // maximumNumberOfPostsToPublish
+						GetLongTermCache(requestContext)
+					);
+
 				case "ViewPost":
 					return new ViewPostController(
 						new PostRepositoryFactory(requestContext.HttpContext).Get(),

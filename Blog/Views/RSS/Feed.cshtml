@@ -1,0 +1,41 @@
+﻿@using System.Linq;
+@using Blog.Helpers.Posts;
+@model Blog.Models.RSSFeedModel
+@{
+    Layout = null;
+}
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+
+	<channel>
+		
+		<title>Productive Rage</title>
+		<link>http://www.productiverage.com/</link>
+		<description>Dan's techie ramblings</description>
+		<language>en-gb</language>
+
+		<lastBuildDate>@Model.Posts.Max(p => p.Posted).ToString("ddd, dd MMM yyyy HH:mm:ss")</lastBuildDate>
+		<docs>http://blogs.law.harvard.edu/tech/rss</docs>
+		
+		<image>
+			<title>Productive Rage</title>
+			<url>http://www.productiverage.com/Content/Images/Grouch.jpg</url>
+			<width>147</width>
+			<height>144</height>
+			<link>http://www.productiverage.com/</link>
+		</image>
+
+		<xhtml:meta xmlns:xhtml="http://www.w3.org/1999/xhtml" name="robots" content="noindex" /> 
+
+@foreach (var post in Model.Posts) {
+		<item>
+			<title>@post.Title</title>
+			<link>@Url.Action("ArchiveById", "ViewPost", new { Id = post.Id }, Request.Url.Scheme)</link>
+			<description>@Html.Encode(Html.RenderPostForRSS(post, Request.Url.Scheme, Model.PostContentCache))</description>
+		</item>
+	
+}
+
+	</channel>
+
+</rss>
