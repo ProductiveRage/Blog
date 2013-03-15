@@ -7,15 +7,11 @@ using Blog.Factories;
 
 namespace Blog
 {
-	// Note: For instructions on enabling IIS6 or IIS7 classic mode, 
-	// visit http://go.microsoft.com/?LinkId=9394801
 	public class MvcApplication : RequestTimingApplication
 	{
 		public static void RegisterRoutes(RouteCollection routes)
 		{
-			routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
-			routes.IgnoreRoute("{*favicon}", new { favicon = @"(.*/)?favicon.ico(/.*)?" });
-			routes.IgnoreRoute("{*staticcontent}", new { staticcontent = @".*\.(bmp|gif|jpg|js|png)(/.*)?" });
+			routes.IgnoreRoute("{*staticcontent}", new { staticcontent = @".*\.(bmp|gif|ico|jpg|js|png)(/.*)?" });
 
 			routes.RouteExistingFiles = true; // We have to set this to true so that stylesheets (for example) get processed rather than returned direct
 
