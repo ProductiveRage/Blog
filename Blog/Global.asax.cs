@@ -11,7 +11,7 @@ namespace Blog
 	{
 		public static void RegisterRoutes(RouteCollection routes)
 		{
-			routes.IgnoreRoute("{*staticcontent}", new { staticcontent = @".*\.(bmp|gif|ico|jpg|js|png)(/.*)?" });
+			routes.IgnoreRoute("{*staticcontent}", new { staticcontent = @".*\.(bmp|gif|ico|jpg|js|png|xslt)(/.*)?" });
 
 			routes.RouteExistingFiles = true; // We have to set this to true so that stylesheets (for example) get processed rather than returned direct
 

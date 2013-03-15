@@ -178,6 +178,7 @@
     <Content Include="Content\Images\Posts\WinDbgASPError2.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError3.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError4.png" />
+    <Content Include="Content\RSS.xslt" />
     <Content Include="Content\Sidebar.less" />
     <Content Include="Content\Footer.less" />
     <Content Include="Content\Header.less" />
