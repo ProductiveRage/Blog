@@ -12,6 +12,9 @@
 	<link rel="stylesheet" type="text/css" href="@Url.Content("~/Content/IEBefore9.css")" />
 	<![endif]-->
 	<link rel="stylesheet" type="text/css" media="print" href="@Url.Content("~/Content/PrintOverrides.css")" />
+@if ((Model != null) && (Model.OptionalCanonicalLinkBase != null)) {
+	<link rel="canonical" href="@Html.AttributeEncode(Model.OptionalCanonicalLinkBase + Request.Url.PathAndQuery)" />
+}
 	<link rel="shortcut icon" href="/favicon.ico" />
 @if ((Model != null) && (Model.OptionalGoogleAnalyticsId != null)) {
 	<script type="text/javascript">

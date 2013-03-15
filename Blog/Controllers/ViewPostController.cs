@@ -11,11 +11,15 @@ namespace Blog.Controllers
 {
 	public class ViewPostController : AbstractErrorLoggingController
 	{
-		private IPostRepository _postRepository;
-		private string _optionalGoogleAnalyticsId;
-		private string _optionalDisqusShortName;
-		private ICache _cache;
-		public ViewPostController(IPostRepository postRepository, string optionalGoogleAnalyticsId, string optionalDisqusShortName, ICache cache)
+		private readonly IPostRepository _postRepository;
+		private readonly string _optionalCanonicalLinkBase, _optionalGoogleAnalyticsId, _optionalDisqusShortName;
+		private readonly ICache _cache;
+		public ViewPostController(
+			IPostRepository postRepository,
+			string optionalCanonicalLinkBase,
+			string optionalGoogleAnalyticsId,
+			string optionalDisqusShortName,
+			ICache cache)
 		{
 			if (postRepository == null)
 				throw new ArgumentNullException("postRepository");
@@ -23,6 +27,7 @@ namespace Blog.Controllers
 				throw new ArgumentNullException("cache");
 
 			_postRepository = postRepository;
+			_optionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			_optionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			_optionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
 			_cache = cache;
@@ -47,6 +52,7 @@ namespace Blog.Controllers
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
 					true,
+					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
 					_cache
@@ -69,6 +75,7 @@ namespace Blog.Controllers
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
 					false,
+					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
 					_cache
@@ -97,6 +104,7 @@ namespace Blog.Controllers
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
 					false,
+					_optionalDisqusShortName,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
 					_cache

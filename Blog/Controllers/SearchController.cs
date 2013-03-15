@@ -12,11 +12,11 @@ namespace Blog.Controllers
 {
 	public class SearchController : AbstractContentDeliveringController
     {
-		private IPostRepository _postRepository;
-		private IPostIndexer _postIndexer;
-		private string _optionalGoogleAnalyticsId;
-		private ICache _cache;
-		public SearchController(IPostRepository postRepository, IPostIndexer postIndexer, string optionalGoogleAnalyticsId, ICache cache)
+		private readonly IPostRepository _postRepository;
+		private readonly IPostIndexer _postIndexer;
+		private readonly string _optionalCanonicalLinkBase, _optionalGoogleAnalyticsId;
+		private readonly ICache _cache;
+		public SearchController(IPostRepository postRepository, IPostIndexer postIndexer, string optionalCanonicalLinkBase, string optionalGoogleAnalyticsId, ICache cache)
 		{
 			if (postRepository == null)
 				throw new ArgumentNullException("postRepository");
@@ -28,6 +28,7 @@ namespace Blog.Controllers
 			_postRepository = postRepository;
 			_postIndexer = postIndexer;
 			_optionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
+			_optionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			_cache = cache;
 		}
 
@@ -56,6 +57,7 @@ namespace Blog.Controllers
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
+					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_cache
 				)
