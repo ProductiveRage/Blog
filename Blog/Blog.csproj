@@ -117,6 +117,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="apple-touch-icon.png" />
     <Content Include="App_Data\AllEnglishWords.txt" />
     <Content Include="App_Data\Posts\1,2011,3,14,20,14,2,0,Immutability.txt" />
     <Content Include="App_Data\Posts\10,2011,8,30,19,06,0,0,Mercurial.txt" />
