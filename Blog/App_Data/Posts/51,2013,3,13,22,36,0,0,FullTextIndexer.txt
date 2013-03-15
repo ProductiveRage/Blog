@@ -105,7 +105,7 @@ The second index, the "precise match" index, should be less forgiving (using a *
 
 ### Query Translator
 
-The two indexes (and a MatchCombiner, see beloW) are used to instantiate a **QueryTranslator** whose method GetMatches will take an **IQuerySegment** and return an immutable set of WeighedEntry results, just like the the **IIndexData* class.
+The two indexes (and a MatchCombiner, see below) are used to instantiate a **QueryTranslator** whose method GetMatches will take an **IQuerySegment** and return an immutable set of WeighedEntry results, just like the the **IIndexData* class.
 
 The MatchCombiner is used whenever multiple matches need be combined together into one - this will happen if there are multiple words in the initial query and will happen any times multiple terms are bracketed together. For the search term
 
