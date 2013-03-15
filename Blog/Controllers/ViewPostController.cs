@@ -105,7 +105,7 @@ namespace Blog.Controllers
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
 					false,
-					_optionalDisqusShortName,
+					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
 					_cache
