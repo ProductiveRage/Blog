@@ -6,6 +6,7 @@ using Blog.Helpers.Timing;
 using Blog.Models;
 using BlogBackEnd.Caching;
 using FullTextIndexer.Common.Lists;
+using BlogBackEnd.Models;
 
 namespace Blog.Controllers
 {
@@ -47,7 +48,7 @@ namespace Blog.Controllers
 				"Index",
 				new PostListModel(
 					post.Title,
-					new[] { post },
+					new NonNullImmutableList<Post>(new[] { post }),
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
