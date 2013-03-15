@@ -1,17 +1,17 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
 	public static class IPostRepository_Extensions
 	{
-		public static IEnumerable<ArchiveMonthLink> GetArchiveLinks(this IPostRepository repo)
+		public static NonNullImmutableList<ArchiveMonthLink> GetArchiveLinks(this IPostRepository repo)
 		{
 			if (repo == null)
 				throw new ArgumentNullException("repo");
 
-			var months = new List<ArchiveMonthLink>();
+			var months = new NonNullImmutableList<ArchiveMonthLink>();
 			var min = repo.GetMinPostDate();
 			var max = repo.GetMaxPostDate();
 			if ((min != null) && (max != null))
@@ -22,7 +22,7 @@ namespace Blog.Models
 					var postCount = repo.Get(startDate, startDate.AddMonths(1)).Count();
 					if (postCount > 0)
 					{
-						months.Add(new ArchiveMonthLink(
+						months = months.Add(new ArchiveMonthLink(
 						  startDate.ToString("MMMM yyyy"),
 						  startDate.Month,
 						  startDate.Year,

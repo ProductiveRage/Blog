@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using BlogBackEnd.Caching;
 using BlogBackEnd.Models;
 using FullTextIndexer.Common.Lists;
@@ -11,10 +9,10 @@ namespace Blog.Models
 	{
 		public PostListModel(
 			string title,
-			IEnumerable<Post> posts,
-			IEnumerable<PostStub> recent,
-			IEnumerable<PostStub> highlights,
-			IEnumerable<ArchiveMonthLink> archiveLinks,
+			NonNullImmutableList<Post> posts,
+			NonNullImmutableList<PostStub> recent,
+			NonNullImmutableList<PostStub> highlights,
+			NonNullImmutableList<ArchiveMonthLink> archiveLinks,
 			bool isSinglePostView,
 			string optionalCanonicalLinkBase,
 			string optionalGoogleAnalyticsId,
@@ -35,10 +33,10 @@ namespace Blog.Models
 				throw new ArgumentNullException("cache");
 
 			Title = title.Trim();
-			Posts = new NonNullImmutableList<Post>(posts.Where(p => p != null));
-			MostRecent = new NonNullImmutableList<PostStub>(recent.Where(p => p != null).OrderByDescending(p => p.Posted));
-			Highlights = new NonNullImmutableList<PostStub>(highlights.Where(p => p != null));
-			ArchiveLinks = new NonNullImmutableList<ArchiveMonthLink>(archiveLinks.Where(l => l != null).OrderByDescending(a => new DateTime(a.Year, a.Month, 1)));
+			Posts = posts;
+			MostRecent = recent.Sort((x, y) => -x.Posted.CompareTo(y.Posted));
+			Highlights = highlights;
+			ArchiveLinks = archiveLinks.Sort((x, y) => -(new DateTime(x.Year, x.Month, 1)).CompareTo(new DateTime(y.Year, y.Month, 1)));
 			IsSinglePostView = isSinglePostView;
 			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
