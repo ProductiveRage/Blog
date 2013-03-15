@@ -16,6 +16,7 @@ namespace Blog.Models
 			IEnumerable<PostStub> highlights,
 			IEnumerable<ArchiveMonthLink> archiveLinks,
 			bool isSinglePostView,
+			string optionalCanonicalLinkBase,
 			string optionalGoogleAnalyticsId,
 			string optionalDisqusShortName,
 			ICache postContentCache)
@@ -39,6 +40,7 @@ namespace Blog.Models
 			Highlights = new NonNullImmutableList<PostStub>(highlights.Where(p => p != null));
 			ArchiveLinks = new NonNullImmutableList<ArchiveMonthLink>(archiveLinks.Where(l => l != null).OrderByDescending(a => new DateTime(a.Year, a.Month, 1)));
 			IsSinglePostView = isSinglePostView;
+			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			OptionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
 			PostContentCache = postContentCache;
@@ -74,6 +76,11 @@ namespace Blog.Models
 		/// This will never return null (the results will be ordered in descending date order, by month)
 		/// </summary>
 		public NonNullImmutableList<ArchiveMonthLink> ArchiveLinks { get; private set; }
+
+		/// <summary>
+		/// This may be null but it will never be empty if non-null
+		/// </summary>
+		public string OptionalCanonicalLinkBase { get; private set; }
 
 		/// <summary>
 		/// This may be null but it will never be empty if non-null

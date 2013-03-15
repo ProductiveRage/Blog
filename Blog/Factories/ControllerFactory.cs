@@ -26,6 +26,7 @@ namespace Blog.Factories
 					return new SearchController(
 						new PostRepositoryFactory(requestContext.HttpContext).Get(),
 						new PostIndexerFactory(requestContext.HttpContext).Get(),
+						Constants.CanonicalLinkBase,
 						Constants.GoogleAnalyticsId,
 						GetLongTermCache(requestContext)
 					);
@@ -33,6 +34,7 @@ namespace Blog.Factories
 				case "ViewPost":
 					return new ViewPostController(
 						new PostRepositoryFactory(requestContext.HttpContext).Get(),
+						Constants.CanonicalLinkBase,
 						Constants.GoogleAnalyticsId,
 						Constants.DisqusShortName,
 						GetLongTermCache(requestContext)
