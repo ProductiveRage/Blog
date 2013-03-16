@@ -33,6 +33,7 @@
 			<title>@post.Title</title>
 			<link>@Url.Action("ArchiveById", "ViewPost", new { Id = post.Id }, Request.Url.Scheme)</link>
 			<description>@Html.Encode(Html.RenderPostForRSS(post, Request.Url.Scheme, Model.PostContentCache))</description>
+			<pubDate>@post.Posted.ToString("ddd, dd MMM yyyy HH:mm:ss")</pubDate>
 		</item>
 	
 }
