@@ -34,7 +34,7 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			var content = GetRenderableContent(helper, post, null, true, true);
+			var content = GetRenderableContent(helper, post, null, true, true, true);
 			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
@@ -60,12 +60,13 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			var content = GetRenderableContent(helper, post, protocolForAbsoluteUrls, false, false);
+			// TODO: Ensure that image urls are absolute
+			var content = GetRenderableContent(helper, post, protocolForAbsoluteUrls, false, false, false);
 			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
 
-		private static string GetRenderableContent(HtmlHelper helper, Post post, string optionalProtocolForAbsoluteUrls, bool includeTitle, bool includeTags)
+		private static string GetRenderableContent(HtmlHelper helper, Post post, string optionalProtocolForAbsoluteUrls, bool includeTitle, bool includePostedDate, bool includeTags)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
@@ -81,11 +82,13 @@ namespace Blog.Helpers.Posts
 			);
 
 			var content = new StringBuilder();
-			content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
+			if (includePostedDate)
+				content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
 			content.Append(
 				MarkdownHelper.TransformIntoHtml(markdownContent)
 			);
-			content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
+			if (includePostedDate)
+				content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
 			if (includeTags && (post.Tags.Any()))
 			{
 				content.Append("<div class=\"Tags\">");

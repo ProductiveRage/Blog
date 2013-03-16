@@ -33,6 +33,17 @@
                         margin: 4px;
                         padding: 0 0 16px 24px;
                     }
+                    div.Post h2.Title
+                    {
+                        margin: 0.5em 0 0 0;
+                        padding: 0;
+                    }
+                    div.Post p.PostedDate
+                    {
+                        color: #c0c0c0;
+                        margin: 0;
+                        padding: 0;
+                    }
                 </style>
             </head>
             <body>
@@ -42,12 +53,15 @@
                 <h2><xsl:value-of select="rss/channel/description"/></h2>
                 <img class="Logo" src="{rss/channel/image/url}" />
                 <xsl:for-each select="rss/channel/item">
-                    <div class="article">
-                        <h2>
+                    <div class="Post">
+                        <h2 class="Title">
                             <a href="{link}" rel="bookmark">
                                 <xsl:value-of select="title"/>
                             </a>
                         </h2>
+                        <p class="PostedDate">
+                            <xsl:value-of select="pubDate"/>
+                        </p>
                         <xsl:value-of select="description" disable-output-escaping="yes"/>
                     </div>
                 </xsl:for-each>
