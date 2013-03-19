@@ -52,11 +52,16 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 
 			try
 			{
-				using (var stream = File.Open(_dataFile.FullName, FileMode.Create))
+				using (var memoryStream = new MemoryStream())
 				{
-					using (var compressedStream = new GZipStream(stream, CompressionMode.Compress))
+					using (var compressedStream = new GZipStream(memoryStream, CompressionMode.Compress))
 					{
 						new BinaryFormatter().Serialize(compressedStream, data);
+					}
+					var serialisedData = memoryStream.ToArray();
+					using (var fileStream = File.Open(_dataFile.FullName, FileMode.Create))
+					{
+						fileStream.Write(serialisedData, 0, serialisedData.Length);
 					}
 				}
 			}
