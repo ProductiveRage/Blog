@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -34,19 +35,19 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			var content = GetRenderableContent(helper, post, null, true, true, true);
+			var content = GetRenderableContent(helper, post, true, true, true);
 			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
 
-		public static IHtmlString RenderPostForRSS(this HtmlHelper helper, Post post, string protocolForAbsoluteUrls, ICache cache)
+		public static IHtmlString RenderPostForRSS(this HtmlHelper helper, Post post, Uri requestHostUrl, ICache cache)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
 			if (post == null)
 				throw new ArgumentNullException("post");
-			if (string.IsNullOrWhiteSpace(protocolForAbsoluteUrls))
-				throw new ArgumentException("Null/blank protocolForAbsoluteUrls specified");
+			if (requestHostUrl == null)
+				throw new ArgumentNullException("requestHostUrl");
 			if (cache == null)
 				throw new ArgumentNullException("cache");
 
@@ -60,25 +61,31 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			// TODO: Ensure that image urls are absolute
-			var content = GetRenderableContent(helper, post, protocolForAbsoluteUrls, false, false, false);
+			var content = GetRenderableContent(helper, post, false, false, false);
+			var doc = new HtmlDocument();
+			doc.LoadHtml(content);
+			MakeUrlsAbsolute(doc, "a", "href", requestHostUrl.Scheme, requestHostUrl.Host, requestHostUrl.Port);
+			MakeUrlsAbsolute(doc, "img", "src", requestHostUrl.Scheme, requestHostUrl.Host, requestHostUrl.Port);
+			using (var writer = new StringWriter())
+			{
+				doc.Save(writer);
+				content = writer.ToString();
+			}
+
 			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
 
-		private static string GetRenderableContent(HtmlHelper helper, Post post, string optionalProtocolForAbsoluteUrls, bool includeTitle, bool includePostedDate, bool includeTags)
+		private static string GetRenderableContent(HtmlHelper helper, Post post, bool includeTitle, bool includePostedDate, bool includeTags)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
 			if (post == null)
 				throw new ArgumentNullException("post");
-			if ((optionalProtocolForAbsoluteUrls != null) && string.IsNullOrWhiteSpace(optionalProtocolForAbsoluteUrls))
-				throw new ArgumentException("optionalProtocolForAbsoluteUrls must not be blank if it is non-null");
 
 			var markdownContent = HandlePostLinks(
 				helper,
-				includeTitle ? ReplaceFirstLineHashHeaderWithPostLink(post.MarkdownContent, post.Id) : RemoveTitle(post.MarkdownContent),
-				optionalProtocolForAbsoluteUrls
+				includeTitle ? ReplaceFirstLineHashHeaderWithPostLink(post.MarkdownContent, post.Id) : RemoveTitle(post.MarkdownContent)
 			);
 
 			var content = new StringBuilder();
@@ -98,7 +105,7 @@ namespace Blog.Helpers.Posts
 				{
 					content.AppendFormat(
 						"<li>{0}</li>",
-						helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag }, optionalProtocolForAbsoluteUrls)
+						helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag })
 					);
 				}
 				content.Append("</ul>");
@@ -111,14 +118,12 @@ namespace Blog.Helpers.Posts
 		/// <summary>
 		/// Update any markdown links where the target is of the form "Post{0}" to replace with the real url
 		/// </summary>
-		private static string HandlePostLinks(HtmlHelper helper, string content, string optionalProtocolForAbsoluteUrls)
+		private static string HandlePostLinks(HtmlHelper helper, string content)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
 			if (string.IsNullOrEmpty(content))
 				return content;
-			if ((optionalProtocolForAbsoluteUrls != null) && string.IsNullOrWhiteSpace(optionalProtocolForAbsoluteUrls))
-				throw new ArgumentException("optionalProtocolForAbsoluteUrls must not be blank if it is non-null");
 
 			var url = new UrlHelper(helper.ViewContext.RequestContext);
 			return Regex.Replace(
@@ -128,11 +133,57 @@ namespace Blog.Helpers.Posts
 				{
 					return String.Format(
 						"]({0})",
-						url.Action("ArchiveById", "ViewPost", new { Id = int.Parse(match.Groups[1].Value) }, optionalProtocolForAbsoluteUrls)
+						url.Action("ArchiveById", "ViewPost", new { Id = int.Parse(match.Groups[1].Value) })
 					);
 				},
 				RegexOptions.Multiline
 			);
+		}
+
+		private static void MakeUrlsAbsolute(HtmlDocument doc, string tagName, string attributeName, string scheme, string hostName, int port)
+		{
+			if (doc == null)
+				throw new ArgumentNullException("doc");
+			if (string.IsNullOrWhiteSpace(tagName))
+				throw new ArgumentException("Null/blank tagName specified");
+			if (string.IsNullOrWhiteSpace(attributeName))
+				throw new ArgumentException("Null/blank attributeName specified");
+			if (string.IsNullOrWhiteSpace(scheme))
+				throw new ArgumentException("Null/blank scheme specified");
+			if (string.IsNullOrWhiteSpace(hostName))
+				throw new ArgumentException("Null/blank hostName specified");
+
+			var nodes = doc.DocumentNode.SelectNodes(string.Format("//{0}[@{1}]", tagName, attributeName));
+			if (nodes == null)
+				return;
+
+			foreach (var node in nodes)
+			{
+				if (node == null)
+					throw new ArgumentException("Null reference encountered in htmlNodes set");
+
+				var attribute = node.Attributes[attributeName];
+				if ((attribute == null) || string.IsNullOrWhiteSpace(attribute.Value))
+					continue;
+
+				try
+				{
+					var url = new Uri(attribute.Value, UriKind.RelativeOrAbsolute);
+					if (url.IsAbsoluteUri)
+						continue;
+				}
+				catch
+				{
+					continue; // Ignore any invalid values
+				}
+				attribute.Value = string.Format(
+					"{0}://{1}{2}/{3}",
+					scheme,
+					hostName,
+					(port == 80) ? "" : ":" + port,
+					attribute.Value.ToString().TrimStart('/')
+				);
+			}
 		}
 
 		public static IHtmlString RenderPostAsPlainTextWithSearchTermsHighlighted(

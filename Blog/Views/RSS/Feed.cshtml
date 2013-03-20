@@ -12,28 +12,31 @@
 		
 		<title>Productive Rage</title>
 		<link>http://www.productiverage.com/</link>
+		<atom:link href="http://www.productiverage.com/feed" rel="self" type="application/rss+xml"/>
 		<description>Dan's techie ramblings</description>
 		<language>en-gb</language>
 
-		<lastBuildDate>@Model.Posts.Max(p => p.Posted).ToString("ddd, dd MMM yyyy HH:mm:ss")</lastBuildDate>
+		<lastBuildDate>@Model.Posts.Max(p => p.Posted).ToString("ddd, dd MMM yyyy HH:mm:ss") GMT</lastBuildDate>
 		<docs>http://blogs.law.harvard.edu/tech/rss</docs>
 		
 		<image>
 			<title>Productive Rage</title>
 			<url>http://www.productiverage.com/Content/Images/Grouch.jpg</url>
-			<width>147</width>
-			<height>144</height>
+			<width>142</width>
+			<height>142</height>
 			<link>http://www.productiverage.com/</link>
 		</image>
 
 		<xhtml:meta xmlns:xhtml="http://www.w3.org/1999/xhtml" name="robots" content="noindex" /> 
 
-@foreach (var post in Model.Posts) {
+@foreach (var post in Model.Posts)
+{
 		<item>
 			<title>@post.Title</title>
 			<link>@Url.Action("ArchiveById", "ViewPost", new { Id = post.Id }, Request.Url.Scheme)</link>
-			<description>@Html.Encode(Html.RenderPostForRSS(post, Request.Url.Scheme, Model.PostContentCache))</description>
-			<pubDate>@post.Posted.ToString("ddd, dd MMM yyyy HH:mm:ss")</pubDate>
+			<guid>@Url.Action("ArchiveById", "ViewPost", new { Id = post.Id }, Request.Url.Scheme)</guid>
+			<description>@Html.Encode(Html.RenderPostForRSS(post, Request.Url, Model.PostContentCache))</description>
+			<pubDate>@post.Posted.ToString("ddd, dd MMM yyyy HH:mm:ss") GMT</pubDate>
 		</item>
 	
 }
