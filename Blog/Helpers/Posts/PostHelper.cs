@@ -10,6 +10,7 @@ using System.Web.Mvc.Html;
 using BlogBackEnd.Caching;
 using BlogBackEnd.Models;
 using FullTextIndexer.Common.Lists;
+using FullTextIndexer.Core.Indexes;
 using HtmlAgilityPack;
 
 namespace Blog.Helpers.Posts
@@ -189,56 +190,55 @@ namespace Blog.Helpers.Posts
 		public static IHtmlString RenderPostAsPlainTextWithSearchTermsHighlighted(
 			this HtmlHelper helper,
 			Post post,
-			string searchTerms,
-			int maxLengthOfEncodedContent,
+			NonNullImmutableList<SourceFieldLocationWithTerm> sourceLocations,
+			int maxLength,
 			ICache cache)
 		{
 			if (post == null)
 				throw new ArgumentNullException("post");
 			if (cache == null)
 				throw new ArgumentNullException("cache");
-			if (string.IsNullOrWhiteSpace(searchTerms))
-				throw new ArgumentException("Null/blank searchTerms specified");
-			if (maxLengthOfEncodedContent <= 0)
+			if (sourceLocations == null)
+				throw new ArgumentNullException("sourceLocations");
+			if (!sourceLocations.Any())
+				throw new ArgumentException("Empty sourceLocations set specified - invalid");
+			if (maxLength <= 0)
 				throw new ArgumentOutOfRangeException("maxLength");
-
-			// Always need to HtmlEncode the content (to ensure that "<" and other characters are escaped, even though we know there is no markup returned
-			// from GetPostAsPlainText)
-			var htmlEncodedPlainTextContent = HttpUtility.HtmlEncode(GetPostAsPlainText(post, cache));
+			if (cache == null)
+				throw new ArgumentNullException("cache");
 
 			// Try to determine which segments of the content should be highlighted as matched search terms
-			// - Note: This method uses a simple StringComparison.InvariantCultureIgnoreCase with a whole-word-only matching requirement so it's possible
-			//   that not all of the search terms will be present in the posts indicated by FullTextIndexer results, depending upon the StringNormaliser
-			//   used by the indexer (eg. if a plurality-handling normaliser is used then it may match "properties" to a post the contains the word
-			//   "property" but the IdentifySearchTerms method does not have this additional logic and so will not be able to mark "property" for
-			//  highlighting as it isn't one of the search terms!
+			var plainTextPostContent = GetPostAsPlainText(post, cache);
 			var segmentMatchRegions = IdentifySearchTerms(
-				htmlEncodedPlainTextContent,
-				new NonNullOrEmptyStringList(searchTerms.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Select(v => v.Trim()).Distinct()),
-				maxLengthOfEncodedContent,
+				plainTextPostContent,
+				sourceLocations,
+				maxLength,
 				new SearchTermBestMatchComparer()
 			);
 			if (!segmentMatchRegions.Any())
 			{
-				// If none of the search terms matched then just return the original content
+				// If none of the search terms matched then just return the original content (have to HtmlEncode the content, even though it's plain
+				// text, in case it contains anything that needs entity-encoding)
 				return (IHtmlString)MvcHtmlString.Create(
-					TruncateAsNecessary(htmlEncodedPlainTextContent, maxLengthOfEncodedContent, "...")
+					HttpUtility.HtmlEncode(
+						(plainTextPostContent.Length > maxLength) ? (plainTextPostContent.Substring(0, maxLength) + "...") : plainTextPostContent
+					)
 				);
 			}
 
 			// Otherwise jump to the start of the matched content - ordinarily this will mean jumping to the lowest value in the bestMatch array and
-			// then taking the next maxLengthOfEncodedContent number of characters, but if this would push us past the end of the string then we're
-			// better off starting from the end and taking maxLengthOfEncodedContent BACK from there
+			// then taking the next maxLength number of characters, but if this would push us past the end of the string then we're better off starting
+			// from the end and taking maxLength BACK from there
 			int numberOfCharactersToTrimFromTheStart, segmentToDisplayLength;
-			if (maxLengthOfEncodedContent > htmlEncodedPlainTextContent.Length)
+			if (maxLength > plainTextPostContent.Length)
 			{
 				// This is an easy case; we're able to show the entire content, so no characters need be removed from the start of it
 				numberOfCharactersToTrimFromTheStart = 0;
-				segmentToDisplayLength = htmlEncodedPlainTextContent.Length;
+				segmentToDisplayLength = plainTextPostContent.Length;
 			}
 			else
 			{
-				// The next case is optimistic; if every match term can be fitted into the first maxLengthOfEncodedContent number of characters
+				// The next case is optimistic; if every match term can be fitted into the first maxLength number of characters
 				// then display the string starting at the beginning
 				var firstCharacterIndex = segmentMatchRegions.Min(s => s.Start);
 				int lastCharacterIndex = 0;
@@ -247,106 +247,103 @@ namespace Blog.Helpers.Posts
 					if ((segment.Start + segment.Length) > lastCharacterIndex)
 						lastCharacterIndex = segment.Start + segment.Length;
 				}
-				if (lastCharacterIndex < maxLengthOfEncodedContent)
+				if (lastCharacterIndex < maxLength)
 				{
 					numberOfCharactersToTrimFromTheStart = 0;
-					segmentToDisplayLength = maxLengthOfEncodedContent;
+					segmentToDisplayLength = maxLength;
 				}
 				else
 				{
 					// Otherwise we're going to have to take a segment out of the content
-					if ((firstCharacterIndex + maxLengthOfEncodedContent) > htmlEncodedPlainTextContent.Length)
-						numberOfCharactersToTrimFromTheStart = htmlEncodedPlainTextContent.Length - maxLengthOfEncodedContent;
+					if ((firstCharacterIndex + maxLength) > plainTextPostContent.Length)
+						numberOfCharactersToTrimFromTheStart = plainTextPostContent.Length - maxLength;
 					else
 						numberOfCharactersToTrimFromTheStart = firstCharacterIndex;
-					segmentToDisplayLength = maxLengthOfEncodedContent;
+					segmentToDisplayLength = maxLength;
 				}
 			}
 
-			// - Any overlapping regions are combined, then the regions are adjusted by subtracting numberOfCharactersToTrimFromTheStart
-			//   from the each Start value to account for the portion of the content that will be displayed
+			// Any overlapping regions are combined, then the regions are adjusted by subtracting numberOfCharactersToTrimFromTheStart from the each Start 
+			// value to account for the portion of the content that will be displayed
 			var adjustedSegmentMatchRegions =
 				CombineOverlappingSegments(segmentMatchRegions)
-				.Select(s => new StringSegment(s.Start - numberOfCharactersToTrimFromTheStart, s.Length)); ;
-			// - They are then processed in reverse order so that matches later in the string can not affect indexes of matches earlier
-			//   in the string
-			var htmlEncodedPlainTextContentSegment = htmlEncodedPlainTextContent.Substring(numberOfCharactersToTrimFromTheStart, segmentToDisplayLength);
-			foreach (var segment in adjustedSegmentMatchRegions.OrderByDescending(s => s.Start))
+				.Select(s => new StringSegment(s.Start - numberOfCharactersToTrimFromTheStart, s.Length));
+
+			// This is the section of the plainTextPostContent that will be rendered
+			var plainTextPostContentToShow = plainTextPostContent.Substring(numberOfCharactersToTrimFromTheStart, segmentToDisplayLength);
+			if (plainTextPostContentToShow.Length < plainTextPostContent.Length)
+				plainTextPostContentToShow += "...";
+
+			// The regions are then processed by constructing a new string that takes each section - highlighted and non-highlighted sections - and html
+			// encodes them (so that any characters that require entity-encoding are dealt with correctly) and the highlighted sections being wrapped in
+			// <strong> tags
+			var highlightedContentBuilder = new StringBuilder();
+			var characterIndex = 0;
+			foreach (var segmentToHighlight in adjustedSegmentMatchRegions.OrderBy(s => s.Start))
 			{
-				htmlEncodedPlainTextContentSegment = string.Format(
-					"{0}<strong>{1}</strong>{2}",
-					htmlEncodedPlainTextContentSegment.Substring(0, segment.Start),
-					htmlEncodedPlainTextContentSegment.Substring(segment.Start, segment.Length),
-					htmlEncodedPlainTextContentSegment.Substring(segment.Start + segment.Length)
-				);
+				if (segmentToHighlight.Start > characterIndex)
+				{
+					highlightedContentBuilder.Append(HttpUtility.HtmlEncode(
+						plainTextPostContentToShow.Substring(characterIndex, segmentToHighlight.Start - characterIndex)
+					));
+				}
+				highlightedContentBuilder.Append("<strong>");
+				highlightedContentBuilder.Append(HttpUtility.HtmlEncode(
+					plainTextPostContentToShow.Substring(segmentToHighlight.Start, segmentToHighlight.Length)
+				));
+				highlightedContentBuilder.Append("</strong>");
+				characterIndex = segmentToHighlight.Start + segmentToHighlight.Length;
 			}
-			if (numberOfCharactersToTrimFromTheStart > 0)
-				htmlEncodedPlainTextContentSegment = "... " + htmlEncodedPlainTextContentSegment;
-			if ((numberOfCharactersToTrimFromTheStart + maxLengthOfEncodedContent) < htmlEncodedPlainTextContent.Length)
-				htmlEncodedPlainTextContentSegment += "... ";
-			return (IHtmlString)MvcHtmlString.Create(htmlEncodedPlainTextContentSegment);
+			if (characterIndex < plainTextPostContentToShow.Length)
+				highlightedContentBuilder.Append(HttpUtility.HtmlEncode(plainTextPostContentToShow.Substring(characterIndex)));
+			
+			return (IHtmlString)MvcHtmlString.Create(highlightedContentBuilder.ToString());
 		}
 
 		/// <summary>
-		/// This will try to identify segments of a content string to highlight that correspond to specified search terms (the terms will be matched without
-		/// case sensitivity but they must be surrounded by whitespace or punctuation - unless they are right at the start or end of the content - in order
-		/// to ensure that only whole words are matched). The segments returned will all be displayable within a segment of the content that is no longer
-		/// than the maxLength value - this may result in compromises being made and not all terms may have highlight segments returned (feasibly an
-		/// empty list will be returned if it was not possible to locate and/or match any of the terms in the content given the maxLength constraint).
+		/// This will try to identify segments of a content string to highlight that correspond to specified search terms. The segments returned will all
+		/// be displayable within a segment of the content that is no longer than the maxLength value - this may result in compromises being made and not
+		/// all terms may have highlight segments returned (feasibly an empty list will be returned if it was not possible to locate and/or match any of
+		/// the terms in the content given the maxLength constraint).
 		/// </summary>
 		private static NonNullImmutableList<StringSegment> IdentifySearchTerms(
-			string content,
-			NonNullOrEmptyStringList searchTerms,
+			string plainTextContent,
+			NonNullImmutableList<SourceFieldLocationWithTerm> sourceLocations,
 			int maxLength,
 			IComparer<NonNullImmutableList<StringSegment>> bestMatchDeterminer)
 		{
-			if (content == null)
-				throw new ArgumentNullException("content");
-			if (searchTerms == null)
-				throw new ArgumentNullException("searchTerms");
-			if (!searchTerms.Any())
-				throw new ArgumentException("No searchTerms specified");
+			if (plainTextContent == null)
+				throw new ArgumentNullException("plainTextContent");
+			if (sourceLocations == null)
+				throw new ArgumentNullException("sourceLocations");
+			if (!sourceLocations.Any())
+				throw new ArgumentException("Empty sourceLocations set specified - invalid");
 			if (bestMatchDeterminer == null)
 				throw new ArgumentNullException("bestMatchDeterminer");
 
-			if (content.Trim() == "")
+			if (plainTextContent.Trim() == "")
 				return new NonNullImmutableList<StringSegment>();
 
 			// Try to find starting points in the content for each of the search terms, only search terms that appear at the start of end of string or
 			// that are surrounded by whitespace or puncutation are considered in order to match whole words only)
-			// - Passing null to Split means break on any whitespace
+			// - Only source locations with a SourceFieldIndex of one will be considered as this is where the Post content will be recorded (the
+			//   Title and MarkdownContent are never null or blank and these fields are specified for the first Content Retrievers when the Index
+			//   Generator is constructed so SourceFieldIndex zero will always be Title and SourceFieldIndex one will always be plain text content
+			//   from the MarkdownContent)
 			var searchTermMatches = new List<Tuple<string, List<int>>>();
-			foreach (var searchTerm in searchTerms)
+			foreach (var postContentSourceLocation in sourceLocations.Where(l => l.SourceFieldIndex == 1))
 			{
-				var start = -1;
-				while (true)
+				if ((postContentSourceLocation.SourceIndex + postContentSourceLocation.SourceTokenLength) > plainTextContent.Length)
+					continue;
+
+				var matchedWord = plainTextContent.Substring(postContentSourceLocation.SourceIndex, postContentSourceLocation.SourceTokenLength);
+				var dataToAddTo = searchTermMatches.FirstOrDefault(e => e.Item1 == matchedWord);
+				if (dataToAddTo == null)
 				{
-					start = content.IndexOf(searchTerm, start + 1, StringComparison.InvariantCultureIgnoreCase);
-					if (start == -1)
-						break;
-
-					if (start > 0)
-					{
-						var previousCharacter = content[start - 1];
-						if (!char.IsWhiteSpace(previousCharacter) && !char.IsPunctuation(previousCharacter))
-							continue;
-					}
-					if ((start + searchTerm.Length) < content.Length)
-					{
-						var followingCharacter = content[start + searchTerm.Length];
-						if (!char.IsWhiteSpace(followingCharacter) && !char.IsPunctuation(followingCharacter))
-							continue;
-					}
-
-					var dataToAddTo = searchTermMatches.FirstOrDefault(e => e.Item1 == searchTerm);
-					if (dataToAddTo == null)
-					{
-						searchTermMatches.Add(Tuple.Create(searchTerm, new List<int>()));
-						dataToAddTo = searchTermMatches.Last();
-					}
-					dataToAddTo.Item2.Add(start);
-					start++;
+					searchTermMatches.Add(Tuple.Create(matchedWord, new List<int>()));
+					dataToAddTo = searchTermMatches.Last();
 				}
+				dataToAddTo.Item2.Add(postContentSourceLocation.SourceIndex);
 			}
 			if (searchTermMatches.Count == 0)
 				return new NonNullImmutableList<StringSegment>();
@@ -367,7 +364,7 @@ namespace Blog.Helpers.Posts
 					.ToArray();
 			}
 
-			// Now determine which of these permutations are valid taking into account the maxLengthOfEncodedContent and keep track of the best one
+			// Now determine which of these permutations are valid taking into account the maxLength and keep track of the best one
 			var bestMatch = new NonNullImmutableList<StringSegment>();
 			foreach (var permutation in allPermutations)
 			{
@@ -391,7 +388,7 @@ namespace Blog.Helpers.Posts
 						max = end;
 				}
 
-				// If this section length exceeds maxLengthOfEncodedContent then it's not valid, so skip over it
+				// If this section length exceeds maxLength then it's not valid, so skip over it
 				if ((max - min) > maxLength)
 					continue;
 
@@ -408,7 +405,7 @@ namespace Blog.Helpers.Posts
 					bestMatch = permutationAsStringSegments;
 			}
 
-			// Note: bestMatch may remain as an empty list if we didn't manage to find any matches (this should only be the case if maxLengthOfEncodedContent
+			// Note: bestMatch may remain as an empty list if we didn't manage to find any matches (this should only be the case if maxLength
 			// is very short and the only matched words all exceed it in length)
 			return bestMatch;
 		}
@@ -496,39 +493,11 @@ namespace Blog.Helpers.Posts
 				throw new ArgumentNullException("cache");
 
 			var cacheKey = "PostHelper-RenderPostAsPlainText-" + post.Id;
-			var doc = new HtmlDocument();
-			doc.LoadHtml(
-				MarkdownHelper.TransformIntoHtml(post.MarkdownContent)
-			);
-			var segments = doc.DocumentNode.DescendantNodesAndSelf()
-				.Where(node => node.NodeType == HtmlNodeType.Text)
-				.Select(node => node.InnerText);
+			var cachedData = cache[cacheKey] as CachablePostContent;
+			if ((cachedData != null) && (cachedData.LastModified >= post.LastModified))
+				return cachedData.RenderableContent;
 
-			// The Markdown content will generally have the inner text html encoded so although we've extracted it as plain text we'll
-			// still need to HtmlDecode it further to get back the triangular brackets (for example)
-			var whitespaceNormalisedContentBuilder = new StringBuilder();
-			var lastCharacterWasWhitespace = false;
-			foreach (var character in HttpUtility.HtmlDecode(string.Join(" ", segments)).Trim())
-			{
-				if (char.IsWhiteSpace(character))
-				{
-					if (!lastCharacterWasWhitespace)
-					{
-						whitespaceNormalisedContentBuilder.Append(" ");
-						lastCharacterWasWhitespace = true;
-					}
-					continue;
-				}
-				whitespaceNormalisedContentBuilder.Append(character);
-				lastCharacterWasWhitespace = false;
-			}
-
-			// The content often includes the title at the start which we don't want to display (since here we're rendering the post
-			// content only), so it needs removing if this is the case
-			var content = whitespaceNormalisedContentBuilder.ToString();
-			if (content.StartsWith(post.Title.Trim()))
-				content = content.Substring(post.Title.Trim().Length).Trim();
-
+			var content = post.GetContentAsPlainText();
 			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
 			return content;
 		}

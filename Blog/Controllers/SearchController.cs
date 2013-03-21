@@ -45,7 +45,7 @@ namespace Blog.Controllers
 			{
 				var allPosts = _postRepository.GetAll();
 				results = _postIndexer.GenerateIndexContent(allPosts).Search(term).Select(
-					m => new SearchResult(allPosts.First(p => p.Id == m.Key), m.Weight)
+					m => new SearchResult(allPosts.First(p => p.Id == m.Key), m.Weight, m.SourceLocations)
 				);
 			}
 
