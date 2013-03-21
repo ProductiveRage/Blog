@@ -30,7 +30,7 @@
 						</div>
 					}
 				</div>
-				@Html.RenderPostStubList("Recent Posts", "Recent", Model.MostRecent, false)
-				@Html.RenderPostStubList("Highlights", "Featured", Model.Highlights, false)
+				@Html.RenderPostStubList("Recent Posts", "Recent", Model.MostRecent, true, false)
+				@Html.RenderPostStubList("Highlights", "Featured", Model.Highlights, false, false)
 				@Html.RenderArchiveLinkList("Archives", "History", Model.ArchiveLinks, false)
 			</div>

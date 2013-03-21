@@ -56,6 +56,21 @@ body
 	{
 		.SidebarContainerWithLinkListItems();
 		> ul > li { padding: 0 0 8px 0; }
+		div.RSSFeedLink
+		{
+			padding: 8px 0 0 0;
+			> a
+			{
+				color: #f1f1f1;
+				background: url("../Content/Images/RSSFeedIcon.png") 0 3px no-repeat;
+				&:hover
+				{
+					color: #c0c0c0;
+					background: url("../Content/Images/RSSFeedIconHover.png") 0 3px no-repeat;
+				}
+				padding: 0 0 0 20px;
+			}
+		}
 	}
 
 	div.History
