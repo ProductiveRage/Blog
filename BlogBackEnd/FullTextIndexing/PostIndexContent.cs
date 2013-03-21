@@ -24,7 +24,7 @@ namespace BlogBackEnd.FullTextIndexing
 		/// <summary>
 		/// This will never return null. It will raise an exception for a null or blank term.
 		/// </summary>
-		public NonNullImmutableList<WeightedEntry<int>> Search(string term)
+		public NonNullImmutableList<WeightedEntryWithTerm<int>> Search(string term)
 		{
 			if (string.IsNullOrWhiteSpace(term))
 				throw new ArgumentException("Null/blank term specified");

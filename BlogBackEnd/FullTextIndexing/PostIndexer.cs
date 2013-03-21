@@ -82,7 +82,7 @@ namespace BlogBackEnd.FullTextIndexing
 				GetTokenWeightDeterminer(5f, sourceStringComparer)
 			));
 			contentRetrievers.Add(new ContentRetriever<Post, int>(
-				p => new PreBrokenContent<int>(p.Id, HttpUtility.HtmlDecode(p.MarkdownContent)),
+				p => new PreBrokenContent<int>(p.Id, p.GetContentAsPlainText()),
 				GetTokenWeightDeterminer(1f, sourceStringComparer)
 			));
 			contentRetrievers.Add(new ContentRetriever<Post, int>(
