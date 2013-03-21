@@ -1,0 +1,165 @@
+﻿## Publishing RSS
+
+With the recent furor about the death of Google Reader, I've been inspired to add an RSS Feed to my blog. It's not something that was at the forefront of my mind since I don't subscribe to any RSS Feeds. The sort of feeds that I might subscribe to will probably have any interesting posts they generate appear on [Hacker News](http://news.ycombinator.com/) or [Programming Reddit](http://programming.reddit.com/) - and they have the benefit that any posts that *aren't* particularly interesting to me aren't likely to appear at all!
+
+I've got a passing knowledge of RSS and have been somewhat involved in developments before to generate RSS Feeds and consume them so this should be no big deal.. right??
+
+### Content Encoding
+
+My swiss cheese knowledge of the basic format had led me to think that the "description" element of the items in the feed should be plain text since there is a "content:encoded" element that I thought was added in a separate module specifically to support content with html markup.
+
+> The &lt;description&gt; tag is for the summary of the post, but in plain text only. No markup.
+
+I'd say I'm not the only one since that quote was taken from the answer to a Stack Overflow question: [Difference between description and content:encoded tags in RSS2](http://stackoverflow.com/a/7369487). The same is mentioned, though with less force -
+
+> However, the RSS &lt;description&gt; element is only supposed to be used to include plain text data
+
+on [Why RSS Content Module is Popular - Including HTML Contents](https://developer.mozilla.org/en-US/docs/RSS/Article/Why_RSS_Content_Module_is_Popular_-_Including_HTML_Contents) on the Mozilla Developer Network pages.
+
+The [RSS 2.0 Specification](http://cyber.law.harvard.edu/rss/rss.html), however, clearly says
+
+> An item may represent a "story" -- much like a story in a newspaper or magazine; if so its description is a synopsis of the story, and the link points to the full story. An item may also be complete in itself, if so, the description contains the text (entity-encoded HTML is allowed; see examples)
+
+*Sigh.*
+
+So I thought I'd start by looking at a well-known blog that I know has an RSS Feed: [Coding Horror](http://www.codinghorror.com/blog/). The feed comes from [http://feeds.feedburner.com/codinghorror/](http://feeds.feedburner.com/codinghorror/) which makes me feel even more confident that whatever I see here is likely to be a good starting point since it suggests that there's a standard service generating it.
+
+And here I see that the description element is being used for html content, where the content is wrapped in a CDATA section. This makes me uneasy since CDATA just feels *wrong* in XML somehow. And what makes it worse is that it doesn't support escaping for the end characters, so you can't have a CDATA section contain the characters "**]]&gt;**" since it opens with **&lt;![CDATA[** and ends with **]]&gt;** and doesn't allow for them to be escaped at all - so this post couldn't simply be wrapped in a CDATA section, for example, as it now contains those characters!
+
+The only way to support it is to break content and wrap it in *multiple* CDATA sections so that the critical sequence nevers appears in one section. So to wrap the content
+
+> This sequence is not allowed ]]&gt; in CDATA
+
+you need to break it into two separate CDATA sections
+
+> This sequence is not allowed ]]
+
+and
+
+> &gt; in CDATA
+
+So that those three magical characters are not encountered within a single CDATA section.
+
+It turns out, though, that content can be html-encoded (as indicated by that excerpt from the RSS 2.0 Spec above). So that makes life a bit easier and makes me wonder why anyone uses CDATA!
+
+### Content Length
+
+So my next question is how many items to include in the feed. The RSS Spec has information about this:
+
+> A channel may contain any number of &lt;item&gt;s
+
+Not very *useful* information then :S
+
+Looking around, the common pattern seems to be ten or fifteen posts for a blog, particularly if including the entire article content in the description / content:encoded and not just a summary. Since these will be accessed by RSS Readers to check for updates, it's probably best that it's not allowed to grow to be massive. If someone's only just subscribed to your feed, they're not likely to want hundreds of historical posts to be shown. If someone is already subscribed to your feed then they just want to get new content. So ten posts sounds good to me.
+
+### Previewing the feed
+
+I thought I'd see how the feed was shaping up at this point. I don't regularly use an RSS Reader, as I've already said, so I hit up my local blog installation's feed url in Chrome. And just got a load of xml filling the screen. Which seems fair enough, but I thought for some reason that browsers do some nice formatting when you view an RSS Feed..
+
+It turns out that both Firefox and IE do (versions 19 and 9, respectively, I have no idea at what version they started doing this). But not Chrome. The Coding Horror feed looks formatted but I think Feed Burner does something clever depending upon the request or the user agent or something.
+
+A little research reveals that you can specify an XSLT document to transform the content when viewed in a browser just by referencing it with the line
+
+    <?xml-stylesheet href="/Content/RSS.xslt" type="text/xsl" media="screen"?>
+
+before the opening "rss" tag.
+
+I've seen some horrific uses of XSLT in the past but here it doesn't require anything too long or convoluted:
+
+    <?xml version="1.0" encoding="iso-8859-1"?>
+    <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+      <xsl:template match="/">
+        <html>
+          <head>
+            <title>
+              <xsl:value-of select="rss/channel/title"/> RSS Feed
+            </title>
+            <style>
+              /* Some styling goes here to tidy things up */
+            </style>
+          </head>
+          <body>
+            <h1>
+              <xsl:value-of select="rss/channel/title"/>
+            </h1>
+            <h2><xsl:value-of select="rss/channel/description"/></h2>
+            <img class="Logo" src="{rss/channel/image/url}" />
+            <xsl:for-each select="rss/channel/item">
+              <div class="Post">
+                <h2 class="Title">
+                  <a href="{link}" rel="bookmark">
+                    <xsl:value-of select="title"/>
+                  </a>
+                </h2>
+                <p class="PostedDate">
+                  <xsl:value-of select="pubDate"/>
+                </p>
+                <xsl:value-of select="description" disable-output-escaping="yes"/>
+              </div>
+            </xsl:for-each>
+          </body>
+        </html>
+      </xsl:template>
+    </xsl:stylesheet>
+
+This only affects Chrome on my computer, not Firefox or IE. I haven't tried it with Opera or Safari since I don't have them installed right now. Essentially, it should improve the rendering on any browser that doesn't already format the content itself.
+
+### Absolute URLs
+
+This one nearly caught me out; all of the example links in the spec are absolute urls but the content generated by my blog for the standard view of the posts are relative urls. Since whatever's retrieving the RSS Feed knows where it's getting the content from, it should be able to resolve any relative urls into absolute ones. But thinking about it, I've seen an integration written at work that renders the markup straight out from an RSS Feed's items. Which won't work with my content as it is! So a few changes are required to ensure that all links specify absolute urls. As do image locations.
+
+### Channel pubDate vs lastBuildDate
+
+According to the spec, pubDate is
+
+> The publication date for the content in the channel. For example, the New York Times publishes on a daily basis, the publication date flips once every 24 hours. That's when the pubDate of the channel changes.
+
+But there is no indication what the publicdation date should flip *to*. Feeds that I've looked at either ignore this value or make it the same as the lastBuildDate which, thankfully, *is* well defined in a clear manner:
+
+> The last time the content of the channel changed.
+
+So, for my blog, that's just the date of the most recent Post. I've decided to go the route of specifying a lastBuildDate value but no pubDate. It is in no way clear from the spec what effect this will have on my feed and how readers interact with it, if any.
+
+### TTL (Time To Live)
+
+This one I really don't even know where to start with. 
+
+> ttl stands for time to live. It's a number of minutes that indicates how long a channel can be cached before refreshing from the source. This makes it possible for RSS sources to be managed by a file-sharing network such as Gnutella.
+
+That doesn't sound too unreasonable. It makes it sound like "Expires" http header which can reduce the number of requests for a resource by allowing it to be cached by various proxies - essentially by promising that it won't change before that time.
+
+But there are few guidelines as to what the value should be. It's unusual for me to publish a post a day, so should I set it to 24 hours? But if I do this, then there could be a delay after a post *is* published before it's picked up if the 24 hours just awkwardly happens to start one hour before I publish. So should I set it to 8 hours so that it's not checked too often but also not too infrequently? How will this affect it compared to specifying no ttl value at all??
+
+I've found this article informative: [The RSS Blog: Understanding TTL](http://www.therssweblog.com/?guid=20070529130637).
+
+There's a lot of interesting content in there but the summary sorted it out for me -
+
+> **Practice**
+>
+> In practice, I've seen several uses of the TTL. Many aggregators let the user determine how often a feed is polled and some of those will use the TTL as a > default (or 60 minutes if not present). Some aggregators simply use the TTL as a hint to determine how often they are polled. The RSS draft profile is > likely a good source for examples of these behaviors. Most aggregators simply ignore TTL and do nothing with it.
+>
+> **Conclusion**
+>
+> Make your own. TTL is rarely supported by both publishers and clients.
+
+I'm ignoring the option of including a ttl element in my feed.
+
+### Final Validation
+
+At this point I started figuring that there must be a simpler way to find out what I was definitely doing wrong. And this [Online Feed Validator](http://feedvalidator.org/check.cgi) seemed like a good approach.
+
+It identified a few mistakes I'd made. Firstly, the image that I'd used for the channel was too big. This apparently may be no larger than 144 pixels on either dimension. It told me that the item's were lacking "guid" elements. The surprisingly informative help text on the site explained that this just had to be something that uniquely identified the item, not a GUID as defined on Wikipedia [Globally unique identifier](http://en.wikipedia.org/wiki/Globally_unique_identifier). A permalink to the post would do fine. The same value as was being specified for the "link" element. The validator help information suggested that using the same value for both (so long as it's a unique url for the article) would be fine. There is a note in the Wikipedia article to that effect as well!
+
+> **XML syndication formats**
+>
+> There is also a guid element in some versions of the RSS specification, and a mandatory id element in Atom, which should contain a unique identifier for each individual article or weblog post. In RSS the contents of the GUID can be any text, and in practice is typically a copy of the article URL. Atoms' IDs need to be valid URIs (usually URLs pointing to the entry, or URNs containing any other unique identifier).
+
+It also pointed out that I wasn't formatting dates correctly. It turns out that .Net doesn't have a formatter to generate the dates in the required RFC 822 layout, as outlined (and then addressed) here [Convert a date to the RFC822 standard for use in RSS feeds](http://madskristensen.net/post/Convert-a-date-to-the-RFC822-standard-for-use-in-RSS-feeds.aspx). That article was written by the same guy who I borrowed some CSS minification regular expressions from back in [On-the-fly CSS Minification](Post20) post - a useful fella! :)
+
+A final point was that my channel has no "atom:link" element so I added that. It duplicates the url from the channel's "link" element by has additional attributes rel="self" and type="application/rss+xml". Apparently without these my feed is not valid.
+
+### Done!
+
+But with that, I'm finished! After more work than I'd first envisaged, to be honest. But now users of [Feedly](http://www.feedly.com/) or whatever ends up taking the place of Google Reader can keep up to date with my ramblings. Those lucky, lucky people :)
+
+I've had a look at a few other blogs for comparison. I happen to know this guy: [MobTowers](http://www.mobtowers.com/) whose blog is generated by WordPress which generates the RSS Feed on its own. It uses the "description" element to render a summary and the "content:encoded" element for the full article content. But both description *and* content:encoded are CDATA-wrapped, with the description apparently containing some entity-encoded characters. If both WordPress *and* Feed Burner are going to work with "accepted common practices" rathen than strict spec adherence then I feel comfortable that my implementation will do the job just fine as it is.
