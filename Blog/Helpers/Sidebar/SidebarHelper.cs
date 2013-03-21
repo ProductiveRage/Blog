@@ -19,6 +19,7 @@ namespace Blog.Helpers.Sidebar
       string title,
       string containerClassName,
       NonNullImmutableList<PostStub> posts,
+      bool renderRSSLinkIfThereAreAnyPosts,
       bool renderEmptyContainer)
     {
       if (posts == null)
@@ -45,8 +46,14 @@ namespace Blog.Helpers.Sidebar
       {
         content.Append("<ul>");
         foreach (var post in posts)
-          content.AppendFormat("<li>{0}</li>", LinkExtensions.ActionLink(helper, post.Title, "ArchiveById", new { Id = post.Id }));
+          content.AppendFormat("<li>{0}</li>", helper.ActionLink(post.Title, "ArchiveById", "ViewPost", new { Id = post.Id }));
         content.Append("</ul>");
+		if (renderRSSLinkIfThereAreAnyPosts)
+		{
+			content.Append("<div class=\"RSSFeedLink\">");
+            content.Append(helper.ActionLink("RSS Feed", "Feed", "RSS"));
+			content.Append("</div>");
+		}
       }
       if (renderEmptyContainer || (posts.Count > 0))
         content.Append("</div>");
@@ -90,10 +97,10 @@ namespace Blog.Helpers.Sidebar
         {
           content.AppendFormat(
             "<li>{0}</li>",
-            LinkExtensions.ActionLink(
-              helper,
+            helper.ActionLink(
               archiveLink.DisplayText + " (" + archiveLink.PostCount + ")",
               "ArchiveByMonth",
+			  "ViewPost",
               new { Month = archiveLink.Month, Year = archiveLink.Year }
             )
           );
