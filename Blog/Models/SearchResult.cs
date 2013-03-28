@@ -8,7 +8,7 @@ namespace Blog.Models
 	[Serializable]
 	public class SearchResult
 	{
-		public SearchResult(Post post, float weight, NonNullImmutableList<SourceFieldLocationWithTerm> sourceLocations)
+		public SearchResult(Post post, float weight, NonNullImmutableList<IndexData_Extensions_PartialMatches.SourceFieldLocationWithTerm> sourceLocations)
 		{
 			if (post == null)
 				throw new ArgumentNullException("post");
@@ -37,6 +37,6 @@ namespace Blog.Models
 		/// <summary>
 		/// This will never be null nor empty
 		/// </summary>
-		public NonNullImmutableList<SourceFieldLocationWithTerm> SourceLocations { get; private set; }
+		public NonNullImmutableList<IndexData_Extensions_PartialMatches.SourceFieldLocationWithTerm> SourceLocations { get; private set; }
 	}
 }
