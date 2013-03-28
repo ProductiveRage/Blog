@@ -190,7 +190,7 @@ namespace Blog.Helpers.Posts
 		public static IHtmlString RenderPostAsPlainTextWithSearchTermsHighlighted(
 			this HtmlHelper helper,
 			Post post,
-			NonNullImmutableList<SourceFieldLocationWithTerm> sourceLocations,
+			NonNullImmutableList<IndexData_Extensions_PartialMatches.SourceFieldLocationWithTerm> sourceLocations,
 			int maxLength,
 			ICache cache)
 		{
@@ -308,7 +308,7 @@ namespace Blog.Helpers.Posts
 		/// </summary>
 		private static NonNullImmutableList<StringSegment> IdentifySearchTerms(
 			string plainTextContent,
-			NonNullImmutableList<SourceFieldLocationWithTerm> sourceLocations,
+			NonNullImmutableList<IndexData_Extensions_PartialMatches.SourceFieldLocationWithTerm> sourceLocations,
 			int maxLength,
 			IComparer<NonNullImmutableList<StringSegment>> bestMatchDeterminer)
 		{
