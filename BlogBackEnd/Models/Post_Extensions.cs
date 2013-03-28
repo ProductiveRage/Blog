@@ -10,7 +10,10 @@ namespace BlogBackEnd.Models
 	public static class Post_Extensions
 	{
 		/// <summary>
-		/// TODO
+		/// This will transform the MarkdownContent into html and then transform it down to plain text. Any html-encoded content will no longer be html-encoded; it
+		/// will be the content that was escaped to display as html. Whitespace will be normalised such that all whitespace is replaced with individual spaces and
+		/// then any runs of spaces reduced down to a single space. This means that formatting will be lost. Finally, if the start of the content matches the Title
+		/// property of the Post, this will be stripped out.
 		/// </summary>
 		public static string GetContentAsPlainText(this Post source)
 		{
