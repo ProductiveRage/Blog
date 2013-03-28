@@ -1,6 +1,5 @@
 ﻿using System;
 using BlogBackEnd.Models;
-using FullTextIndexer.Core.Indexes;
 using FullTextIndexer.Common.Lists;
 
 namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
