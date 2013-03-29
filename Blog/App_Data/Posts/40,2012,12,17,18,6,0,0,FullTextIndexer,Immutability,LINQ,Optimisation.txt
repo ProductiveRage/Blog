@@ -27,3 +27,5 @@ The code can be found in the [Full Text Indexer BitBucket Repository](https://bi
 **Update (5th March 2013):** I just can't seem to let this lie! :) I've added another post [The Full Text Indexer - Automating Index Generation](Post48) which demonstrates some new code that will examine your source data type and generate an index for you, all on its own! Easy!
 
 **Update (14th March 2013):** And another! This time about support for structured querying, a way to combine terms with AND, OR, NOT operators. See [The Full Text Indexer - Structured Queries](Post51).
+
+**Update (28th March 2013):** Documenting an extension to the index data that allow for more performant consecutive term matching: [The Full Text Indexer: Source Locations](Post53).

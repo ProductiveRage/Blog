@@ -29,6 +29,8 @@ The **ConsecutiveTokenCombiningTokenBreaker** is essentially the opposite, it wi
 
 The use of these token breakers, whether individually or in combination, will result in more data being stored in the Index (as well as more processing of the input content required in order to generate the index) but offer the benefits that searches can also match content more loosely in some cases while prioritising the best matches in others.
 
+**Update (28th March 2013):** The **ConsecutiveTokenCombiningTokenBreaker** is no longer the best way to deal with searches for consecutive terms, there is now a GetConsecutiveMatches extension method for IIndexData that doesn't require the additional (expensive) processing when the index is generated, see [The Full Text Indexer: Source Locations](Post53).
+
 ## Bonus Material: The Indexer in action (small scale, though it may be!)
 
 All of the above is a bit dry and I wanted to include it largely to round out the introductory series to this code. So to make this post marginally more interesting, I thought I'd include the configuration in which I've used it on this blog to implement the site search and the autocomplete facility.
