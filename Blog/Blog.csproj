@@ -169,6 +169,7 @@
     <Content Include="App_Data\Posts\50,2013,3,12,16,45,0,0,CSS.txt" />
     <Content Include="App_Data\Posts\51,2013,3,13,22,36,0,0,FullTextIndexer.txt" />
     <Content Include="App_Data\Posts\52,2013,3,20,23,18,0,0,RSS.txt" />
+    <Content Include="App_Data\Posts\53,2013,3,28,23,29,0,0,FullTextIndexer.txt" />
     <Content Include="App_Data\Posts\6,2011,5,2,21,24,0,0.txt" />
     <Content Include="App_Data\Posts\7,2011,7,13,20,11,0,0,AutoMapper,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM.txt" />

@@ -1,0 +1,88 @@
+﻿## The Full Text Indexer: Source Locations
+
+After adding the [Structured Queries](Post51) functionality to my [Full Text Indexer](Post40) project I've been looking back at the mechanism for matching runs of tokens - eg. matching
+
+> "penguins are the best"
+
+not just to results that contain the words "penguins", "are", "the", "best" but results that contain them in a string, as a run of consecutive tokens.
+
+I'd previously addressed this functionality with the **ConsecutiveTokenCombiningTokenBreaker** - this can wrap another token breaker so that during Index generation the Index will be populated with tokens that are not just individual words but also runs of words strung back together. (There's more details in the [Token Breaker and String Normaliser variations](Post36) post).
+
+There are some issues that I've encountered with this when I've used it with real data, however. Firstly, the Index generation time expands greatly since so much more work is done in terms of generating the tokens and also building the Index with all of this additional token data. Secondly, all of this additional data takes up a lot more space (whether persisting the Index to disk or just maintaining it in memory). An Index generated with the use of a **ConsecutiveTokenCombiningTokenBreaker** will likely be several times larger, feasibly ten times as large. And finally, the token breaker takes a constructor argument "maxNumberOfTokens" which caps how many tokens will be strung together in any given run. This puts a limit on the length of input search strings, based on the number of tokens it would be broken down into ("penguins are the best" would be a run of four words. If a maxNumberOfTokens value of three was specified, then the string couldn't be matched in any content).
+
+### Source Locations
+
+Something I've been thinking about adding is "Source Location" information to the match data. I believe that Lucene can be configured to record where in the source content that a particular token was extracted from, which can be used for search term highlighting. I've implemented search term highlighting on my blog but that tries to match search terms to content after the Index has identified which posts match the search. And it doesn't use the same string normaliser as the Index so it doesn't realise that "cat" and "cats" will be considered the same by the Index.
+
+So in the back of my mind I've thought about adding this source location data to token matches so that I could use it to implement more consistent search term highlighting (consistent in that the same token matches identified by the Index will be considered by the search term highlighter).
+
+But it struck me that I should be able to use the same data to search for consecutive runs of token matches after the Index has been generated, rather than requiring additional processing to generate the Index in the first place.
+
+If all of the string data for a source data entry was extracted out into one long string then each "Source Location" instance would need a start index and a length for the segment of that string that was extracted for a particular token. However, this isn't how the string data is extracted for data types that have multiple properties to extract from, each is considered a separate field. So the source location would require a field index as well as the content start index and length. (If the source data type represents articles, for example, then different fields may be Title, Description, Author, etc..).
+
+If, in addition to this, we record the "token index" for each source location then we would have the data required to identify consecutive runs. If a source data instance had a single text property with the content
+
+> "penguins are the best, penguins!"
+
+this could be extracted into source locations with
+
+    { 0, 0, 0,  8 }, // FieldIndex, TokenIndex, ContentIndex, ContentLength
+    { 0, 1, 9,  3 }, // FieldIndex, TokenIndex, ContentIndex, ContentLength
+    { 0, 2, 13, 3 }, // FieldIndex, TokenIndex, ContentIndex, ContentLength
+    { 0, 3, 17, 4 }, // FieldIndex, TokenIndex, ContentIndex, ContentLength
+    { 0, 4, 23, 8 }  // FieldIndex, TokenIndex, ContentIndex, ContentLength
+
+(They would all have FieldIndex zero since there is only a single field to extract from).
+
+The search for "penguins are the best" could be performed by searching for each of the four words and then analysing the match data and its source locations to only consider token matches that are arranged in the content as part of a consecutive run. The second instance of "penguins" could be ignored as there is no match for the word "are" that has the same FieldIndex but a TokenIndex one greater.
+
+This logic is incorporated into the new "GetConsecutiveMatches" extension method. Its signature is similar to "GetPartialMatches" - it takes a search term which is expected to be multiple tokens according to the token breaker which must also be provided. It then requires _two_ weight combiners where GetPartialMatches only requires one.
+
+    // There are alternate signatures that take less arguments in favour of sensible defaults
+    public static NonNullImmutableList<WeightedEntry<TKey>> GetConsecutiveMatches<TKey>(
+        this IIndexData<TKey> index,
+        string source,
+        ITokenBreaker tokenBreaker,
+        IndexGenerator.WeightedEntryCombiner weightCombinerForConsecutiveRuns,
+        IndexGenerator.WeightedEntryCombiner weightCombinerForFinalMatches
+    )
+
+GetPartialMatches will combine matches for each of the individual words in the search term, regardless of where they appear in the source content. There is only one combination of match data for any given result. GetConsecutiveMatches has to break down the match data back into individual occurences in the source data because some occurences of a word may be valid for the returned data (if they are part of a consecutive run of search terms) while other occurences may _not_ be valid (if they _aren't_ part of a consecutive run). In the above example, the word "penguin" appears as a match with two source locations but only the first source location is valid as that is the only one that is part of a consecutive run of tokens that match "penguins are the best".
+
+GetConsecutiveMatches will identify distinct runs of tokens represented by WeightedEntry instances with a single SourceLocation each. The first weight combiner will be called with these sets of tokens (where each set represents a single run that matches the entire search term) and must return a weight that represents the entire run. This run of tokens will be reduced to a single WeightedEntry instance with a single SourceLocation that spans from the start of the first token in the run to the end of the last one. A reasonable implementation of a weight combiner for this purpose would be one that sums together the weights of each token in the run and then applies a multiplier based on the length of the run (how many tokens are in it), this way longer token runs are awarded a greater match weight.
+
+The second weight combiner is responsible for determing the final match weight for a result where the run of tokens is identified multiple times. If the source data in the earlier example had other data where the phrase "penguins are the best" appeared then a single WeightedEntry for that result for the string "penguins are the best" is required, its weight will be an aggregate of the weights of the individual matches. This process is exactly the same as that which takes place as part of the Index generation; when a token is found multiple times for the same result a combined weight for that token must be determined. The exact same delegate (the **IndexGenerator.WeightedEntryCombiner**) is used by the **IndexGenerator**'s constructor and for the weight combiners for GetConsecutiveMatches.
+
+### Hurrah for defaults
+
+That's the detail about the source locations data that enabled the GetConsecutiveMatches extension method to be written, and the detail about how to call it where you need to specify all of its behaviour. But following the convenience of the **AutomatedIndexGeneratorFactory** (see [Automating Index Generation](Post48)) I've included some method signatures which provide defaults for the weight combiners and the token breaker. So you can get results with the much simpler
+
+    var results = index.GetConsecutiveMatches("penguins are the best");
+
+The default token breaker is a **WhiteSpaceExtendingTokenBreaker** that treats common puncuation characters as whitespace (such as square, round, curly or triangular brackets, commas, full stops, colons and some others). This is the same token breaker that the **AutomatedIndexGeneratorFactory** will use unless a token break override is specified.
+
+The default weight-combiner-for-consecutive-runs will sum the weights of tokens in the consecutive run and then multiply by two to the power number-of-tokens-minus-one (so x2 if there are two tokens that make up the run, x4 if there are three, x8 if there are four, etc..). The default weight-combiner-for-all-of-a-results-consecutive-runs will sum the weights of the tokens (which is the default weight combiner used by the **AutomatedIndexGeneratorFactoryBuilder**).
+
+While I was doing this, I added similar alternate method signatures to GetPartialMatches as well, so now the bare minimum it needs is
+
+    var results = index.GetPartialMatches("penguins are the best");
+
+The default token break is the same as described above and the default weight combiner is one that sums the weights so long as all of the search terms are present for the result somewhere in its content. Any result that contains the words "penguins", "are" and "the" but not "best" would not be included in the results.
+
+### More data but reduced disk space requirements
+
+For my blog, I persist the search index data to disk so that it doesn't need to be rebuilt if the application is reset (it stores a last-modified date alongside the index data which can be compared to the last-modified date of any post, so it's rebuilt when the source data changes rather than when a memory cache entry arbitrarily expires).
+
+I was concerned that this additional source location data would make a significant difference to the size of this stored data, which could be inconvenient because I tend to build it before uploading changes to the web server (so smaller is better). And, to be honest, I had already been somewhat surprised that the data I persist to disk was several megabytes. (Even though that also contains all of the raw Post contents, along with the AutoComplete content extracted from analysing the Posts, it was still larger than my gut instinct suspected it would be). So I didn't want to make it any worse!
+
+I've used the bog standard **BinaryFormatter** to serialise the data and **GZipStream** to compress it. To see how much overhead was added by this approach compared to writing a custom serialisation method for the **IndexData**, I wrote the **IndexDataSerialiser**. This only works with **IndexData** (the specific implemenation of **IIndexData** rather than _any_ **IIndexData** implementation) which means that there are assumptions that can be made (eg. that all of the source locations will be instances of the **SourceFieldLocation** class and not another class derived from it). And it's reduced the size of the data for the Index that my blog content generates to about 10% of what it was before. Win!
+
+The **IndexDataSerialiser** is a static class with two methods:
+
+    void IndexDataSerialiser.Serialise(IndexData<TKey> source, Stream stream);
+
+    IndexData<TKey> IndexDataSerialiser.Deserialise(Stream stream);
+
+It doesn't compress the data at all, so there will be advantages to using a **GZipStream**. It uses the **BinaryWriter** to write out the bare minimum content required to describe the data when serialising and then the **BinaryReader** to read the data back out and instantiate a new **IndexData** from it. It has to rebuild the **TernarySearchTreeDictionary** that the **IndexData** takes as a constructor argument but my feeling is that the processing required to do this is less than deserialising an already-populated **IndexData** using the **BinaryFormatter**. (I've not compared them thorough but in preliminary testing it seemed to take longer to deserialise with the **BinaryFormatter** when the data was loaded into a **MemoryStream** than the **IndexDataSerialiser** deserialisation took when loading from disk).
+
+I might write another day about how I implemented the search term highlighting on this blog but I think this post has already gone on long enough!
