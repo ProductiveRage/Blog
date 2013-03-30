@@ -20,9 +20,10 @@ namespace BlogBackEnd.FullTextIndexing
 		{
 			if (posts == null)
 				throw new ArgumentNullException("post");
-			
-			// The Search Index data uses an EnglishPluralityStringNormaliser which removes a lot of content from strings but the token set will never
-			// be visible to a site user, they will pass a string into the index to match and only see the results.
+
+			// In common language, characters such as "." and "," indicate breaks in words (unlike "'" or "-" which are commonly part of words).
+			// When generating an index from content that contains C# (or other similar languages) there are a raft of other characters which
+			// need to be treated similarly.
 			var whitespaceTokenBreaker = new WhiteSpaceExtendingTokenBreaker(
 				new ImmutableList<char>(new[] {
 					'<', '>', '[', ']', '(', ')', '{', '}',
@@ -32,6 +33,9 @@ namespace BlogBackEnd.FullTextIndexing
 				}),
 				new WhiteSpaceTokenBreaker()
 			);
+
+			// The Search Index data uses an EnglishPluralityStringNormaliser which removes a lot of content from strings but the token set will never
+			// be visible to a site user, they will pass a string into the index to match and only see the results.
 			var defaultIndexDataForSearching = GenerateIndexData(
 				posts,
 				new EnglishPluralityStringNormaliser(
@@ -89,9 +93,6 @@ namespace BlogBackEnd.FullTextIndexing
 				GetTokenWeightDeterminer(3f, sourceStringComparer)
 			));
 
-			// In common language, characters such as "." and "," indicate breaks in words (unlike "'" or "-" which are commonly part of words).
-			// When generating an index from content that contains C# (or other similar languages) there are a raft of other characters which
-			// need to be treated similarly.
 			return new IndexGenerator<Post, int>(
 				contentRetrievers.ToNonNullImmutableList(),
 				new DefaultEqualityComparer<int>(),
