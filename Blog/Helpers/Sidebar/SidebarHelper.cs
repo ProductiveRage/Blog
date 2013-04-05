@@ -46,7 +46,7 @@ namespace Blog.Helpers.Sidebar
       {
         content.Append("<ul>");
         foreach (var post in posts)
-          content.AppendFormat("<li>{0}</li>", helper.ActionLink(post.Title, "ArchiveById", "ViewPost", new { Id = post.Id }));
+          content.AppendFormat("<li>{0}</li>", helper.ActionLink(post.Title, "ArchiveById", "ViewPost", new { Id = post.Id }, null));
         content.Append("</ul>");
 		if (renderRSSLinkIfThereAreAnyPosts)
 		{
@@ -101,7 +101,8 @@ namespace Blog.Helpers.Sidebar
               archiveLink.DisplayText + " (" + archiveLink.PostCount + ")",
               "ArchiveByMonth",
 			  "ViewPost",
-              new { Month = archiveLink.Month, Year = archiveLink.Year }
+              new { Month = archiveLink.Month, Year = archiveLink.Year },
+			  null
             )
           );
         }

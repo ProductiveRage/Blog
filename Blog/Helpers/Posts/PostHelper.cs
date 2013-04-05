@@ -107,7 +107,7 @@ namespace Blog.Helpers.Posts
 				{
 					content.AppendFormat(
 						"<li>{0}</li>",
-						helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag })
+						helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag }, null)
 					);
 				}
 				content.Append("</ul>");
