@@ -208,13 +208,24 @@ namespace Blog.Helpers.Posts
 			if (cache == null)
 				throw new ArgumentNullException("cache");
 
+			// Only consider source locations that come from the Post Content (not Title or Tags), since that is all that can be highlighted (the second
+			// Content Retriever is responsible for extracting content from this field and the first field - Title - will always have content, so the
+			// Source Locations for the Post Content will always have SourceFieldIndex 1)
+			var sourceLocationsFromPostContentField = sourceLocations.Where(s => s.SourceFieldIndex == 1);
+
 			var plainTextPostContent = GetPostAsPlainText(post, cache);
-			var matchesToHighlight = SearchTermHighlighter.IdentifySearchTermsToHighlight(
-				plainTextPostContent,
-				maxLength,
-				sourceLocations,
-				new SearchTermBestMatchComparer()
-			);
+			NonNullImmutableList<SearchTermHighlighter.StringSegment> matchesToHighlight;
+			if (!sourceLocationsFromPostContentField.Any())
+				matchesToHighlight = new NonNullImmutableList<SearchTermHighlighter.StringSegment>();
+			else
+			{
+				matchesToHighlight = SearchTermHighlighter.IdentifySearchTermsToHighlight(
+					plainTextPostContent,
+					maxLength,
+					sourceLocationsFromPostContentField.ToNonNullImmutableList(),
+					new SearchTermBestMatchComparer()
+				);
+			}
 
 			int startIndexOfContent;
 			if ((plainTextPostContent.Length <= maxLength) || !matchesToHighlight.Any())
@@ -265,11 +276,13 @@ namespace Blog.Helpers.Posts
 			if ((lengthOfContentIncluded < maxLength) && (plainTextPostContent.Length > endIndexOfLastSection))
 			{
 				highlightedContentBuilder.Append(
-					plainTextPostContent.Substring(
-						endIndexOfLastSection,
-						Math.Min(
-							maxLength - lengthOfContentIncluded,
-							plainTextPostContent.Length - endIndexOfLastSection
+					HttpUtility.HtmlEncode(
+						plainTextPostContent.Substring(
+							endIndexOfLastSection,
+							Math.Min(
+								maxLength - lengthOfContentIncluded,
+								plainTextPostContent.Length - endIndexOfLastSection
+							)
 						)
 					)
 				);
