@@ -9,7 +9,12 @@ namespace BlogBackEnd.FullTextIndexing
 	public static class SearchTermHighlighter
 	{
 		/// <summary>
-		/// TODO (inc. non-overlapping of returned segments)
+		/// Given a content string and a set of source locations all indicate matches within that content, return a set of string segments (each having an Index and Length
+		/// that refer to the specified content) that should be highlighted if only a section of that content string is to rendered to represent a "search match summary".
+		/// The length of the search match string is restricted will be no greater than the provided maxLengthForHighlightedContent value. For cases where multiple sets
+		/// of string segments may be generated, the best match (according to the specified bestMatchDeterminer) will be returned. The returned string segments will never
+		/// contain instances that overlap. If it was not possible to identify any segments to highlight (if the sourceLocations set was empty or if none of the matches
+		/// could be highlighted without exceeding the maxLengthForHighlightedContent constraint), then an empty set will be returned. This will never return null.
 		/// </summary>
 		public static NonNullImmutableList<StringSegment> IdentifySearchTermsToHighlight(
 			string content,
@@ -23,12 +28,14 @@ namespace BlogBackEnd.FullTextIndexing
 				throw new ArgumentOutOfRangeException("maxLengthForHighlightedContent", "must be greater than zero");
 			if (sourceLocations == null)
 				throw new ArgumentNullException("sourceLocations");
-			if (!sourceLocations.Any())
-				throw new ArgumentException("There must be at least one source location specified");
 			if (sourceLocations.Select(s => s.SourceFieldIndex).Distinct().Count() > 1)
 				throw new ArgumentException("All sourceLocations must have the same SourceFieldIndex");
 			if (bestMatchDeterminer == null)
 				throw new ArgumentNullException("bestMatchDeterminer");
+
+			// If there are no source locations there there is nothing to highlight
+			if (!sourceLocations.Any())
+				return new NonNullImmutableList<StringSegment>();
 
 			// Sort sourceLocations by index and then length
 			sourceLocations = sourceLocations.Sort((x, y) =>
@@ -72,7 +79,8 @@ namespace BlogBackEnd.FullTextIndexing
 		}
 
 		/// <summary>
-		/// TODO
+		/// This alternative method signature accepts source locations returned from calls to GetPartialMatches (which return SourceFieldLocationWithTerm instances
+		/// rather than SourceFieldLocation instances)
 		/// </summary>
 		public static NonNullImmutableList<StringSegment> IdentifySearchTermsToHighlight(
 			string content,

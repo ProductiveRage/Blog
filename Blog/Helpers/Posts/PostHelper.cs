@@ -212,20 +212,13 @@ namespace Blog.Helpers.Posts
 			// Content Retriever is responsible for extracting content from this field and the first field - Title - will always have content, so the
 			// Source Locations for the Post Content will always have SourceFieldIndex 1)
 			var sourceLocationsFromPostContentField = sourceLocations.Where(s => s.SourceFieldIndex == 1);
-
 			var plainTextPostContent = GetPostAsPlainText(post, cache);
-			NonNullImmutableList<SearchTermHighlighter.StringSegment> matchesToHighlight;
-			if (!sourceLocationsFromPostContentField.Any())
-				matchesToHighlight = new NonNullImmutableList<SearchTermHighlighter.StringSegment>();
-			else
-			{
-				matchesToHighlight = SearchTermHighlighter.IdentifySearchTermsToHighlight(
-					plainTextPostContent,
-					maxLength,
-					sourceLocationsFromPostContentField.ToNonNullImmutableList(),
-					new SearchTermBestMatchComparer()
-				);
-			}
+			var matchesToHighlight = SearchTermHighlighter.IdentifySearchTermsToHighlight(
+				plainTextPostContent,
+				maxLength,
+				sourceLocationsFromPostContentField.ToNonNullImmutableList(),
+				new SearchTermBestMatchComparer()
+			);
 
 			int startIndexOfContent;
 			if ((plainTextPostContent.Length <= maxLength) || !matchesToHighlight.Any())
