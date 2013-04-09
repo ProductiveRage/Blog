@@ -85,4 +85,6 @@ The **IndexDataSerialiser** is a static class with two methods:
 
 It doesn't compress the data at all, so there will be advantages to using a **GZipStream**. It uses the **BinaryWriter** to write out the bare minimum content required to describe the data when serialising and then the **BinaryReader** to read the data back out and instantiate a new **IndexData** from it. It has to rebuild the **TernarySearchTreeDictionary** that the **IndexData** takes as a constructor argument but my feeling is that the processing required to do this is less than deserialising an already-populated **IndexData** using the **BinaryFormatter**. (I've not compared them thorough but in preliminary testing it seemed to take longer to deserialise with the **BinaryFormatter** when the data was loaded into a **MemoryStream** than the **IndexDataSerialiser** deserialisation took when loading from disk).
 
-I might write another day about how I implemented the search term highlighting on this blog but I think this post has already gone on long enough!
+I might write another day about how I implemented the search term highlighting on this blog but I think this post has already gone on long enough! **Update (9th April):** See [Search Term Highlighting with Source Locations](Post54).
+
+For more information on this project, see the [Full Text Indexer Round-up](Post40).
