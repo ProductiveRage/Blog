@@ -28,4 +28,4 @@ The code can be found in the [Full Text Indexer BitBucket Repository](https://bi
 
 **Update (14th March 2013):** And another! This time about support for structured querying, a way to combine terms with AND, OR, NOT operators. See [The Full Text Indexer - Structured Queries](Post51).
 
-**Update (28th March 2013):** Documenting an extension to the index data that allow for more performant consecutive term matching: [The Full Text Indexer: Source Locations](Post53).
+**Update (28th March 2013):** Documenting an extension to the index data that allow for more performant consecutive term matching: [The Full Text Indexer: Source Locations](Post53). Followed by a way to utilise this information for [Search Term Highlighting with Source Locations](Post54).
