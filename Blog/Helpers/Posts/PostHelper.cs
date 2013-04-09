@@ -208,10 +208,10 @@ namespace Blog.Helpers.Posts
 			if (cache == null)
 				throw new ArgumentNullException("cache");
 
-			// Only consider source locations that come from the Post Content (not Title or Tags), since that is all that can be highlighted (the second
-			// Content Retriever is responsible for extracting content from this field and the first field - Title - will always have content, so the
-			// Source Locations for the Post Content will always have SourceFieldIndex 1)
-			var sourceLocationsFromPostContentField = sourceLocations.Where(s => s.SourceFieldIndex == 1);
+			// Only consider source locations that come from the Post Content (not Title or Tags), since that is all that can be highlighted (the first
+			// Content Retriever is responsible for extracting content from this field so the Source Locations for the Post Content will always have
+			// a SourceFieldIndex value of zero)
+			var sourceLocationsFromPostContentField = sourceLocations.Where(s => s.SourceFieldIndex == 0);
 			var plainTextPostContent = GetPostAsPlainText(post, cache);
 			var matchesToHighlight = SearchTermHighlighter.IdentifySearchTermsToHighlight(
 				plainTextPostContent,
@@ -306,7 +306,7 @@ namespace Blog.Helpers.Posts
 				if (combinedWeightComparisonResult != 0)
 					return combinedWeightComparisonResult;
 
-				var numberOfTokensComparisonResult = y.Count.CompareTo(x.Count);
+				var numberOfTokensComparisonResult = x.Count.CompareTo(y.Count);
 				if (numberOfTokensComparisonResult != 0)
 					return numberOfTokensComparisonResult;
 

@@ -79,14 +79,16 @@ namespace BlogBackEnd.FullTextIndexing
 			if (tokenBreaker == null)
 				throw new ArgumentNullException("tokenBreaker");
 
+			// The Post (plain text) content is always the first field since its Content Retriever is first, this means that all source locations for the content
+			// will have an SourceFieldIndex of zero
 			var contentRetrievers = new List<ContentRetriever<Post, int>>();
-			contentRetrievers.Add(new ContentRetriever<Post, int>(
-				p => new PreBrokenContent<int>(p.Id, p.Title),
-				GetTokenWeightDeterminer(5f, sourceStringComparer)
-			));
 			contentRetrievers.Add(new ContentRetriever<Post, int>(
 				p => new PreBrokenContent<int>(p.Id, p.GetContentAsPlainText()),
 				GetTokenWeightDeterminer(1f, sourceStringComparer)
+			));
+			contentRetrievers.Add(new ContentRetriever<Post, int>(
+				p => new PreBrokenContent<int>(p.Id, p.Title),
+				GetTokenWeightDeterminer(5f, sourceStringComparer)
 			));
 			contentRetrievers.Add(new ContentRetriever<Post, int>(
 				p => new PreBrokenContent<int>(p.Id, p.Tags),
