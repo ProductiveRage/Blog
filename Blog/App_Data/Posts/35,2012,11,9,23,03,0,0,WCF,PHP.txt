@@ -67,7 +67,7 @@ Getting things working in PHP is another matter, however. For someone who doesn'
         )
     );
 
-It seems like the SoapClient can do some sort of magic with what are presumably associative arrays to build up the web request. All looks for declaring data for the "request" argument of the GetHotels method; we set the "ApiKey" property of the request to an appropriate string, the SoapClient must be doing something clever with the wsdl to determine the xml to generate, which must include the type name of the request to specify. But if the type names are intended to be hidden, how am I going to specify them when I build the "Filters" array?? I can't just carry on with this type-name-less associated-array approach because there will be no way for the request to know that I want the CategoryFilter or the ProximityFilter (or any other Filter that might be available).
+It seems like the SoapClient can do some sort of magic with what are presumably associative arrays to build up the web request. All looks good initially for declaring data for the "request" argument of the GetHotels method; we set the "ApiKey" property of the request to an appropriate string.. the SoapClient must be doing something clever with the wsdl to determine the xml to generate, which must include the type name of the request to specify. But if the type names are intended to be hidden, how am I going to specify them when I build the "Filters" array?? I can't just carry on with this type-name-less associated-array approach because there will be no way for the request to know that I want the CategoryFilter or the ProximityFilter (or any other Filter that might be available).
 
 Hmmm...
 
