@@ -16,8 +16,23 @@ body
 			.atn { color: #606; }
 			.atv { color: #080; }
 			.dec { color: #606; }
-			li.L0,li.L1,li.L2,li.L3,li.L5,li.L6,li.L7,li.L8 { list-style: none; }
-			li.L1,li.L3,li.L5,li.L7,li.L9 { background: #eee; }
+
+			.NoBulletPoint() { list-style: none; }
+			.BackgroundHighlight() { background: #eee; }
+
+			li.L0,li.L2,li.L6,li.L8
+			{
+				.NoBulletPoint();
+			}
+			li.L1,li.L3,li.L5,li.L7
+			{
+				.NoBulletPoint();
+				.BackgroundHighlight();
+			}
+			li.L9
+			{
+				.BackgroundHighlight();
+			}
 		}
 	}
 }

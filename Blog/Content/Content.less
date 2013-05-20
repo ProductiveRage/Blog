@@ -133,14 +133,17 @@ body
 			color: @HeaderColour;
 		}
 
-		h3.PostDate,
-		p.PostTime
+		.PostTimeText()
 		{
 			font-family: "Lucida Console", "Lucida Grande", Verdana;
-			color: #bf7c52;
+		}
+		h3.PostDate
+		{
+			.PostTimeText();
 		}
 		p.PostTime
 		{
+			.PostTimeText();
 			padding: 16x 16px 8px 16px;
 			clear: both; // Ensure this tucks beneath any floated images, ensuring the always encloses around images
 		}
