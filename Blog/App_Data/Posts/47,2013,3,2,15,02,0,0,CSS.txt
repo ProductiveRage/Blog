@@ -146,6 +146,8 @@ This allows the **ContentReplacingTextFileLoader** to remove all references to "
 
 The string "REPLACEME" and "REPLACEME " (with the trailing space) are specified as constructor arguments for the **LessCssOpeningBodyTagRenamer** and **ContentReplacingTextFileLoader** so different values may be used if you think something else would be more appropriate.
 
+**Update (4th June):** I've replaced **LessCssOpeningBodyTagRenamer** with **LessCssOpeningHtmlTagRenamer** since trimming out the body tag will prevent stylesheets being written where selectors target classes on the body, which some designs I've worked with rely upon being able to do.
+
 ### Media Query Grouping
 
 In order to follow [Non-cascading CSS](Post42) Rule 3
@@ -154,13 +156,15 @@ In order to follow [Non-cascading CSS](Post42) Rule 3
 
 media queries must be nested inside style blocks rather than existing in separate files that rearrange elements for different breakpoints (which is a common pattern I've seen used). This makes the maintenance of the styles much easier as the styles for a given element are arranged together but it means that there may end up being many media-query-wrapped sections in the final content where many sections have the same criteria (eg. "@media screen and (max-width:35em)").
 
-I'm sure that I've read somewhere that on some devices, having many such sections can be expensive since they all have to evaluated. I think it mentioned a particular iPhone model but I can't for the life of me find the article now! But if this is a concern then we can take all styles that are media-query-wrapped and merge any media queries whose criteria are identical using the **MediaQueryGroupingCssLoader**.
+I'm sure that I've read somewhere* that on some devices, having many such sections can be expensive since they all have to evaluated. I think it mentioned a particular iPhone model but I can't for the life of me find the article now! But if this is a concern then we can take all styles that are media-query-wrapped and merge any media queries whose criteria are identical using the **MediaQueryGroupingCssLoader**.
 
 Note that this will move all of the media query sections to the end of the style content. If your styles rely on them appearing in the final output in the same order as they appear in the source then this may pose a problem. But this is one of the issues addressed by the [Non-cascading CSS](Post42) rules, so if they're followed then this manipulation will always be safe.
 
+\* **Update (4th June):** It finally found what I was thinking of but couldn't find - it was [this comment](http://alwaystwisted.com/post.php?s=2012-05-05-everyday-im-bubbling-with-media-queries-and-less#comment-537669505) on the artible [Everyday I'm Bubbling. With Media Queries and LESS](http://alwaystwisted.com/post.php?s=2012-05-05-everyday-im-bubbling-with-media-queries-and-less).
+
 ### More to come!
 
-As part of this work, I've written a CSS / LESS parser which can be found on Bitbucket: [CSS Parser](https://bitbucket.org/DanRoberts/cssparser). It will lazily evaluate the content, so if you only need to examine the first few style declarations of a file then only the work required to parse those styles will be performed. It's used by the **LessCssOpeningBodyTagRenamer** and I intend to use it to write a validator that will check which of my Non-cascading CSS rules are or aren't followed by particular content. I might write more about the parser then.
+As part of this work, I've written a CSS / LESS parser which can be found on Bitbucket: [CSS Parser](https://bitbucket.org/DanRoberts/cssparser). It will lazily evaluate the content, so if you only need to examine the first few style declarations of a file then only the work required to parse those styles will be performed. It's used by the **LessCssOpeningBodyTagRenamer** (**4th June**: Now the **LessCssOpeningHtmlTagRenamer**) and I intend to use it to write a validator that will check which of my Non-cascading CSS rules are or aren't followed by particular content. I might write more about the parser then.
 
 In the meantime, if you want to give it a go for any reason then clone that repository and call
 
@@ -205,3 +209,5 @@ giving it a string of content and getting back an IEnumerable&lt;CategorisedChar
 The content is parsed as that enumerable set is iterated through, so when you stop enumerating it stops processing.
 
 **Update (12th March):** I've posted a follow-up to this about various caching mechanism so that all of this processing need be performed as infrequently as possible! See [CSS Minifier - Caching](Post50).
+
+**Update (4th June):** I've also started writing up a bit about how I implemented the parsing, there's a few interesting turns (at least I think there are!) so check it out at [Parsing CSS](Post56).

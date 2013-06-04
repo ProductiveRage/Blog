@@ -182,6 +182,8 @@ The @c value inside the body scope applies within that scope and overrides the @
 
 It's up for debate whether this definitely turns out to be a good idea. Interesting, so far I've not come across it anywhere else, but it really seems like it would increase the potential for sharing files (that are tightly scoped to particular controls, or other unit of layout / presentation) between projects.
 
+**Update (4th June)**: I've since updated this rule to specify the use of the html tag rather than body as I've written a processor that will strip out the additional tags injected (see [Extending the CSS Minifier](Post47)) and stripping out body tags would mean that selectors could not be written that target elements in a page where a particular class is specified on the body tag.
+
 #### No selector may be repeated in the rules
 
 In order to try to ensure that no element gets styles specified in more places than it should (that means it should be set no more frequently than in the resets, in the "common" / "theme" sheet and then at most by one other specific selector), class names should not be repeated in the rules.
@@ -332,3 +334,5 @@ It could be configured such that if a rule was identified to have not been follo
 I'm not sure yet how easy it will or won't be to check for all of these rules, but I'm definitely interested in finding out!
 
 Hopefully I'll post back with a follow-up at some point, possibly with any interesting pre-processing code to go along with it. I think the only way to determine the validity of these rules is with the eating of a whole lot of my own dog food :)
+
+**Update (4th June):** I've written a couple of related posts - see the [Non-cascading CSS: The follow-up](Post46) and [Extending the CSS Minifier](Post47). The first has a couple of amendments I've made to these rules after putting them into practice and the second has information about how my [CSS Minifier](https://bitbucket.org/DanRoberts/cssminifier) project now has support for injecting into the compiled output the "source ids" mentioned in this post, along with a way to implement rule 5 (html-tag-scoping). I also intend to write a few posts about the mechanisms used to implement these processing steps starting with [Parsing CSS](Post57).

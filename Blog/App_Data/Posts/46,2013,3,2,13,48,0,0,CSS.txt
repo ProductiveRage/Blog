@@ -34,6 +34,8 @@ For common breakpoints less-than-480px, up-to-600px, up-to-768px, up-to-900px an
 
 I think there's a lot of mileage to be had from this joint fixed-width / fluid-layout combination.
 
+BTW, if you haven't read the classic "A List Apart" article [Creating Liquid Layouts with Negative Margins](http://alistapart.com/article/negativemargins) (from 2004!) then be sure to check it out - when I came to actually trying to implement fixed width side bar(s) with a fluid width main column I came a bit unstuck until I rooted this out and refreshed my memory on what is basically the definitive way to do it.
+
 However, there is one point at which I've become stuck. I've seen designs which have a horizontal gallery of items: imagine a row of images with captions beneath them. In a similar design to that shown above, these would appear below the content area - so within the 400-600px wide region. The design requires that four items be displayed within the gallery at all times. The current approach I've seen to implementing this is for a wrapper around the gallery to effectively be 100% of the available width and then for each of the four items to have a width of 25%. This means that they resize as the available width changes. The image for each item has a width of 100% which ensures that it fills the space it has *within* the 25% section.
 
 ![Fluid Width Gallery Problem](/Content/Images/Posts/FluidLayoutsGallery.png "Fluid Width Gallery Problem")
