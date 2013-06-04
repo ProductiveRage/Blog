@@ -1,0 +1,184 @@
+﻿## Parsing CSS
+
+A few months ago I wrote about some [extensions to the CSS Minifer](Post47) to support pseudo-Source-Mapping for compiled and minified content (among other things) and I've been meaning to write about the code I used to analyse the style sheet content.
+
+### History Lesson
+
+A long time ago I wrote some code to parse javascript to remove comments and minify the content, this was before there were a proliferation of excellent plugins and such like to do it all for you - I think the YUI Compressor might have been around but since it required java to be installed where it would be used, we couldn't use it to compile scripts on-the-fly.
+
+The first pass through the content would break it down into strings representing javacript code, javascript strings and comments. Strings can be quoted with either single or double quotes, single-quote-wrapped strings could contain double quotes without escaping them and vice versa, either string format could contain their own quotes so long as they were formatted. Comments could be multi-line if they were wrapped in /* and */ or single line if they started with // (terminating with a line return or end-of-file). So similar to CSS in a lot of ways! (Particularly if you consider parsing LESS which supports single line comments, unlike regular CSS).
+
+I wrote it in a fairly naive manner, trying to handle each case at a time, building up a primary loop which went through each character, deciding what to do with it based upon what character it was and whether the current content was a string (and what would indicate the end of the string), a comment (and what would terminate that) or javascript code. There were various variables to keep track of these items of state. It did the job but I was keen not to repeat the same approach when writing this "CSS Parser" I wanted.
+
+### Employing Immutability (what a surprise!)
+
+Keeping track of the changing state in this way meant that at any point in time there was a lot to hold in my head while I was trying to understand what was going on if something appeared to be misbehaving and made each change to add new functionality increasingly difficult. But reducing the places where state change is a large part of the [immutability obsession](/Search?term=immutable) I've got going on so I figured there must be a better way.
+
+The idea was to start with two interfaces
+
+    public interface IProcessCharacters
+    {
+      CharacterProcessorResult Process(IWalkThroughStrings stringNavigator);
+    }
+
+    public interface IWalkThroughStrings
+    {
+      char? CurrentCharacter { get; }
+      IWalkThroughStrings Next { get; }
+    }
+
+with corresponding class and enum
+
+    public class CharacterProcessorResult
+    {
+      public CharacterProcessorResult(
+        CharacterCategorisationOptions characterCategorisation,
+        IProcessCharacters nextProcessor)
+      {
+        if (!Enum.IsDefined(typeof(CharacterCategorisationOptions), characterCategorisation))
+          throw new ArgumentOutOfRangeException("characterCategorisation");
+        if (nextProcessor == null)
+          throw new ArgumentNullException("nextProcessor");
+
+        CharacterCategorisation = characterCategorisation;
+        NextProcessor = nextProcessor;
+      }
+
+      public CharacterCategorisationOptions CharacterCategorisation { get; private set; }
+      public IProcessCharacters NextProcessor { get; private set; }
+    }
+
+    public enum CharacterCategorisationOptions
+    {
+      Comment,
+      CloseBrace,
+      OpenBrace,
+      SemiColon,
+      SelectorOrStyleProperty,
+      StylePropertyColon,
+      Value,
+      Whitespace
+    }
+
+such that a given string can be traversed character-by-character with a processor returning the type of that character and providing a processor appropriate to the next character.
+
+The clever part being each processor will have very tightly-scoped behaviour and responsibility. For example, if a string is encountered that starts with double quotes then a processor whose entire job is string-handling would be used. This processor would know what quote character would terminate the string and that processing should go back to the previous processor when the string has terminated. All characters encountered within the string would be identified as the same type (generally this will be of type **Value** since strings are most commonly used in style properties - eg. a url string as part of a background property - so if a semi-colon is encountered it would be identified as type **Value** despite a semi-colon having more significant meaning when not part of a string value). Handling escape characters becomes very simple if a skip-characters processor is used; when a backslash is encountered, the quoted-section processor hands off to a processor that returns a fixed type for the next character and then returns control back to the quoted-section processor. This means that the quoted-section processor doesn't need to maintain any state such as even-if-the-next-character-is-the-terminating-quote-character-do-not-terminate-the-string-yet-as-it-is-being-escaped.
+
+Comment sections can be handled in a very similar manner, with different processors for multiline comments than single line since the termination manners are different (and this helps keep things really easy).
+
+There is a primary processor which is a bit meatier than I'd like (but still only 320-odd commented lines) that looks out for the start of string or comments and hands off processing appropriately, but also identifies single signficant characters such as opening or closing braces, colons (usually indicating the a separator between a style property name and its value but sometimes a pseudo-class indicator - eg. in "a:hover") and semi-colons.
+
+Parsing is made more challenging as I wanted to support [LESS](http://lesscss.org/) which allows for nesting of rules whereas the only nesting that regular CSS supports is selectors within media queries. CSS 2.1 only allows for a single media query to wrap a selector while CSS 3 *may* support nesting media rules - see this answer on Stack Overflow: [Nesting @media rules in CSS](http://stackoverflow.com/questions/11746581/nesting-media-rules-in-css/11747166#11747166).
+
+As a bit of a cop-out, I don't differentiate between a selector and a property name in the **CharacterCategorisationOptions** enum, they are both rolled into the value **SelectorOrStyleProperty** (similarly, media query content is classified as a **SelectorOrStyleProperty**). While this feels lazy on the one hand, on the other I wanted to make this pass through the content as cheap and clean as possible and accurately determining whether a given character is a selector or a property name could involve significant reading back and forth through the content to find out for sure.
+
+This way, not only is the implementation easier to follow but it enables the main loop to parse only as much content as required to enumerate as far through the content as the caller requires.
+
+To explain what I mean, I need to introduce the class that wraps **IProcessCharacters** and **IWalkThroughStrings** -
+
+    public interface ICollectStringsOfProcessedCharacters
+    {
+      IEnumerable<CategorisedCharacterString> GetStrings(
+        IWalkThroughStrings contentWalker,
+        IProcessCharacters contentProcessor
+      );
+    }
+
+and its return type..
+
+    public class CategorisedCharacterString
+    {
+      public CategorisedCharacterString(
+        string value,
+        int indexInSource,
+        CharacterCategorisationOptions characterCategorisation)
+      {
+        if (string.IsNullOrEmpty(value))
+          throw new ArgumentException("Null/blank value specified");
+        if (indexInSource < 0)
+          throw new ArgumentOutOfRangeException("indexInSource", "must be zero or greater");
+        if (!Enum.IsDefined(typeof(CharacterCategorisationOptions), characterCategorisation))
+          throw new ArgumentOutOfRangeException("characterCategorisation");
+
+        Value = value;
+        IndexInSource = indexInSource;
+        CharacterCategorisation = characterCategorisation;
+      }
+
+      public string Value { get; private set; }
+
+      public int IndexInSource { get; private set; }
+
+      public CharacterCategorisationOptions CharacterCategorisation { get; private set; }
+    }
+
+The default **ICollectStringsOfProcessedCharacters** implementation will traverse through the **IWalkThroughStrings** content and group together characters of the same **CharacterCategorisationOptions** into a single **CategorisedCharacterString**, using [yield return](http://msdn.microsoft.com/en-us/library/vstudio/9k7k7cf0.aspx) to return the values.
+
+This means that
+
+    /* Test */ .Content { color: black; }
+
+would return content identified as
+
+    "/* Test */"     Comment
+    " "              Whitespace
+    ".Content"       SelectorOrStyleProperty
+    " "              Whitespace
+    "{"              OpenBrace
+    "color"          SelectorOrStyleProperty
+    ":"              StylePropertyColon
+    " "              Whitespace
+    "black"          Value
+    ";"              SemiColon
+    "}"              CloseBrace
+
+But if the enumeration of the data returned from the **GetStrings** method stopped after the ".Content" string was returned then no more parsing of the CSS would be carried out. If accurate differentiation of selectors, media queries and style property names was required at this point then a lot more parsing may be required to ensure that that string (".Content") was indeed a selector.
+
+Another benefit arises if a large amount of content is to be parsed; an **IWalkThroughStrings** implementation that wraps a **TextReader** may be used so the content could be loaded from disk in chunks and as much or as little parsed as desired, using relatively few resources.
+
+### No Read-ahead at *all*??
+
+Having just jabbered on about how amazing it is that this **SelectorOrStyleProperty** categorisation requires absolutely zero reading ahead in order to categorise any given character (so long as all of the preceeding characters have been parsed), there are a couple of exceptions to this rue:
+
+1. When a @media rule is encountered, all of the following content needs to be considered to be either **Whitespace** or **SelectorOrStyleProperty** until the opening brace for the rule is encountered, since the rule may contain otherwise-significant characters such as colon (eg. the ":" in "@media (min-width:500px)" is part of the media query and does not signify the separator symbol between a property name and a property value), so when a "@" is encountered, the next characters are read to determine whether it's a media rule or not
+1. A colon in a pseudo class should also not be identified as a **StylePropertyColon**, it should be considered part of the **SelectorOrStyleProperty**, so if a colon is encountered while processing what is thought to be a selector then some reading ahead is done to try to determine whether the content indicates that it is indeed a psuedo-class selector and not a separator between a property name and its value
+
+To make this easier, the **IWalkThroughStrings** interface has an additional method
+
+    /// <summary>
+    /// This will try to extract a string of length requiredNumberOfCharacters from the current
+    /// position in the string navigator. If there are insufficient characters available, then
+    /// a string containing all of the remaining characters will be returned. This will be an
+    /// empty string if there is no more content to deliver. This will never return null.
+    /// </summary>
+    string TryToGetCharacterString(int requiredNumberOfCharacters);
+
+I contemplated making this an extension method since the data can always be retrieved using the CurrentCharacter and Next properties, but depending upon the implementation there may be more efficient ways to retrieve the data and so it became an interface method.
+
+### An original idea?
+
+State machine?
+
+### Optimisation
+
+Processor factory
+
+### Overview of processors
+
+LESS parsing layer
+
+
+TextReaderStringNavigator?
+- Probably too long to get into here
+
+
+
+
+
+
+
+
+
+
+
+
