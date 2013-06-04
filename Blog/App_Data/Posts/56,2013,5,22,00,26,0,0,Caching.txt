@@ -1,0 +1,229 @@
+﻿## More Caching Mechanisms
+
+This is something I'd meant to cover in the last post ([Caching Mechanisms](Post55)) before I realised how long the last one was getting! And it's a bite-sized post before I segue into more about alternate approches to expiring cache entries.
+
+Last time I had the catchily-named **StaleResultDeliveringLastModifiedBasedCachingConfigLoader** which implemented this simple interface
+
+    namespace CachingExamples.ConfigLoaders
+    {
+      ConfigDetails Get();
+    }
+
+and combined a cache expiration mechanism based upon the last-modified date of the source content with a willingness to return stale content so long as it promised to perform a background update of the cached data when it first knowingly returned stale content.
+
+The principle being that this sort of cache would be used in an environment where retrieving the data is expensive and the frequency of requests is high. If stale data delivery was not allowed then this combination of expensive data retrieval and high request frequency would mean that when cached data was found to be stale (and so removed from cache) there would likely be multiple requests all going to retrieve the live data independently. And if this process is so expensive then this would be a bad thing that we'd like to avoid!
+
+An alternative to delivering stale data during these points would be to queue up the requests that all want to go and get the live data such that only one makes the live retrieval and pushes it into cache, then the queued requests could be set free but directed at the now-populated cache. Delivering stale data during the update process, however, means that all of the requests are fast during the background update process and the high frequency of the requests should mean that stale data is not present in the cache long before it is updated (and hence the window in which stale data is returned should be small).
+
+However, at first request the cache will be empty and if the request rate is so high and the retrieval so expensive  then there will be a burst of activity as multiple requests all have to retrieve the data live before the first to complete pushes it into the cache.
+
+To address that, there's this variation on it, the **WorkAvoidingLastModifiedBasedCachingConfigLoader** (because it's getting late and I was unable to come up with a succinct but descriptive name.. ironic considering the quote about the "hard things in computer science" I started the [last post](Post55) with!).
+
+This adds a queue around requests that have to deal with the case of the cache being unable to provide any content, stale or otherwise. The synchronisation mechanism here is more like a traditional lock construct but with a timeout so that a limit can optionally be put on how long requests should be patient for while waiting for another request to get the live data, with an exception being raised if this time is exceeded. (I say "optionally" since specifying TimeSpan.MaxValue for the timeout value would effectively disable this behaviour).
+
+A "lock" is basically translated by the compiler from
+
+    lock (lockObject)
+    {
+      // Do work
+    }
+
+into
+
+    var copyOfLockObject = lockObject;
+    var lockWasTaken = false;
+    try
+    {
+      Monitor.Enter(copyOfLockObject, ref lockWasTaken);
+
+      // Do work
+    }
+    finally
+    {
+      if (lockWasTaken)
+        Monitor.Exit(copyOfLockObject);
+    }
+
+I've used the Monitor.TryEnter method that takes a timeout argument. If the lock couldn't be taken then a timeout occurred and so I throw an exception.
+
+This lock-unrolling information is taken from Eric Lippert's [Locks and exceptions do not mix](http://blogs.msdn.com/b/ericlippert/archive/2009/03/06/locks-and-exceptions-do-not-mix.aspx) which is quite short and absolutely worth a read (as per usual!). He mentions that "the body of a lock should do as little as possible" not only "so that anyone waiting on the lock does not have to wait long" but more importantly that "small, simple lock bodies minimize the chance that the thing in there is going to throw an exception" which could leave the resources in a messed up state. Wwrapping work in a lock only guarantees that a single thread can process it at any given time, not that the work magically becomes atomic - it could half succeed and then fail, leaving these resources that must be protected in an unpredictable way. Thankfully, here all I'm doing inside the lock is trying to retrieve live data and then updating the cache - *hopefully* nothing that can leave things corrupt in any way.
+
+    namespace CachingExamples.ConfigLoaders
+    {
+      public class WorkAvoidingLastModifiedBasedCachingConfigLoader : IRetrieveConfigDetails
+      {
+        private readonly IRetrieveConfigDetails _configLoader;
+        private readonly Func<DateTime> _lastModifiedDateRetriever;
+        private readonly TimeSpan _retrieverLockAcquisitionTimeout;
+        private readonly Action<Action> _backgroundWorkExecuter;
+        private readonly ICacheOneSpecificThing _cache;
+        private int _workInProgressIndicator;
+        private readonly object _retrieverLock;
+        public StaleResultDeliveringLastModifiedBasedCachingConfigLoader(
+          IRetrieveConfigDetails configLoader,
+          Func<DateTime> lastModifiedDateRetriever,
+          TimeSpan retrieverLockAcquisitionTimeout,
+          Action<Action> backgroundWorkExecuter,
+          ICacheOneSpecificThing cache)
+        {
+          if (configLoader == null)
+            throw new ArgumentNullException("configLoader");
+          if (lastModifiedDateRetriever == null)
+            throw new ArgumentNullException("lastModifiedDateRetriever");
+          if (retrieverLockAcquisitionTimeout.Ticks <= 0)
+            throw new ArgumentOutOfRangeException(
+              "retrieverLockAcquisitionTimeout",
+              "must be a positive duration"
+            );
+          if (backgroundWorkExecuter == null)
+            throw new ArgumentNullException("backgroundWorkExecuter");
+          if (cache == null)
+            throw new ArgumentNullException("cache");
+
+          _configLoader = configLoader;
+          _lastModifiedDateRetriever = lastModifiedDateRetriever;
+          _retrieverLockAcquisitionTimeout = retrieverLockAcquisitionTimeout;
+          _backgroundWorkExecuter = backgroundWorkExecuter;
+          _cache = cache;
+          _workInProgressIndicator = 0;
+          _retrieverLock = new object();
+        }
+        public StaleResultDeliveringLastModifiedBasedCachingConfigLoader(
+          IRetrieveConfigDetails configLoader,
+          Func<DateTime> lastModifiedDateRetriever,
+          TimeSpan retrieverLockAcquisitionTimeout,
+          ICacheOneSpecificThing cache)
+          : this(
+            configLoader,
+            lastModifiedDateRetriever,
+            retrieverLockAcquisitionTimeout,
+            ThreadPoolBackgroundWorkExecuter,
+            cache
+          ) { }
+
+        /// <summary>
+        /// The default manner in which background work is performed is to queue up the work through
+        /// the Threadpool but this be can overridden by using the constructor that takes the 
+        /// backgroundWorkExecuter argument
+        /// </summary>
+        public static Action<Action> ThreadPoolBackgroundWorkExecuter
+        {
+          get
+          {
+            return backgroundAction =>
+            {
+              if (backgroundAction == null)
+                return;
+
+              ThreadPool.QueueUserWorkItem(state => { backgroundAction(); });
+            };
+          }
+        }
+
+        public ConfigDetails Get()
+        {
+          // Try to retrieve data from cache
+          var lastModified = _lastModifiedDateRetriever();
+          var cachedData = _cache.GetIfAvailable() as ConfigDetailsWithModifiedDate;
+          
+          // If unavailable in cache then the cache needs populating, only one request should be
+          // allowed to perform this work, any others should wait until the work has completed
+          // and the data been made available in the cache
+          if (cachedData == null)
+          {
+            var lockWasTaken = false;
+            try
+            {
+              Monitor.TryEnter(_retrieverLockAcquisitionTimeout, ref lockWasTaken);
+              if (lockWasTaken)
+              {
+                cachedData = _cache.GetIfAvailable() as ConfigDetailsWithModifiedDate;
+                if (cachedData == null)
+                {
+                  var liveData = _configLoader.Get();
+                  _cache.SetIfNotAvailable(
+                    new ConfigDetailsWithModifiedDate(
+                      liveData,
+                      lastModified
+                    )
+                  );
+                  return liveData;
+                }
+              }
+            }
+            finally
+            {
+              if (lockWasTaken)
+                Monitor.Exit(_retrieverLockAcquisitionTimeout);
+            }
+            if (!lockWasTaken)
+              throw new TimeoutException("The request timed out while waiting for Config Details load");
+          }
+
+          // If the available data is still valid then return that
+          if (cachedData.LastModified >= lastModified)
+            return cachedData.Config;
+
+          // If the available data is no longer valid then initiate a background request
+          // immediately return the stale data
+          if (Interlocked.CompareExchange(ref _workInProgressIndicator, 1, 0) == 1)
+          {
+            _backgroundWorkExecuter(() =>
+            {
+              try
+              {
+                UpdateCachedData();
+              }
+              catch
+              {
+                // Ignore any errors - if this work was performed on another thread then there's
+                // nothing we can do about it here, we just need to be sure to reset the
+                // workInProgressIndicator value
+              }
+              Interlocked.Exchange(ref _workInProgressIndicator, 0);
+            });
+          }
+          return cachedData.Config;
+        }
+
+        private void UpdateCachedData()
+        {
+          var lastModified = _lastModifiedDateRetriever();
+          var backgroundUpdateLiveData = _configLoader.Get();
+          _cache.RemoveIfAvailable();
+          _cache.SetIfNotAvailable(
+            new ConfigDetailsWithModifiedDate(
+              backgroundUpdateLiveData,
+              lastModified
+            )
+          );
+        }
+
+        private class ConfigDetailsWithModifiedDate
+        {
+          public ConfigDetailsWithModifiedDate(ConfigDetails config, DateTime lastModified)
+          {
+            if (config == null)
+              throw new ArgumentNullException("config");
+
+            Config = config;
+            LastModified = lastModified;
+          }
+
+          /// <summary>
+          /// This will never be null
+          /// </summary>
+          public ConfigDetails Config { get; private set; }
+
+          public DateTime LastModified { get; private set; }
+        }
+      }
+    }
+
+I think the use of Monitor for the locking in this case is most appropriate for the case in hand where the timeout on queued requests is required. Particularly since the time spent with the cache empty should be relatively small and so any performance losses comparing Monitor to the Interlocked approach used for marking a background update as being in progress will be minor.
+
+The test for an empty cache has to implement the double-checked locking pattern for cases where requests are queued up while one gets the live data, otherwise once the live data becomes available then the queued requests would try to get the live data themselves even though it's just been put into cache. There's no complications with this implementation of the pattern as having the Monitor call implicitly generates "full fence" memory barriers around it to prevent any instructions reordering that is the threat to this sort of thing. I think the definitive article is Joe Albarhari's [Threading in C# (Part 4: Advanced Threading)](http://www.albahari.com/threading/part4.aspx). I'm sure I've linked to it before and I've certainly read it over and over again over the years!
+
+I think I've covered everything I wanted to about implementing caches for now*, I still need to do some more work before I can crack on with talking about all of the cache expiration methods I have in mind. Think it's going to be a little while before that's all ready but having to get everything completely straight in my head for a topic has been one of the benefit I've found to blogging about things!
+
+\* (I half contemplated writing *another* variation which would have a perioidic timer to pick up on an empty cache or trigger a background update if stale data is present and an update is not already in progress, but to be honest I think that might be labouring the point a bit and wouldn't add that much value to the post - hopefully it's obvious both how such a mechanism could be implemented and what some of the pros and cons would be).
