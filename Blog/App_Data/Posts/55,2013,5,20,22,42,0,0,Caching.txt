@@ -500,7 +500,7 @@ Thusly..
 
             // If the available data is no longer valid then initiate a background request
             // immediately return the stale data
-            if (Interlocked.CompareExchange(ref _workInProgressIndicator, 1, 0) == 1)
+            if (Interlocked.CompareExchange(ref _workInProgressIndicator, 1, 0) == 0)
             {
               _backgroundWorkExecuter(() =>
               {
