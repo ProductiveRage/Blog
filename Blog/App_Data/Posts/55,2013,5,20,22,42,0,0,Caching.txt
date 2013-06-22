@@ -498,8 +498,11 @@ Thusly..
             if (cachedData.LastModified >= lastModified)
               return cachedData.Config;
 
-            // If the available data is no longer valid then initiate a background request
-            // immediately return the stale data
+            // If the available data is no longer valid then initiate a background request immediately
+            // return the stale data (if CompareExchange returns zero then it means that the value of
+            // _workInProgressIndicator was zero before the call to CompareExchange (and so it will
+            // have then been set to one since the second argument is the value to set the first
+            // argument's reference to if it currently matches the third argument)
             if (Interlocked.CompareExchange(ref _workInProgressIndicator, 1, 0) == 0)
             {
               _backgroundWorkExecuter(() =>
