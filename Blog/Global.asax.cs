@@ -71,13 +71,7 @@ namespace Blog
 			);
 
 			routes.MapRoute(
-			  "404ErrorTestWith200Response",
-			  "NotFoundTest",
-			  new { controller = "StaticContent", action = "ErrorPage" }
-			);
-
-			routes.MapRoute(
-			  "404ErrorTestWith404Response",
+			  "404ErrorPage",
 			  "NotFound404",
 			  new { controller = "StaticContent", action = "ErrorPage404" }
 			);
