@@ -21,7 +21,7 @@ strong { font-weight: bold; }
 .RounderBorders (@radius)
 {
 	-webkit-border-radius: @radius;
-	-moz-border-radius: @radius;
+	//-moz-border-radius: @radius; // Binned in Firefox 13 so think we can safely drop it here!
 	-ms-border-radius: @radius;
 	-o-border-radius: @radius;
 	border-radius: @radius;
