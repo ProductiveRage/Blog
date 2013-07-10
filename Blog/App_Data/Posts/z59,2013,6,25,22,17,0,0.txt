@@ -1,0 +1,252 @@
+﻿## Auto-releasing Event Listeners
+
+Last time, in [Parsing CSS](Post57), I talked about a way to parse CSS and identify character-by-character what "type" it was (eg. "SelectorOrStyleProperty", "Value", "Whitespace", etc..). The interesting things, I think, are more what I intend to do with the work (trying to validate the rules from [Non-cascading CSS: A revolution!](Post42)) and *how* the processing was performed. The input content is traversed through this interface:
+
+    public interface IWalkThroughStrings
+    {
+      char? CurrentCharacter { get; }
+      IWalkThroughStrings Next { get; }
+    }
+
+The first implementation of this took a string of CSS (or the [LESS](http://www.dotlesscss.org) variant) and internally maintained an index for each new **IWalkThroughStrings** returned when the "Next" property is accessed on an instance (so each time Next is accessed, a new instance of the class is returned with an index value one greater than the instance whose Next property was requested).
+
+But I'd suggested that an alternate implementation could wrap a **TextReader** and read through potentially huge amounts of content using relatively few resources since very little "reading ahead" is required and so only a small segment of the complete data need be in memory at any one time.
+
+(The returned data is an enumerable set that delivers the results through [yield return](http://msdn.microsoft.com/en-us/library/vstudio/9k7k7cf0.aspx) and so there is no internal list built that has to describe the entirety of the content, further limiting the resource requirements).
+
+Actually writing an implementation of **IWalkThroughStrings** that used the **TextReader**, however, turned out to be an interesting adventure and introduced me (in great detail) to one of the few not-too-difficult-to-encounter "memory leaks" of the .net framework.
+
+### Memory leaks in .net?!
+
+I'll quickly try to describe what I was doing; the problem with wrapping a **TextReader** in an interface that is supposed to represent immutable data is that a **TextReader** instance is *not* immutable. It has a Read method that can retrieve zero, one or multiple bytes and will then move past the read content (if there was any). So subsequent calls to Read with the arguments will (much of the time) return different data. If I want to parse the content
+
+    a:hover { color: blue; }
+
+by walking it through it with a hypothetical **TextReaderStringWalker** "c0" then I expect **CurrentCharacter** of this *c0* instance to return "a" no matter how many times I call it. To get the next character, I could set a new instance *c1* to be the reference that *c0* declares as its **Next** property and get the **CurrentCharacter** from *c1*. Each instance consistently reports data specific to the location in the content that it represents.
+
+If each move through the content would only ever be a single character then this wouldn't seem too difficult, but in some scenarios the parser has to read ahead in the content a little. In the above example, it has to look ahead to see that the ":" in "a:hover" represents the start of a pseudo class and not the separator between a property name and its value.
+
+But if some read-ahead is required to correctly identify the type of that second character, when we want to access the third character, the **TextReader** will be in the wrong place!
+
+The way I addressed this was to wrap the **TextReader** in an intermediary which would only move it a single character for any give request, would track the position of the **TextReader** (TODO: footnote) and would raise an event for each move. The **TextReaderStringWalker** instances would subscribe to this event and maintain a buffer of characters that the wrapped **TextReader** had progressed beyond its the current position of the **TextReaderStringWalker**. Since these "string walkers" are only expected to have a very short lifespan as the content is traversed, having a few character buffers built up when read aheads occurred would be no big deal.
+
+So now when the work of *c1* is done and the ":" character identified as being type "SelectorOrStyleProperty", when the **Next** property of *c1* is accessed and a new **TextReaderStringWalker** returned, the character that that instance will return comes from the buffer that *c1* maintained and which it shared with the new instance. The **TextReader** doesn't have to be moved on since it's already read past the end of "hover".
+
+And this approach seemed to work a treat! Until I did some investigation..
+
+I added a finaliser to the **TextReaderStringWalker** class which would write to the console when they dropped out of scope so that I could see them being tidied up as the content was traversed. At least that was the plan. The finalisers didn't get called until my little console app terminated, despite a liberal smattering of [GC.Collect](http://msdn.microsoft.com/en-us/library/xe0c2357.aspx) calls (for the purposes of testing only, of course!).
+
+Head-scratching ensued.. I'd expected to encounter problems when I was learning about memory pinning in [IDispatch (IWastedTimeOnThis but ILearntLots)](Post44) but not when doing something as apparently simple as this!
+
+### Events use EventHandlers, EventHandlers are delegates, delegates are..
+
+A typical way to subscribe to an event is
+
+    button.Click += (sender, e) =>
+    {
+    };
+
+which defines an anoymous method that becomes somehow registered with the Click event and called when the Click event is raised. (I'll be less vague about the "somehow" further down). The anonymous method is passed as a delegate which matches the **EventHandler** signature. A delegate is essentially a **MethodInfo** and optionally a target object. If a named method had been used - eg
+
+    button.Click += ButtonClicked;
+
+with
+
+    void ButtonClicked(object sender, EventArgs e)
+    {
+    }
+
+then the target reference would be the instance of the class the contained that method or would be null if it was a static method. With the anonymous method it's potentially a bit more complicated since Visual Studio does clever things with closures to ensure that anything that exists outside of the closure that is referenced *inside* the closure is still available when the event callback is made. It's outside the scope of this post to go into too much detail on this so for now we'll just approximate by assuming that the target reference that gets passed is a reference to the instance of the class that contains the event-subscribing code.
+
+And in there lies the key! The event publisher keeps hold of these callback delegates and these callback delegates have (internally) a reference to the event subscriber. So the publisher has a possibly-less-than-obvious reference to the subscriber and so the subscriber can't be elligible for garbage collection while the publisher is still "alive" since the publisher has a reference to it!
+
+Many times this isn't a problem. If a button's Click event triggers some code in a Windows Form, for example, the Button and the Form will probably be disposed of at approximately the same time. The Form being referenced by the Button due to the event subscription is unlikely to be an issue since the Button is unlikely to exist after the Form has been closed and so this link won't be "keeping alive" the Form (ie. it won't be prevented it from being garbage collected).
+
+But when the lifespan of the event publisher is expected to be longer than that of the subscriber then it *can* become an issue. This is what was happening with my **TextReaderStringWalker** and the wrapper around the **TextReader** that was raising the events; so long as a reference to that wrapper existed, there would also be references to the string walkers through the subscribed events.
+
+My tester app did all of the work in the Main method and so the reference to the **TextReader** wasn't dropped until the program terminated and so, by extension, the references to the string walkers weren't dropped until that point either. Which explains the behaviour I'd seen!
+
+### Another example of what not to do in the finaliser
+
+A pattern I'm sure I've seen in some code in the past is to try to unhook event handlers in class finalisers - eg.
+
+    public class SillyExample
+    {
+      private ClassWithEvent _target;
+      public SillyExample(ClassWithEvent target)
+      {
+        if (target == null)
+          throw new ArgumentNullException("target");
+
+        _target = target;
+        _target.Event += TargetEvent;
+      }
+
+      ~SillyExample()
+      {
+        if (_target != null)
+        {
+          _target.Event -= TargetEvent;
+          _target = null;
+        }
+      }
+
+      private void TargetEvent(object sender, EventArgs e)
+      {
+      }
+    }
+
+The idea being that the event will be "tidied up" in the finaliser. It should be obvious from I've written above that this won't work - if the event needs unhooking then the finaliser won't be called since the event publisher (**ClassWithEvent**) will still have a reference to the subscriber (**SillyExample**) and so the subscriber's finaliser won't have been called. And the subscriber can't have been garbage collected since the publisher (**SillyExample**) still has a reference to it (the "_target" member).
+
+TODO: Mention http://ericlippert.com/2013/06/10/construction-destruction ??
+
+### The WeakReference and "Weak Event Handlers"
+
+So what would be ideal would be if there was a way for the Event Source to have a reference to the Listener but somehow not prevent the Listener from being garbage-collected if nothing else is keeping it alive.
+
+Well, conveniently, the framework provides just that: the **WeakReference**!
+
+The **WeakReference** wraps a reference and provides access to it through the "Target" property without preventing it from being garbage collected. If the reference *has* been garbage collected then the **WeakReference** whose Target property previous referred to it will now report a null Target.
+
+So if a class is written where it is expected that listeners for a given event will be shorter-lived than the event publisher (as is the case with the class that will wrap the **TextReader** and raises read-ahead events - this will be long-lived - and the **TextReaderStringWalker**, whose instances will be short-lived) then whenever someone subscribes to an event, the EventHandler can be manipulated such that the reference to the subscriber is replaced with a WeakReference.
+
+(It's also possible to turn this round such that listeners that expect to be shorter-lived than the event source can make sure that they provide EventHandler delegates which already use WeakReferences - there's an excellent article about doing it this way round that I'll link to further down, a lot of the same ground is covered as I'm going to talk about here).
+
+But first a quick segue into more detail about what an event is and what it means to attach or detach to one.
+
+### More specifics about delegates and events
+
+I said above that delegates are essentially a pairing of a Target and a Method. That's not the whole truth. When a delegate is defined, such as
+
+    public delegate void EventHandler<TEventArgs>(object sender, TEventArgs e);
+
+this is compiled into a class that inherits **MulticastDelegate** which itelf inherits **Delegate**. These are both abstract classes, the latter is as I described above whereas the former expresses the intent to potentially have multiple Targets and Methods. Each Method will have the same signature but a single call to handler -
+
+    EventHandler<EventArgs> handler = GetExampleEventHandler();
+    handler(this, EventArgs.Empty);
+
+could be calling one method or it could be calling many.
+
+Delegates may be combined by calling Delegate.Combine or Delegate.Remove, so in the above example we could add another delegate call to the handler reference with
+
+    handler = (EventHandler<EventArgs>)Delegate.Combine(GetAnotherExampleEventHandler());
+
+for which there is operator overload support for -
+
+    handler = handler + GetAnotherExampleEventHandler();
+
+or, even more concisely:
+
+    handler += GetAnotherExampleEventHandler();
+
+(Each operation here is resulting in a new instance, delegates are immutable - something I approve of! :)
+
+So it might seem that we almost don't need the "event" keyword in C#
+
+    public event EventHandler<EventArgs> MyEvent;  // Why do we need this?
+    public EventHandler<EventArgs> MyEvent;        // What's wrong with just using this?
+
+If a class exposed events in the second, shorter manner then subscribers could indeed sign up for updates with
+
+    target.MyEvent += (sender, e) => { /* Do whatever };
+
+However, this would not be thread-safe.
+
+If MyEvent starts off as null and someone tries to attach "callback1" to the event with
+
+    target.MyEvent += callback1;
+
+then Delegate.Combine MyEvent will become a delegate with a single target. If someone else tries to attach "callback2"
+
+    target.MyEvent += callback2;
+
+then MyEvent will have two targets. But if both registrations happen simultaneously then it's quite possible that one change would override the other - both requests would start with the null MyEvent reference and try to combine either callback1 or callback2 and whichever finished last would "win".
+
+So the C# compiler enables the "event" keyword which will do a little rewriting.
+
+    public event EventHandler<EventArgs> MyEvent;
+
+actually becomes something approximating
+
+    private event EventHandler<EventArgs> _myEvent;
+    public event EventHandler<EventArgs> MyEvent
+    {
+      add
+      {
+        lock (this)
+        {
+          _myEvent += value;
+        }
+      }
+      remove
+      {
+        lock (this)
+        {
+          _myEvent -= value;
+        }
+      }
+    }
+
+The only operations allowed are add and remove, so a caller to the class containing the event couldn't set the reference to null to empty the registration list, for example. And these add and remove requests have to go through the add / remove methods (defined in a similar way to the get and set methods of a property, note how there is an implicit "value" reference in both add and remove, like the "value" reference in a property setter) so that their behaviour can be controlled.
+
+(If you try to perform an action other than adding or removing you will get a compile error "The event '{MyType.MyEvent}' can only appear on the left hand side of += or -= (except when used from within the type '{MyType}')").
+
+The compiler will include a default implementation of the add and remove methods but they could be overridden using the above syntax is required. It is recommended that you don't override without good reason since this leaves Microsoft free to improve the default implementations behind the scenes and you may benefit from this with no effort of your part. For example (and we're really going into the details now!), from .Net 4 onwards they have changed the default implementation so that it is still thread safe (for callers to add and remove event handlers without stepping on each others' toes) but in a way that sacrifices less performance when there is no contention. I've renamed the variables and rearranged it very slightly to explain how it works -
+
+    add
+    {
+      EventHandler<TEventArgs> valueBeforeChangeAttempt, valueAtChangePoint;
+      do
+      {
+        valueBeforeChangeAttempt = _myEvent;
+        var newValue = valueBeforeChangeAttempt + handler;
+
+        // Compare _readAhead to valueBeforeChangeAttempt and change _readAhead's value to newValue if
+        // they match. Return the value of _readAhead before the method call, regardless of whether its
+        // value was changed or not.
+        // - If the returned valueAtChangePoint does not match the valueBeforeChangeAttempt then no
+        //   change to _readAhead was performed (another thread must have made a change to it before
+        //   the CompareExchange call) and so we must loop round to try again
+        valueAtChangePoint = Interlocked.CompareExchange<Eventhandler<TEventArgs>>(
+          ref _myEvent,
+          newValue,
+          valueBeforeChangeAttempt
+        );
+      }
+      while (valueAtChangePoint != valueBeforeChangeAttempt);
+    }
+
+(The remove method is the same except the "+" is replaced with a "-" when newValue is generated).
+
+Using CompareExchange is much faster than having to acquire a lock (which I touched on very briefly in [Caching Mechanisms](Post55)] but at least as important is that locks should always be taken on private references to avoid deadlocks, locking on the instance of the class that contains the event is a bad idea (as explained at [Safe Thread Synchronization](http://msdn.microsoft.com/en-us/magazine/cc188793.aspx) - written by Jeffrey Richter who wrote "CLR via C#" which I'm reading on-and-off and thoroughly enjoying).
+
+### Reining it back in
+
+
+
+TODO: Linq Expression / Reflection by name or static method /  Generic Type on Instance Callback / Activator.CreateObject vs GetConstructor and Invoke
+
+
+
+
+
+TODO: Cons of WeakReference in regards to GC - maintains for longer than it would otherwise?
+
+
+TODO: Explain about event add/remove, EventHandler Delegate.Combine, its immutability, thread-safe variations in .Net framework versions
+
+
+
+
+
+
+
+
+
+
+TODO[?]: To be fair, a similar issue would occur if the **TextReader** was progressed every time a new **TextReaderStringWalker** was instantiated since accessing the **Next** property..
+
+
+TODO: COM AssemblyResolve Event Issue
+
+TODO: Link to best Weak Event Listener article
