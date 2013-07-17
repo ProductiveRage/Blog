@@ -27,7 +27,7 @@ namespace Blog.Factories
 						new PostRepositoryFactory(requestContext.HttpContext).Get(),
 						new PostIndexerFactory(requestContext.HttpContext).Get(),
 						Constants.CanonicalLinkBase,
-						Constants.GoogleAnalyticsId,
+						IsLocalHost(requestContext) ? null : Constants.GoogleAnalyticsId,
 						GetLongTermCache(requestContext)
 					);
 
@@ -42,7 +42,7 @@ namespace Blog.Factories
 					return new ViewPostController(
 						new PostRepositoryFactory(requestContext.HttpContext).Get(),
 						Constants.CanonicalLinkBase,
-						Constants.GoogleAnalyticsId,
+						IsLocalHost(requestContext) ? null : Constants.GoogleAnalyticsId,
 						Constants.DisqusShortName,
 						GetLongTermCache(requestContext)
 					);
@@ -64,6 +64,23 @@ namespace Blog.Factories
 				requestContext.HttpContext.Cache,
 				TimeSpan.FromDays(1)
 			);
+		}
+
+		private bool IsLocalHost(RequestContext requestContext)
+		{
+			if (requestContext == null)
+				throw new ArgumentNullException("requestContext");
+
+			var httpContext = requestContext.HttpContext;
+			if (httpContext == null)
+				return false;
+			var request = httpContext.Request;
+			if (requestContext == null)
+				return false;
+			var url = request.Url;
+			if (url == null)
+				return false;
+			return url.Host.Equals("localhost", StringComparison.InvariantCultureIgnoreCase);
 		}
 
 		public SessionStateBehavior GetControllerSessionBehavior(RequestContext requestContext, string controllerName)
