@@ -125,11 +125,13 @@ would return content identified as
     ".Content"       SelectorOrStyleProperty
     " "              Whitespace
     "{"              OpenBrace
+    " "              Whitespace
     "color"          SelectorOrStyleProperty
     ":"              StylePropertyColon
     " "              Whitespace
     "black"          Value
     ";"              SemiColon
+    " "              Whitespace
     "}"              CloseBrace
 
 But if the enumeration of the data returned from the **GetStrings** method stopped after the ".Content" string was returned then no more parsing of the CSS would be carried out. If accurate differentiation of selectors, media queries and style property names was required at this point then a lot more parsing may be required to ensure that that string (".Content") was indeed a selector.
