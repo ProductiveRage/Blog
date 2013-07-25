@@ -41,7 +41,9 @@ body
 					&.HasSideBar { width: 100%; }
 				}
 
-				p.SearchResultContent, p.NoResults { width: 764px; }
+				p.SearchResultContent, p.NoResults { min-width: 764px; }
+
+				p.SearchResultContent > strong { color: #121212; } // Undo the softening of bold for main content when highlighted search term matches
 			}
 
 			div.SideBar
