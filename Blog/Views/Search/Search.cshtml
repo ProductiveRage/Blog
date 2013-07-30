@@ -2,7 +2,7 @@
 @using Blog.Helpers.Posts;
 
 @{
-    ViewBag.Title = Model.SearchTerm;
+    ViewBag.Title = string.IsNullOrWhiteSpace(Model.SearchTerm) ? "Search" : Model.SearchTerm;
 	Layout = "~/Views/Shared/SiteMasterWithSearchOnlySidebar.cshtml";
 }
 
