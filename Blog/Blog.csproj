@@ -177,6 +177,7 @@
     <Content Include="App_Data\Posts\58,2013,7,10,20,21,0,0,NeoCities.txt" />
     <Content Include="App_Data\Posts\59,2013,7,25,22,17,0,0.txt" />
     <Content Include="App_Data\Posts\6,2011,5,2,21,24,0,0.txt" />
+    <Content Include="App_Data\Posts\60,2013,7,28,22,14,0,0,FullTextIndexer,NeoCities.txt" />
     <Content Include="App_Data\Posts\7,2011,7,13,20,11,0,0,AutoMapper,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM.txt" />
     <Content Include="Content\Content.less" />
