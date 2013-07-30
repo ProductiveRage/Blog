@@ -8,6 +8,11 @@ I wrote about the basic building blocks of the Index Generator, went off on a fe
 * [The Full Text Indexer - Adding and Subtracting](Post31)
 * [The Full Text Indexer - Going International!](Post32)
 * [The Full Text Indexer - Token Breaker and String Normaliser variations (+AutoComplete)](Post36)
+* [The Full Text Indexer - Automating Index Generation](Post48)
+* [The Full Text Indexer - Structured Queries](Post51)
+* [The Full Text Indexer: Source Locations](Post53)
+* [Search Term Highlighting with Source Locations](Post54)
+* [The Full Text Indexer goes Client-side!](Post58)
 
 Along the journey, I got to learn a few new things, take advantage of other's research and have fun trying to improve the performance of some of the bottlenecks in the index generation process.
 
@@ -16,6 +21,7 @@ Along the journey, I got to learn a few new things, take advantage of other's re
 * [Optimising the Plurality-Handling Normaliser](Post27)
 * [A Plurality-Handling Normaliser Correction](Post28)
 * [Compiled LINQ Expressions don't serialise :(](Post29)
+* [JavaScript Compression (Putting my JSON Search Indexes on a diet)](Post60)
 
 I also had a chance to revisit the basic immutable list structure that I used from the get-go in this project and improve its performance characteristics as well (again, taking a lot of inspiration from cleverer people who've tackled the same problems before me! :)
 
@@ -24,8 +30,12 @@ I also had a chance to revisit the basic immutable list structure that I used fr
 
 The code can be found in the [Full Text Indexer BitBucket Repository](https://bitbucket.org/DanRoberts/full-text-indexer/). I've still got a few ideas I'm contemplating toying with - but I've also got other projects I want to investigate! So we'll just have to see what happens with this next..
 
-**Update (5th March 2013):** I just can't seem to let this lie! :) I've added another post [The Full Text Indexer - Automating Index Generation](Post48) which demonstrates some new code that will examine your source data type and generate an index for you, all on its own! Easy!
+**Update (5th March 2013):** I just can't seem to let this lie! :) I've added another post [The Full Text Indexer - Automating Index Generation](Post48) which demonstrates some new code that will examine your source data type and generate an index for you, all on its own! Easy! (Added to the list above).
 
-**Update (14th March 2013):** And another! This time about support for structured querying, a way to combine terms with AND, OR, NOT operators. See [The Full Text Indexer - Structured Queries](Post51).
+**Update (14th March 2013):** And another! This time about support for structured querying, a way to combine terms with AND, OR, NOT operators. See [The Full Text Indexer - Structured Queries](Post51).  (Added to the list above).
 
-**Update (28th March 2013):** Documenting an extension to the index data that allow for more performant consecutive term matching: [The Full Text Indexer: Source Locations](Post53). Followed by a way to utilise this information for [Search Term Highlighting with Source Locations](Post54).
+**Update (28th March 2013):** Documenting an extension to the index data that allow for more performant consecutive term matching: [The Full Text Indexer: Source Locations](Post53). Followed by a way to utilise this information for [Search Term Highlighting with Source Locations](Post54). (Added to the list above).
+
+**Update (25th July 2013):** Inspired by the "[The 10 Megabyte Manifesto](http://10mbmanifesto.neocities.org)" and [NeoCities](http://neocities.org), I've developed a way to consume search index data with JavaScript to enable a copy of this blog to be hosted where the searching is done entirely client-side. Read about it at [The Full Text Indexer goes client-side!](Post58) and see it in action live at [productiverage.neocities.org](http://productiverage.neocities.org)! (Added to the list above).
+
+**Update (30th July 2013):** A follow-up to the "The Full Text Indexer goes client-side" describing how the search index data can be compressed to take up less space on the host: [JavaScript Compression (Putting my JSON Search Indexes on a diet)](Post60). (Added to the list above).
