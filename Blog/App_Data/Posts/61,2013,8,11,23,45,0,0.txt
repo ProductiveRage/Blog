@@ -1,0 +1,723 @@
+﻿## C# State Machines
+
+Not too long ago, I published [Parsing CSS](Post57) which talked about how I'd used a form of state machine to traverse the content and how doing so made changing the logic for "changing requirements" much easier -
+
+> When I started writing it, I somehow forgot all about attribute selectors [..] If this had been processed in some contorted single loop full of complicated interacting conditions [..] then adding that extra set of conditions would have filled me with dread. With this approach, it was no big deal.
+
+(In this case it wasn't really changing requirements, it was me jumping in head first to try something out, rather than doing as much preparation as I could have.. and then finding I'd forgotten a thing a two).
+
+I didn't start out by deciding to use a state machine, I hadn't written one before and had only a passing familiarity with the term. It just seemed like the best approach and it was only afterwards that I thought it would make sense to see if it was a common pattern and see how close or far away from the standard manner I was with what I'd written.
+
+To be honest, although there is a lot of information available about this pattern, it didn't entirely click with me until I read this: [Game Programming Patterns: State](http://gameprogrammingpatterns.com/state.html). It wasn't that I didn't see the point of them or that I could see much problem in implementing them, it was just.. they just didn't seem to slot very well into how I thought of things. In fact, I was having difficulty just trying to decide if my CSS Parser code could really be considered a state machine at all! But after reading that article, it all fell into place nicely. It's really well-written and the examples manage to demonstrate how quickly complexity escalates (and how this may be handled) while keeping things nice and concise.
+
+Having linked to that article, hopefully what I'm going to write here won't seem redundant :)
+		
+Someone who I used to work with (hiya, Pricey!) got in touch with me about my parsing post and said that he'd also been getting to grips with the state machine pattern and we'd talked about using it to describe how a traffic light works. I presume that this is one of those examples that's been around *forever*. I have a *very* vague recollection of some interface between a BBC Micro and some sort of Lego-brick-mounted motors and lights and sensors when I was in my last year at primary school - one of the teaching projects was to try to model how a traffic light works. This was a loooooooong time before all those fancy Mindstorms Lego packages became available! And while researching this post, I've found numerous mention of traffic lights in relation to state machine tutorials or exercises.
+
+Anyway... I thought this was a cool idea since a single traffic light is quite a simple prospect, but it could quickly be made increasingly complex by considering multiple sets of traffic lights controlling traffic at a crossroads, for example.
+
+### How do UK Traffic Lights work?
+
+Traffic light strategies can be extremely complex when lights interact with each other so to begin with we'll just consider modelling a single set of lights controlling traffic flow. It seems like it would be odd to have traffic lights arbitrarily stopping cars if there is no traffic to flow perpendicular to it (whether that be pedestrians trying to cross or other cars at a junction or crossroads) but let's start simple.
+
+* The default light state is red
+* If a car arrives at the red light then after a short delay that red light will change to red-and-yellow
+* After another short delay, it will change to a green light - at this point, cars may pass through
+* After staying green for some time, it will change to a yellow light - at this point cars shouldn't really go through, but it's not illegal to
+* The next state is the same as the first state; a red light that won't change until traffic arrives at the light
+
+The change from the first state occurs only if car(s) arrive at the light. The other transitions occur only according to the passing of time.
+
+(If there were two sets of traffic lights at a crossroads - with two roads running perpendicular and controlling traffic in both directions on both roads - then the state of the traffic flow on the other road must be considered as well; just because both sets of lights have cars waiting to go doesn't mean they should both transition to green at the same time! But we'll talk about that later on..)
+
+### Modelling
+		
+Let's get straight in with some code. I'm going to declare an interface for a single traffic light state, the implementations of which will be immutable. Then I'll have a **TrafficLight** class which has a mutable state reference and that passes through possible transition triggers for car-has-arrived-at-lights and time-has-passed events. This class will also be used to log when the state visibly changes - eg. "red light to red-and-yellow light". So first the interface..
+
+    public interface IAmATrafficLightState
+    {
+      ColourOptions Colour { get; }
+    
+      IAmATrafficLightState RegisterCarQueueing();
+
+      /// <summary>
+      /// This will represent the passing of an arbitrary slice of time. The "real time" duration of it
+      /// is not important, its duration could be decreased or increased to make the simulation proceed
+      /// more quickly or more slowly.
+      /// </summary>
+      IAmATrafficLightState RegisterPassageOfTime();
+    }
+
+    public enum ColourOptions
+    {
+      GreenOnly,
+      RedOnly,
+      RedAndYellow,
+      YellowOnly
+    }
+
+.. and now the wrapper class...
+
+    public class TrafficLight
+    {
+      private IAmATrafficLightState _state;
+      public TrafficLight(IAmATrafficLightState initialState)
+      {
+        if (initialState == null)
+          throw new ArgumentNullException("initialState");
+
+        _state = initialState;
+      }
+
+      public ColourOptions Colour
+      {
+        get { return _state.Colour; }
+      }
+
+      public void RegisterCarQueueing()
+      {
+        var previousColour = _state.Colour;
+        _state = _state.RegisterCarQueueing();
+        if (_state.Colour != previousColour)
+          Console.WriteLine("* Colour changed from " + previousColour + " to " + _state.Colour);
+      }
+
+      /// <summary>
+      /// This will represent the passing of an arbitrary slice of time. The "real time" duration of it
+      /// is not important, its duration could be decreased or increased to make the simulation proceed
+      /// more quickly or more slowly.
+      /// </summary>
+      public void RegisterPassageOfTime()
+      {
+        var previousColour = _state.Colour;
+        _state = _state.RegisterPassageOfTime();
+        if (_state.Colour != previousColour)
+          Console.WriteLine("* Colour changed from " + previousColour + " to " + _state.Colour);
+      }
+    }
+
+Before I get into how the states will be implemented, here's the app that will drive the simulation. All that happens is a loop periodically calls "trafficLight.RegisterPassageOfTime" and once every ten loops (on average, based on calls to Random.NextDouble) it calls trafficLight.RegisterCarQueueing. This logs when cars arrive at lights and have to stop, and it logs when they pass straight through. The thing only that determines whether they have to stop or whether they pass is the colour of the lights.
+
+    class Program
+    {
+      static void Main(string[] args)
+      {
+        // This controls how fast the simulation proceeds at
+        var baseTimeSlice = TimeSpan.FromMilliseconds(100);
+
+        // This is the chance that each time slice a car arrives
+        var probabilityOfCarArrivingEachTimeSlice = 0.1;
+
+        var trafficLight = new TrafficLight(new RedLightWaitingForTraffic());
+        var rnd = new Random();
+        while (true)
+        {
+          if (rnd.NextDouble() < probabilityOfCarArrivingEachTimeSlice)
+          {
+            if (trafficLight.Colour == ColourOptions.GreenOnly)
+              Console.WriteLine("Car didn't have to queue, went straight through");
+            else if (trafficLight.Colour == ColourOptions.YellowOnly)
+              Console.WriteLine("Car didn't have to queue, went straight through (naughty!)");
+            else
+            {
+              Console.WriteLine("Register car queuing..");
+              trafficLight.RegisterCarQueueing();
+            }
+          }
+
+          Thread.Sleep(TimeSpan.FromMilliseconds(baseTimeSlice.TotalMilliseconds));
+
+          trafficLight.RegisterPassageOfTime();
+        }
+      }
+    }
+
+The first state is the only that is affected by traffic arriving at the light so we'll address that on its own -
+
+    /// <summary>
+    /// This is a red light that currently has no reason to change. If cars starting queuing up at it
+    /// then it will transition into starting the colour-change cycle.
+    /// </summary>
+    public class RedLightWaitingForTraffic : IAmATrafficLightState
+    {
+      public ColourOptions Colour { get { return ColourOptions.RedOnly; } }
+
+      public IAmATrafficLightState RegisterCarQueueing()
+      {
+        return new RedLightAboutToChangeLight();
+      }
+
+      public IAmATrafficLightState RegisterPassageOfTime()
+      {
+        // If all that's happening is that time is ticking along then there is nothing to action here
+        return this;
+      }
+    }
+
+The other states will share a base class that deals with the boring work of wait-a-set-period-of-time-before-transitioning-to-another-state. This will make these states really easy to implement -
+
+    public class RedLightAboutToChangeLight : TimeBasedTransitiveState
+    {
+      public const int TIME_TO_STAY_RED_AFTER_CAR_ARRIVES = 10;
+
+      public RedLightAboutToChangeLight() : base(
+        TIME_TO_STAY_RED_AFTER_CAR_ARRIVES,
+        new RedAndYellowLight()) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.RedOnly; } }
+    }
+
+    public class RedAndYellowLight : TimeBasedTransitiveState
+    {
+      public const int TIME_TO_WAIT_ON_RED_AND_YELLOW = 5;
+
+      public RedAndYellowLight() : base(
+        TIME_TO_WAIT_ON_RED_AND_YELLOW,
+        new GreenLight()) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.RedAndYellow; } }
+    }
+
+    public class GreenLight : TimeBasedTransitiveState
+    {
+      public const int TIME_TO_STAY_ON_GREEN = 100;
+    
+      public GreenLight() : base(
+        TIME_TO_STAY_ON_GREEN,
+        new YellowLight()) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.GreenOnly; } }
+    }
+
+    public class YellowLight : TimeBasedTransitiveState
+    {
+      private const int TIME_TO_WAIT_ON_YELLOW = 5;
+
+      public YellowLight() : base(
+        TIME_TO_WAIT_ON_YELLOW,
+        new RedLightWaitingForTraffic()) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.YellowOnly; } }
+    }
+
+The **TimeBasedTransitiveState** base class is not particularly taxing, it would just be loads of duplication if wasn't abstracted away. Each time the "RegisterPassageOfTime" method is called on a class that is derived from **TimeBasedTransitiveState**, either a **TimeBasedTransitiveStateInstance** is returned (that has a reference back to the derived class so that the "Colour" property can be reported) or - if the countdown has completed - it returns the "nextState" reference.
+
+    /// <summary>
+    /// This represents a state that is predetermined to change and that may only be affected by the
+    /// passing of time. Any more cars queuing up at the light will have no effect. This may be a
+    /// green light that will stay green for a fixed period of time before cycling back through
+    /// red-and-yellow and then to red.
+    /// </summary>
+    public abstract class TimeBasedTransitiveState : IAmATrafficLightState
+    {
+      private readonly int _timeSlicesToWaitFor;
+      private readonly IAmATrafficLightState _nextState;
+      protected TimeBasedTransitiveState(int timeSlicesToWaitFor, IAmATrafficLightState nextState)
+      {
+        if (timeSlicesToWaitFor <= 0)
+          throw new ArgumentOutOfRangeException("timeSlicesToWaitFor");
+        if (nextState == null)
+          throw new ArgumentNullException("nextState");
+
+        _timeSlicesToWaitFor = timeSlicesToWaitFor;
+        _nextState = nextState;
+      }
+
+      public abstract ColourOptions Colour { get; }
+
+      public IAmATrafficLightState RegisterCarQueueing()
+      {
+        return this;
+      }
+
+      public IAmATrafficLightState RegisterPassageOfTime()
+      {
+        if (_timeSlicesToWaitFor == 1)
+          return _nextState;
+
+        return new TimeBasedTransitiveStateInstance(this, _timeSlicesToWaitFor - 1, _nextState);
+      }
+
+      /// <summary>
+      /// This is used to describe the states that are passed through while other classes derived from
+      /// TimeBasedTransitiveState count down until they are allowed to reach their "nextState"
+      /// </summary>
+      private class TimeBasedTransitiveStateInstance : TimeBasedTransitiveState
+      {
+        public TimeBasedTransitiveStateInstance(
+          IAmATrafficLightState source,
+          int timeSlicesToWaitFor,
+          IAmATrafficLightState nextState) : base(timeSlicesToWaitFor, nextState)
+        {
+          if (source == null)
+            throw new ArgumentNullException("source");
+
+          Source = (source is TimeBasedTransitiveStateInstance)
+            ? ((TimeBasedTransitiveStateInstance)source).Source
+            : source;
+        }
+
+        /// <summary>
+        /// This will never be null and will never be a TimeBasedTransitiveStateInstance, it will always
+        /// be the state that inherited TimeBasedTransitiveState and that has transitioned into a
+        /// TimeBasedTransitiveStateInstance until the timer ticks down
+        /// </summary>
+        public IAmATrafficLightState Source { get; private set; }
+
+        public override ColourOptions Colour { get { return Source.Colour; } }
+      }
+    }
+
+## First pass complete!
+
+That is actually all of the code required to run a simulation of the traffic light, according the behaviour I described earlier.
+
+It's not all that exciting, though, is it? And it's not immediately obvious why writing this as a state machine would be particularly beneficial. (Although, there is an argument made that by the time you realise that a state machine might me most appropriate that it's too late: [Why Developers Never Use State Machines](http://www.skorks.com/2011/09/why-developers-never-use-state-machines/)). So let's ramp up the complexity a bit!
+
+### See you at the crossroads
+
+Let's paint a picture. There's a road that runs North-South and one that runs East-West. Where they cross, there are traffic lights for both roads. For this example, I'm going to say that both sets of traffic lights work in the same manner as outlined above with one caveat: only one light may be anything other than red at any time. So if one set of lights is anywhere in the red-and-yellow, green, yellow cycle then the other lights must be red. As soon as that first set of lights becomes red again, the other set are elligible to cycle round if traffic requires that they do so.
+
+There are all sorts of variations that could be made instead at this point. If the North-South road is always busier than the East-West road then, to maximise overall throughput, the lights on the North-South road might be configured to default to green unless there is East-West traffic. In America, I believe that you can turn right at crossroads if you're in the right lane, even when they're on red in some (if not all?) circumstances. I don't know if that changes the behaviour of the lights depending upon which lane traffic is in? Traffic light patterns can be further complicated by having different patterns applied at different times of the day and further *again* if lights at multiple junctions interact with each other - so traffic at one junction can affect other junctions by giving them knowledge of what traffic may be coming towards them. It actually sounds like it could be a really interesting field to work in!
+
+Having an insight into how complex things could get makes the state machine pattern look like a good fit here.
+
+Before I get stuck into the code again, I want to mention one thing that I'm not too happy with in the above code. When the **YellowLight** cycles round it transitions to a new instance of the **RedLightWaitingForTraffic** state. It seems like it would be more efficient to be able to reuse the instance that first cycled round to let traffic through. The Game Programming article I linked talks about using a "pushdown automaton", which really just means a stack for the states. So when the **RedLightWaitingForTraffic** transitions to the **RedLightAboutToChangeLight**, that new state is pushed onto the stack. When that transitions through **RedAndYellowLight**, **GreenLight** and **YellowLight**, these each *replace* the current state at the top of the stack. When the **YellowLight** state has completed, it pops off the stack, leaving the **RedLightWaitingForTraffic**.
+
+To implement a state stack, instead of returning an **IAmATrafficLight** instance for each "RegisterCarQueueing" and "RegisterPassingOfTime" call, a **StateTransition** will be returned -
+
+    public class StateTransition
+    {
+      public static StateTransition NoChange()
+      {
+        return new StateTransition(TransitionTypeOptions.NoChange, null);
+      }
+      public static StateTransition Pop()
+      {
+        return new StateTransition(TransitionTypeOptions.Pop, null);
+      }
+      public static StateTransition Push(IAmATrafficLightState state)
+      {
+        if (state == null)
+          throw new ArgumentNullException("state");
+        return new StateTransition(TransitionTypeOptions.Push, state);
+      }
+      public static StateTransition Replace(IAmATrafficLightState state)
+      {
+        if (state == null)
+          throw new ArgumentNullException("state");
+        return new StateTransition(TransitionTypeOptions.Replace, state);
+      }
+
+      private StateTransition(TransitionTypeOptions transitionType, IAmATrafficLightState newState)
+      {
+        if (!Enum.IsDefined(typeof(TransitionTypeOptions), transitionType))
+          throw new ArgumentOutOfRangeException("transitionType");
+        if ((transitionType == TransitionTypeOptions.NoChange)
+        || (transitionType == TransitionTypeOptions.Pop))
+        {
+          if (newState != null)
+            throw new ArgumentException("newState must be null if transitionType is NoChange or Pop");
+        }
+        else if (newState == null)
+          throw new ArgumentException("newState must be non-null if transitionType is Push or Replace");
+
+        TransitionType = transitionType;
+        NewState = newState;
+      }
+
+      public enum TransitionTypeOptions
+      {
+        NoChange,
+        Pop,
+        Push,
+        Replace
+      }
+
+      public TransitionTypeOptions TransitionType { get; private set; }
+
+      /// <summary>
+      /// This will be null if TransitionType is NoChange or Pop and non-null if TransitionType is
+      /// Push or Replace
+      /// </summary>
+      public IAmATrafficLightState NewState { get; private set; }
+    }
+
+This is going to require a change to the "**TrafficLight** wrapper class but before that I'm going to introduce a change to the **IAmATrafficLightState** interface by adding the property "Status" -
+
+    public interface IAmATrafficLightState
+    {
+      ColourOptions Colour { get; }
+      StatusOptions Status { get; }
+
+      StateTransition RegisterCarQueueing();
+      StateTransition RegisterPassageOfTime();
+    }
+
+    public enum StatusOptions
+    {
+      HandlingTraffic,
+      NotHandlingTraffic
+    }
+
+If the North-South **TrafficLight** instance is currently in a state that reports that it is "HandlingTraffic" then the East-West **TrafficLight** may not be in any state that does not indicate a red light (and vice versa).
+
+This "Status" will be easy to add to the states we've already defined. Anything other than the **RedLightWaitingForTraffic** will have the Status "HandlingTraffic" (including **RedLightAboutToChangeLight** since, by the point at which that state has been reached, the traffic light is committed to going through a full cycle). **RedLightWaitingForTraffic** will have the status "NotHandlingTraffic" since traffic is not actually passing through the lights (or about to pass through) so any dependent lights are free to change.
+
+Two additional states need to be added to smoothly integrate this new status data, however. The first is the **RedLightWaitingForAccess** state. Previously, the pattern to change from red was as follows
+
+* The state is **RedLightWaitingForTraffic**
+* Car(s) arrive
+* State changes to **RedLightAboutToChangeLight**
+* A short delay occurs
+* State changes to **RedAndYellowLight**
+* A short delay occurs
+* etc..
+
+I'm not entirely sure *why* there is this short delay before changing to red-and-yellow with real-life traffic lights. I'm not sure if it's something to do with traffic calming, whether it improves traffic flow in a non-intuitive manner, whether it's about ensuring that drivers assume they will always have to come to a full stop when approaching a red light or if there's another explanation. What I *do* know, though, is that if traffic is already queued up at a crossroads' red light since the other road has traffic passing, then this delay should be removed. When the other road changes to red, the traffic lights for the road with backed-up cars should be able to transtion straight to red-and-yellow.
+
+The **RedLightWaitingForAccess** covers this case. It is not affected by more cars arriving at the lights but each time slice it will check the status of the other road's lights and change state to **RedAndYellowLight** as soon as those other lights report "NotHandlingTraffic".
+
+The other new state is the **RedLightPausedBeforeWaitingForTraffic**. A **YellowLight** will transition to this before returning to **RedLightWaitingForTraffic**. This imposes a short delay on a set of traffic lights which guarantees that it will stay in a state with status "NotHandlingTraffic" after allowing through traffic. This will ensure that traffic lights on the other road can transition if required, even if a car arrives at the set of traffic lights that just cycled round. Essentially, it makes sure that if traffic is trying to pass both North-South and East-West then the roads "take turns" in allowing traffic to pass.
+
+### The new code
+
+To work with the new **IAmATrafficLightState** interface and to add support for a "state stack", the **TrafficLight** wrapper class will need to be updated -
+
+    public class TrafficLight
+    {
+      private readonly Stack<IAmATrafficLightState> _states;
+      public TrafficLight(string trafficLightId, IAmATrafficLightState initialState)
+      {
+        if (string.IsNullOrWhiteSpace(trafficLightId))
+          throw new ArgumentNullException("Null/blank trafficLightId specified");
+        if (initialState == null)
+          throw new ArgumentNullException("initialState");
+
+        TrafficLightId = trafficLightId.Trim();
+        _states = new Stack<IAmATrafficLightState>();
+        _states.Push(initialState);
+      }
+
+      public string TrafficLightId { get; private set; }
+
+      public ColourOptions Colour
+      {
+        get { return _states.Peek().Colour; }
+      }
+
+      public StatusOptions Status
+      {
+        get { return _states.Peek().Status; }
+      }
+
+      public void RegisterCarQueueing()
+      {
+        ApplyTransition(_states.Peek().RegisterCarQueueing());
+      }
+
+      public void RegisterPassageOfTime()
+      {
+        ApplyTransition(_states.Peek().RegisterPassageOfTime());
+      }
+
+      private void ApplyTransition(StateTransition transition)
+      {
+        if (transition == null)
+          throw new ArgumentNullException("transition");
+
+        var previousColour = _states.Peek().Colour;
+        if (transition.TransitionType == StateTransition.TransitionTypeOptions.NoChange)
+        {
+          // Do nothing
+        }
+        else if (transition.TransitionType == StateTransition.TransitionTypeOptions.Pop)
+        {
+          if (_states.Count == 1)
+            throw new ArgumentException("Invalid transition - may not remove last state in the stack");
+          _states.Pop();
+        }
+        else if (transition.TransitionType == StateTransition.TransitionTypeOptions.Push)
+          _states.Push(transition.NewState);
+        else if (transition.TransitionType == StateTransition.TransitionTypeOptions.Replace)
+        {
+          _states.Pop();
+          _states.Push(transition.NewState);
+        }
+        else
+          throw new ArgumentException("Unsupported transition type: " + transition.TransitionType);
+        var newColour = _states.Peek().Colour;
+        if (newColour != previousColour)
+          Console.WriteLine("* " + TrafficLightId + " changed " + previousColour + " to " + newColour);
+      }
+    }
+
+I've included a "TrafficLightId" property so that the console messages indicate *which* traffic light has changed colour. The code that is common for each state change event has been pulled out into its own method and the class also exposes the new "Status" property. It's not valid for the state stack to ever be empty (since that would indicate that it has no state, which makes no sense - this is guaranteed by the code in this class) and so the Colour and Status values can be taken by looking at the state at the top of the stack.
+
+The **RedLightWaitingForTraffic** requires three changes. Firstly to return **StateTransition** instances from its "RegisterCarQueueing" and "RegisterPassageOfTime" methods instead of **IAmATrafficLightState** implementations. Secondly to expose the new **IAmATrafficLightState** Status property. And thirdly to accept a filter that may prevent it from allowing traffic through at any given time.
+
+This filter is what prevents the North-South road traffic lights from changing from red if the East-West road is currently allowing through traffic. If cars are queuing at lights but the lights may not change colour at this time, then the state changes from **RedLightWaitingForTraffic** to the new **RedLightWaitingForAccess** state. If they *are* able to change then they proceed as before.
+
+    public class RedLightWaitingForTraffic : IAmATrafficLightState
+    {
+      private readonly Func<bool> _isAllowedToLetTrafficThrough;
+      public RedLightWaitingForTraffic(Func<bool> isAllowedToLetTrafficThrough)
+      {
+        if (isAllowedToLetTrafficThrough == null)
+          throw new ArgumentNullException("isAllowedToLetTrafficThrough");
+
+        _isAllowedToLetTrafficThrough = isAllowedToLetTrafficThrough;
+      }
+
+      public ColourOptions Colour { get { return ColourOptions.RedOnly; } }
+      public StatusOptions Status { get { return StatusOptions.NotHandlingTraffic; } }
+
+      public StateTransition RegisterCarQueueing()
+      {
+        if (_isAllowedToLetTrafficThrough())
+          return StateTransition.Push(new RedLightAboutToChange());
+
+        return StateTransition.Push(new RedLightWaitingForAccess(_isAllowedToLetTrafficThrough));
+      }
+
+      public StateTransition RegisterPassageOfTime()
+      {
+        return StateTransition.NoChange();
+      }
+    }
+
+The new **RedLightWaitingForAccess** state will just try to proceed to the **RedAndYellowLight** state each time slice, if the filter allows it. Otherwise it has to stay as it is.
+
+    public class RedLightWaitingForAccess : IAmATrafficLightState
+    {
+      private readonly Func<bool> _isAllowedToLetTrafficThrough;
+      public RedLightWaitingForAccess(Func<bool> isAllowedToLetTrafficThrough)
+      {
+        if (isAllowedToLetTrafficThrough == null)
+          throw new ArgumentNullException("isAllowedToLetTrafficThrough");
+
+        _isAllowedToLetTrafficThrough = isAllowedToLetTrafficThrough;
+      }
+
+      public ColourOptions Colour { get { return ColourOptions.RedOnly; } }
+      public StatusOptions Status { get { return StatusOptions.NotHandlingTraffic; } }
+
+      public StateTransition RegisterCarQueueing()
+      {
+        // We can't do anything here, we're already waiting
+        return StateTransition.NoChange();
+      }
+
+      public StateTransition RegisterPassageOfTime()
+      {
+        if (_isAllowedToLetTrafficThrough())
+          return StateTransition.Replace(new RedAndYellowLight());
+
+        return StateTransition.NoChange();
+      }
+    }
+
+The other states require only minor changes to implement the new interface (note that I've snuck in the other new state here, the **RedLightPausedBeforeWaitingForTraffic**) -
+
+    public class RedLightAboutToChange : TimeBasedTransitiveState
+    {
+      public const int TIME_TO_STAY_RED_AFTER_CAR_ARRIVES = 10;
+
+      public RedLightAboutToChange() : base(
+        TIME_TO_STAY_RED_AFTER_CAR_ARRIVES,
+        StateTransition.Replace(new RedAndYellowLight())) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.RedOnly; } }
+    
+      /// <summary>
+      /// We're committed to letting traffic pass at this point so declare HandlingTraffic
+      /// </summary>
+      public override StatusOptions Status { get { return StatusOptions.HandlingTraffic; } }
+    }
+
+    public class RedAndYellowLight : TimeBasedTransitiveState
+    {
+      public const int TIME_TO_WAIT_ON_RED_AND_YELLOW = 5;
+
+      public RedAndYellowLight() : base(
+        TIME_TO_WAIT_ON_RED_AND_YELLOW,
+        StateTransition.Replace(new GreenLight())) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.RedAndYellow; } }
+      public override StatusOptions Status { get { return StatusOptions.HandlingTraffic; } }
+    }
+
+    public class GreenLight : TimeBasedTransitiveState
+    {
+      public const int TIME_TO_STAY_ON_GREEN = 100;
+
+      public GreenLight() : base(
+        TIME_TO_STAY_ON_GREEN,
+        StateTransition.Replace(new YellowLight())) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.GreenOnly; } }
+      public override StatusOptions Status { get { return StatusOptions.HandlingTraffic; } }
+    }
+
+    public class YellowLight : TimeBasedTransitiveState
+    {
+      private const int TIME_TO_WAIT_ON_YELLOW = 5;
+
+      public YellowLight() : base(
+        TIME_TO_WAIT_ON_YELLOW,
+        StateTransition.Replace(new RedLightPausedBeforeWaitingForTraffic())) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.YellowOnly; } }
+      public override StatusOptions Status { get { return StatusOptions.HandlingTraffic; } }
+    }
+
+    public class RedLightPausedBeforeWaitingForTraffic : TimeBasedTransitiveState
+    {
+      private const int TIME_AFTER_RESETTING_TO_RED_BEFORE_CONSIDERING_TRAFFIC = 5;
+
+      public RedLightPausedBeforeWaitingForTraffic() : base(
+        TIME_AFTER_RESETTING_TO_RED_BEFORE_CONSIDERING_TRAFFIC,
+        StateTransition.Pop()) { }
+
+      public override ColourOptions Colour { get { return ColourOptions.RedOnly; } }
+      public override StatusOptions Status { get { return StatusOptions.NotHandlingTraffic; } }
+    }
+
+The **TimeBasedTransitiveState** code requires only minor tweaks (since I've gone for a code-heavy post, I thought I might as well include everything! :)
+
+    public abstract class TimeBasedTransitiveState : IAmATrafficLightState
+    {
+      private readonly int _timeSlicesToWaitFor;
+      private readonly StateTransition _nextState;
+      protected TimeBasedTransitiveState(int timeSlicesToWaitFor, StateTransition nextState)
+      {
+        if (timeSlicesToWaitFor <= 0)
+          throw new ArgumentOutOfRangeException("timeSlicesToWaitFor");
+        if (nextState == null)
+          throw new ArgumentNullException("nextState");
+
+        _timeSlicesToWaitFor = timeSlicesToWaitFor;
+        _nextState = nextState;
+      }
+
+      public abstract ColourOptions Colour { get; }
+      public abstract StatusOptions Status { get; }
+
+      public StateTransition RegisterCarQueueing()
+      {
+        return StateTransition.NoChange();
+      }
+
+      public StateTransition RegisterPassageOfTime()
+      {
+        if (_timeSlicesToWaitFor == 1)
+          return _nextState;
+
+        return StateTransition.Replace(
+          new TimeBasedTransitiveStateInstance(this, _timeSlicesToWaitFor - 1, _nextState)
+        );
+      }
+
+      private class TimeBasedTransitiveStateInstance : TimeBasedTransitiveState
+      {
+        public TimeBasedTransitiveStateInstance(
+          IAmATrafficLightState source,
+          int timeSlicesToWaitFor,
+          StateTransition nextState) : base(timeSlicesToWaitFor, nextState)
+        {
+          if (source == null)
+            throw new ArgumentNullException("source");
+
+          Source = (source is TimeBasedTransitiveStateInstance)
+            ? ((TimeBasedTransitiveStateInstance)source).Source
+            : source;
+        }
+
+        public IAmATrafficLightState Source { get; private set; }
+
+        public override ColourOptions Colour { get { return Source.Colour; } }
+        public override StatusOptions Status { get { return Source.Status; } }
+      }
+    }
+
+The tester app now has to instantiate two **TrafficLight** instances and update them both. It has to be able to pass a filter to each of the initial **RedLightWaitingForTraffic** instances (one for the North-South route and one for East-West) but that's simple; it need only look at the Status of the other lights and allow traffic if the other Status reports "NotHandlingTraffic".
+
+    class Program
+    {
+      static void Main(string[] args)
+      {
+        // This controls how fast the simulation proceeds at
+        var baseTimeSlice = TimeSpan.FromMilliseconds(100);
+
+        // This is the chance that each time slice a car arrives
+        var probabilityOfCarArrivingEachTimeSlice = 0.1;
+
+        // The eastWestTrafficLight reference is required by the isAllowedToLetTrafficThrough filter
+        // passed to the initial RedLightWaitingForTraffic state for the North-South traffic light so
+        // it has to be set to something (otherwise we'll get a compiler error). At this point that
+        // has to be null but it will be set to the real value immediately after. The filter won't be
+        // used until the RegisterCarQueueing and RegisterPassageOfTime methods are called, so it
+        // doesn't matter that the filter temporarily has a null reference.
+        TrafficLight eastWestTrafficLight = null;
+        var northSouthTrafficLight = new TrafficLight(
+          "N-S",
+          new RedLightWaitingForTraffic(
+            () => (eastWestTrafficLight.Status == StatusOptions.NotHandlingTraffic)
+          )
+        );
+        eastWestTrafficLight = new TrafficLight(
+          "E-W",
+          new RedLightWaitingForTraffic(
+            () => (northSouthTrafficLight.Status == StatusOptions.NotHandlingTraffic)
+          )
+        );
+
+        var allTrafficLights = new[] { northSouthTrafficLight, eastWestTrafficLight };
+        var rnd = new Random();
+        while (true)
+        {
+          foreach (var trafficLight in allTrafficLights)
+          {
+            if (rnd.NextDouble() < probabilityOfCarArrivingEachTimeSlice)
+            {
+                if (trafficLight.Colour == ColourOptions.GreenOnly)
+                {
+                  Console.WriteLine(
+                    "Car didn't have to queue {0}, went straight through",
+                    trafficLight.TrafficLightId
+                  );
+                }
+                else if (trafficLight.Colour == ColourOptions.YellowOnly)
+                {
+                  Console.WriteLine(
+                    "Car didn't have to queue {0}, went straight through (naughty!)",
+                    trafficLight.TrafficLightId
+                  );
+                }
+                else
+                {
+                  Console.WriteLine("Register car queuing {0}..", trafficLight.TrafficLightId);
+                  trafficLight.RegisterCarQueueing();
+                }
+            }
+          }
+
+          Thread.Sleep(TimeSpan.FromMilliseconds(baseTimeSlice.TotalMilliseconds));
+
+          foreach (var trafficLight in allTrafficLights)
+            trafficLight.RegisterPassageOfTime();
+        }
+      }
+    }
+
+### Win?
+
+It might look like quite a lot of code since I've decided to include *all* of the code here. But there wasn't that much new code required to go from supporting the simple one-traffic-light example to the more complex configuration. And at each step, it's easy to see what exactly is going on and how the various interactions are being handled.
+
+That's the real benefit of the state machine pattern, adding complexity is much cheaper than it is with more naive approaches. If we wanted to add *another* set of lights here (maybe there's a pedestrian crossing) then doing so wouldn't blow up the code complexity. Even if we bear in mind the fact that pedestrian crossing lights have different rules to traffic lights (there's only a red man and a green man - or "walk" and "don't walk", if you prefer - there's no yellow light).
+
+Another interesting pattern would be to vary the length that the green light stays on for, depending upon the traffic pressure building up on the other road. This might require a way to pass a "pressure retriever" reference through to the **GreenLight** (similar to the is-access-allowed delegate that the **RedLightWaitingForTraffic** and **RedLightWaitingForAccess** states have, but with a sliding scale rather than a simple yes-or-no), but all of the complexity would be contained within that **GreenLight** state.
+
+It's also worth noting that the mutability of the data is tightly restricted to the **TrafficLight** class and the "isAllowedToLetTrafficThrough" delegates. As always, this makes reasoning about the behaviour of the code much easier and can make the solution more robust. If a model was created where events would be raised on different threads then the number of places which would have to explicitly deal with access from different threads would be limited as it is only places where data is mutated that multi-threaded access tends to pose a problem. It makes me happy when I find even more reassurance that immutability is the way forward :)
+
+So now all I have to do is try to look out for more times when this pattern will be appropriate (and try to avoid trying to crowbar it into places where it isn't)!
