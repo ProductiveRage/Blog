@@ -1,0 +1,448 @@
+﻿## TypeScript State Machines
+
+Last time, in [C# State Machines](Post61), I used the example of traffic lights at a crossroads to illustrate how complexity could be handled easily with the state machine pattern. This was a follow-on to my [Parsing CSS](Post57) post and inspired by the excellent article [Game Programming Patterns: State](http://gameprogrammingpatterns.com/state.html).
+
+Well this little excursion offered me the perfect opportunity to dive into something else I've been looking at: [TypeScript](http://www.typescriptlang.org/). I've long been a fan of JavaScript. It's got a lot of quirks and it's easy to write absolute rubbish with it. In fairness, it's possible to write crap with any language, it just feels like sometimes JavaScript makes it *very* easy. But if you embrace the patterns that work well with it and apply a little discipline, you can come up with elegant, maintainable solutions.
+
+But I've often found it difficult to leave behind entirely the concept of static typing and that warm cozy feeling of knowing that the argument that you want is going to be an int and, as an int, you can apply any range checks you might need to and be content that everything has met your expectations (or demands, perhaps :) But if you don't even know what type it is, you can't as easily apply these sorts of restrictions. You can try to check the type of the argument and *then* apply range checking (or whatever) but that can start to get very messy, very quickly. I used to work with someone who claimed that static checking was unnecessary with sufficient unit testing. Meanwhile, I still think that there's a lot of potential for [Code Contracts](http://msdn.microsoft.com/en-us/library/dd264808.aspx) which is tending towards the polar opposite, so we basically had to agree to disagree on that one. In fact I may choose to take his argument to mean that with static types that a whole category of unit tests become unnecessary, handled instead by compiler checks!
+
+So it's probably fairly easy to see, if I like JavaScript *and* I like static typing, why TypeScript could seem apper attractive prospect. And here was a nice little project that was non-trivial but still pretty compact that I could try it out with.
+
+The type annotations in TypeScript are optional, but since I'm writing the code from scratch it makes sense to use them throughout. Interfaces are defined but do not need to referenced by types that implement the interface - so long as they have all of the required properties and methods then they will implicitly be considered to implement the interface. This is like Google's [Go](http://golang.org/) language and not like C#.
+
+One thing that I don't like too much is that it isn't currently possible to specify an interface with readonly properties. It must be a property with a getter and setter or nothing. So I've resorted to specific Get methods on the interfaces instead, such as GetColour() and GetState().
+
+(I'm going for a fairly direct port from the C# code. If you haven't read the [last post](Post61) then it might be worth a quick look - there's nothing too complicated going on here, it's just that I'm going to be skimming over the general program structure and concentrating mostly on how it works with TypeScript).
+
+    interface IAmATrafficLightState {
+      GetColour(): ColourOptions;
+      GetStatus(): StatusOptions;
+      RegisterCarQueueing(): IAmAStateTransition;
+      RegisterPassageOfTime(): IAmAStateTransition;
+    }
+
+    interface IAmAStateTransition {
+      GetTransitionType(): TransitionTypeOptions;
+      GetNewState(): IAmATrafficLightState; 
+    }
+
+    enum ColourOptions {
+      GreenOnly,
+      RedAndYellow,
+      RedOnly,
+      YellowOnly
+    }
+
+    enum StatusOptions {
+      HandlingTraffic,
+      NotHandlingTraffic
+    }
+
+    enum TransitionTypeOptions {
+      NoChange,
+      Pop,
+      Push,
+      Replace
+    }
+
+In the C# code, I actually had a **StateTransition** class rather than an **IAmAStateTransition**. The class had a private constructor and multiple static public methods for constructing instances: NoChange, Pop, Push and Replace. This isn't a structure that TypeScript supports, so instead I've got an interface and separate implementations. Each of the below classes implicitly **IAmAStateTransition** as they have the methods GetTransitionType() and GetNewState().
+
+The **PushTransition** and **ReplaceTransition** classes take a single constructor argument of type **IAmATrafficLightState** (as the transitions work against a "state stack", only the Push and Replace actions require a state to change to, Pop and NoChange don't). Since the constructor argument's type is specified, the only validation I have to perform to remain consistent with the C# code is to ensure that it has a non-null value. TypeScript would indicate a compile-time error if I tried to pass a string for this argument, as that clearly isn't an **IAmATrafficLightState** implementation. But it won't complain about *either* a null value or an undefined value. So the easiest thing to do seems to be just use the JavaScript pattern of testing for anything that evaluates to false - ie. "if (!state) { /* Error */ }"
+
+    class NoChangeTransition {
+      GetTransitionType(): TransitionTypeOptions {
+        return TransitionTypeOptions.NoChange;
+      }
+      GetNewState(): IAmATrafficLightState {
+        return null;
+      }
+    }
+
+    class PopTransition {
+      GetTransitionType(): TransitionTypeOptions {
+        return TransitionTypeOptions.Pop;
+      }
+      GetNewState(): IAmATrafficLightState {
+        return null;
+      }
+    }
+
+    class PushTransition {
+      constructor(private state: IAmATrafficLightState) {
+        if (!state) {
+          throw new Error("state may not be null for a Push Transition");
+        }
+      }
+      GetTransitionType(): TransitionTypeOptions {
+        return TransitionTypeOptions.Push;
+      }
+      GetNewState(): IAmATrafficLightState {
+        return this.state;
+      }
+    }
+
+    class ReplaceTransition {
+      constructor(private state: IAmATrafficLightState) {
+        if (!state) {
+          throw new Error("state may not be null for a Replace Transition");
+        }
+      }
+      GetTransitionType(): TransitionTypeOptions {
+        return TransitionTypeOptions.Replace;
+      }
+      GetNewState(): IAmATrafficLightState {
+        return this.state;
+      }
+    }
+
+I like the syntax here where constructor arguments can be marked as private, resulting in a private backing field being implicitly specified (see Steve Fenton's [Stop Manually Assigning TypeScript Constructor Parameters](http://www.stevefenton.co.uk/Content/Blog/Date/201304/Blog/Stop-Manually-Assigning-TypeScript-Constructor-Parameters/)). What I don't like is that in the resulting JavaScript, these fields are *not* private. If you look at the JavaScript below, which is generated from the TypeScript **PushTransition** class..
+
+    // This is the generated JavaScript for the TypeScript "PushTransition" class above
+    var PushTransition = (function () {
+      function PushTransition(state) {
+        this.state = state;
+        if (!state) {
+          throw new Error("state may not be null for a Push Transition");
+        }
+      }
+      PushTransition.prototype.GetTransitionType = function () {
+        return TransitionTypeOptions.Push;
+      };
+      PushTransition.prototype.GetNewState = function () {
+        return this.state;
+      };
+      return PushTransition;
+    })();
+
+.. you'll see that the state value is stored in "this.state". That's a public reference that JavaScript can manipulate. If all of the code that uses this class is TypeScript, then it won't be a problem as the compiler will enforce its private status. But if this is code to be called by non-TypeScript JavaScript then it's not ideal.
+
+Although Douglas Crockford showed us years ago that genuinely private members were possible (see [Private Members in JavaScript](http://javascript.crockford.com/private.html)), the sacrifice is that methods for an object instance with private members must be declared for each instance. The class structure used by TypeScript, on the other hand, uses the prototype approach to declare functions for each class. This means that each method is defined only once per class, rather than once per instance. So it's a conscious decision to gain a performance improvement in terms of the memory required. (Anders Hejlsberg - the daddy of both C# and TypeScript - addresses exactly this point in this forum post [Private Variables](http://typescript.codeplex.com/discussions/397651)).
+
+### Time-Transitioning States
+
+Some states in this model will transition based upon time alone. The initial state of **RedLightWaitingForTraffic** will only transition when cars arrive at the lights whereas states such as **GreenLight** transition based solely on time - it will stay green for a set period of time before cycling back round.
+
+In the C# code last time, I had an abstract **TimeBasedTransitiveState** class with a nested class that would represent the states during which time was being counted down before the next transition. This nested class would have a "Source" property that pointed back to the traffic light state that started the countdown (eg. a **GreenLight** instance). TypeScript doesn't support abstract classes *or* nested classes so this structure wasn't going to work.
+
+Instead I wrote it in a much more straight forward manner and then replaced the classes that have no internal state other than Colour, Status, Next Transition and Time-To-Next-Transition with what amount to static references. I liked this approach so much that I went back and changed the C# code such that **TimeBasedTransitiveState** class was written in pretty much the same way. (I've put the code up on Bitbucket for reference - see the [TrafficLightStateMachine](https://bitbucket.org/DanRoberts/trafficlightstatemachine)). I haven't changed the C# code to use static references yet, but it's something I'm considering.
+
+    class TimeBasedTransitiveState {
+      constructor(
+        private colour: ColourOptions,
+        private status: StatusOptions,
+        private timeSlicesToWaitFor: number,
+        private nextTransition: IAmAStateTransition) {
+        if (!nextTransition) {
+          throw new Error("nextTransition may not be null for a Push Transition");
+        }
+        if (timeSlicesToWaitFor <= 0) {
+          throw new Error("timeSlicesToWaitFor must be a positive value");
+        }
+      }
+      GetColour(): ColourOptions {
+        return this.colour;
+      }
+      GetStatus(): StatusOptions {
+        return this.status;
+      }
+      RegisterCarQueueing(): IAmAStateTransition {
+        return new NoChangeTransition();
+      }
+      RegisterPassageOfTime(): IAmAStateTransition {
+        if (this.timeSlicesToWaitFor === 1) {
+          return this.nextTransition;
+        }
+        return new ReplaceTransition(
+          new TimeBasedTransitiveState(
+            this.colour,
+            this.status,
+            this.timeSlicesToWaitFor - 1,
+            this.nextTransition
+          )
+        );
+      }
+    }
+
+    var RedLightPausedBeforeWaitingForTraffic = (function () {
+      var TIME_AFTER_RESETTING_TO_RED_BEFORE_CONSIDERING_TRAFFIC = 5;
+      return new TimeBasedTransitiveState(
+        ColourOptions.RedOnly,
+        StatusOptions.HandlingTraffic,
+        TIME_AFTER_RESETTING_TO_RED_BEFORE_CONSIDERING_TRAFFIC,
+        new PopTransition()
+      );
+    })();
+
+    var YellowLight = (function () {
+      var TIME_TO_WAIT_ON_YELLOW = 5;
+      return new TimeBasedTransitiveState(
+        ColourOptions.YellowOnly,
+        StatusOptions.HandlingTraffic,
+        TIME_TO_WAIT_ON_YELLOW,
+        new ReplaceTransition(RedLightPausedBeforeWaitingForTraffic)
+      );
+    })();
+
+    var GreenLight = (function () {
+      var TIME_TO_STAY_ON_GREEN = 100;
+      return new TimeBasedTransitiveState(
+        ColourOptions.GreenOnly,
+        StatusOptions.HandlingTraffic,
+        TIME_TO_STAY_ON_GREEN,
+        new ReplaceTransition(YellowLight)
+      );
+    })();
+
+    var RedAndYellowLight = (function () {
+      var TIME_TO_WAIT_ON_RED_AND_YELLOW = 5;
+      return new TimeBasedTransitiveState(
+        ColourOptions.RedAndYellow,
+        StatusOptions.HandlingTraffic,
+        TIME_TO_WAIT_ON_RED_AND_YELLOW,
+        new ReplaceTransition(GreenLight)
+      );
+    })();
+
+    var RedLightAboutToChange = (function () {
+      // We're committed to letting traffic pass at this point so declare HandlingTraffic
+      var TIME_TO_STAY_RED_AFTER_CAR_ARRIVES = 10;
+      return new TimeBasedTransitiveState(
+        ColourOptions.RedOnly,
+        StatusOptions.HandlingTraffic,
+        TIME_TO_STAY_RED_AFTER_CAR_ARRIVES,
+        new ReplaceTransition(RedAndYellowLight)
+      );
+    })();
+
+Note that the state objects have to follow the **TimeBasedTransitiveState** definition, in terms of the order in which they appear in the code. These objects are created by calling the constructor of the **TimeBasedTransitiveState** class. If these calls are made before the class is defined then an error such as "undefined is not a function" or "PushTransition is not a constructor" will be raised (depending upon browser or other runtime environment).
+
+This has been observed by many people, sometimes resulting in bug reports such as [Inheritance only works if parent class is declared before child class](https://typescript.codeplex.com/workitem/627). These have so far been rejected. In that report, [Jon Turner](http://social.msdn.microsoft.com/profile/jonathan%20turner%20%5Bms%5D/) writes
+
+> Unless we reorder the code for you, I think you still can come up with situations where a value hasn't been fully initialized. [..] At this time, we're explicitly not reordering code (or even adding code except in a couple of exceptions) that you've written.
+
+So I guess that we have to get used to the current situation.
+
+For working with multiple files, there is support for CommonJs and AMD modules as talked about at [Organizing your code with AMD modules and require.js](http://blorkfish.wordpress.com/2012/10/23/typescript-organizing-your-code-with-amd-modules-and-require-js/). Note that I think the mention of comments "reference path" is out of date now, as Steve Fenton points out in [Say Goodbye To TypeScript Reference Comments](http://www.stevefenton.co.uk/Content/Blog/Date/201308/Blog/Say-Goodbye-To-TypeScript-Reference-Comments/)!
+
+One last point relating to this. I had a niggling thought that "isn't hoisting in JavaScript a way around this?" But hoisting is just about variable declarations, not their definitions. If you need a refresher on this (like I did) then this article is excellent: [JavaScript Hoisting Explained](http://net.tutsplus.com/tutorials/javascript-ajax/quick-tip-javascript-hoisting-explained/) (it has a video at the top which I skipped, all of the information is written below it).
+
+### Traffic-Transitioning States
+
+So back to the TypeScript state machine code..
+
+The traffic-transitioning states are the ones that are a bit more interesting! Traffic lights start off as a **RedLightWaitingForTraffic**. Once traffic is registered as having arrived at the light, it will transition to either the **RedLightAboutToChange** state or the **RedLightWaitingForAccess**. The first option is only possible if the traffic lights on the intersecting road at the crossroads are not letting traffic through - it would be no good for traffic on both roads to be moving simultaneously! The **RedLightAboutToChange** is one of the time-transitioning states above, all that will happen is that the full state cycle (RedAndYellow to Green to Yellow and back to Red) will take place.
+
+However, if the other road *is* letting through traffic then the **RedLightWaitingForAccess** state is used. This state will check whether it is free to pass traffic every time that its RegisterPassageOfTime method is called. If so (meaning that the other road is no longer letting traffic flow), then it can transition straight to the **RedAndYellowLight** state. Otherwise it has to stick to being a **RedLightWaitingForAccess**.
+
+Something I particularly liked when writing the TypeScript version was how easy it was to specify a constructor argument that was a function. I shouldn't be surprised, really, since not only does JavaScript support first class functions but also C# has had lambdas all over the place (and the **Func** class) since .net 3.5. But it was just gratifying that it was so easy to declare! I want a single argument that is a parameter-less function that returns a bool. As such, I need only write -
+
+    constructor(private isAllowedToLetTrafficThrough: () => boolean) {
+
+Lovely! Succinct but easy to follow. So for the full implementations of the two traffic-based states we have -
+
+    class RedLightWaitingForAccess {
+      constructor(private isAllowedToLetTrafficThrough: () => boolean) {
+        if (!isAllowedToLetTrafficThrough) {
+          throw new Error("isAllowedToLetTrafficThrough must be specified");
+        }
+      }
+      GetColour(): ColourOptions {
+        return ColourOptions.RedOnly;
+      }
+      GetStatus(): StatusOptions {
+        return StatusOptions.NotHandlingTraffic;
+      }
+      RegisterCarQueueing(): IAmAStateTransition {
+        // We can't do anything here, we're already waiting
+        return new NoChangeTransition();
+      }
+      RegisterPassageOfTime(): IAmAStateTransition {
+        if (this.isAllowedToLetTrafficThrough()) {
+          return new ReplaceTransition(RedAndYellowLight);
+        }
+        return new NoChangeTransition();
+      }
+    }
+
+    class RedLightWaitingForTraffic {
+      constructor(private isAllowedToLetTrafficThrough: () => boolean) {
+        if (!isAllowedToLetTrafficThrough) {
+          throw new Error("isAllowedToLetTrafficThrough must be specified");
+        }
+      }
+      GetColour(): ColourOptions {
+        return ColourOptions.RedOnly;
+      }
+      GetStatus(): StatusOptions {
+        return StatusOptions.NotHandlingTraffic;
+      }
+      RegisterCarQueueing(): IAmAStateTransition {
+        if (this.isAllowedToLetTrafficThrough()) {
+          return new PushTransition(RedLightAboutToChange);
+        }
+        return new PushTransition(new RedLightWaitingForAccess(this.isAllowedToLetTrafficThrough));
+      }
+      RegisterPassageOfTime(): IAmAStateTransition {
+        return new NoChangeTransition();
+      }
+    }
+
+Representing the state transitions as a stack and having each **IAmATrafficLightState** implementation return an **IAmAStateTransition** for the calls to RegisterCarQueueing and RegisterPassageOfTime makes following the changes in state very easy. The **RedLightWaitingForTraffic** is always at the bottom of the stack. When it changes state (to either a **RedLightAboutToChange** or a **RedLightWaitingForAccess**) that new state is pushed onto the stack. All of the following states replace that top entry until the final **RedLightPausedBeforeWaitingForTraffic** which will pop off, leaving the original **RedLightWaitingForTraffic**.
+
+### Tying it all together
+
+Having recreated the states and the transitions, we need the **TrafficLight** class that keeps track of the state queue. The TypeScript version is reassuringly close to the C# code. There's no **Stack** class so I've used an array instead (which in JavaScript has "push" and "pop" methods and so isn't far removed from the .net **Stack** class). TypeScript's enums are implemented in such a way that if you want to display their name (rather than their numeric value) then you need to treat the enum as a hashtable which maps the value back onto the name. This varies from C#, where the ToString method of an enum value will return the name rather than the value. Also note that I'm using a method "Log" to write out messages. This will be defined below.
+
+    class TrafficLight {
+      private states: IAmATrafficLightState[];
+      constructor(private trafficLightId: string, initialState: IAmATrafficLightState) {
+        if (!trafficLightId) {
+          throw new Error("A trafficLightId must be specified");
+        }
+        if (!initialState) {
+          throw new Error("An initialstate must be specified");
+        }
+        this.states = [ initialState ];
+      }
+
+      GetTrafficLightId(): string {
+        return this.trafficLightId;
+      }
+
+      GetColour(): ColourOptions {
+        return this.GetCurrentState().GetColour();
+      }
+
+      GetStatus(): StatusOptions {
+        return this.GetCurrentState().GetStatus();
+      }
+
+      RegisterPassageOfTime(): void {
+        this.ApplyTransition(this.GetCurrentState().RegisterPassageOfTime());
+      }
+
+      RegisterCarQueueing(): void {
+        this.ApplyTransition(this.GetCurrentState().RegisterCarQueueing());
+      }
+
+      private ApplyTransition(transition: IAmAStateTransition): void {
+        var previousColour = this.GetCurrentState().GetColour();
+        if (transition.GetTransitionType() === TransitionTypeOptions.NoChange) {
+          // Do nothing
+        }
+        else if (transition.GetTransitionType() === TransitionTypeOptions.Pop) {
+          if (this.states.length === 1) {
+            throw new Error("Invalid transition - may not remove last state in the stack");
+          }
+          this.states.pop();
+        }
+        else if (transition.GetTransitionType() === TransitionTypeOptions.Push) {
+          this.states.push(transition.GetNewState());
+        }
+        else if (transition.GetTransitionType() === TransitionTypeOptions.Replace) {
+          this.states[this.states.length - 1] = transition.GetNewState();
+        }
+        else {
+          throw new Error("Unsupported transition type: " + transition.GetTransitionType());
+        }
+        var newColour = this.GetCurrentState().GetColour();
+        if (newColour !== previousColour) {
+          Log(
+            "* " + this.trafficLightId + " changed " + ColourOptions[previousColour] +
+            " to " + ColourOptions[newColour]
+          );
+        }
+      }
+
+      private GetCurrentState() {
+        return this.states[this.states.length - 1];
+      }
+    }
+
+The final piece of the puzzle is the equivalent of the **Program** class that drives the simulation in the C# code. This will create an object "tester" that wraps up references to both the North-South and East-West traffic lights in a closure, exposing a method "Advance" which will call "RegisterPassageOfTime" on the lights and, from time-to-time, based on the probabilityOfCarArrivingEachTimeSlice value, call "RegisterCarQueueing" too.
+
+I originally intended to run the code from the command line (using CScript) but thought afterward that it might be worth doing in the browser as well, maybe using that to bolt on some sort of graphical representation of what's happening. Doing it in the browser allows it to be slowed down, too, since tester.Advance may be called through the setInterval method rather than firing full speed as it does at the command line (JavaScript has no Thread.Sleep method!). Note that any sort of "graphical representation" is yet to be implemented, it's text-only for now.
+
+Whether or not it's being hosted in the browser also affects how it logs out its messages - with "console.log" or "WScript.Echo". I've gone for a simple approach in guessing how it's being hosted by presuming that if there is a "window" reference that it's in the browser and at the command line otherwise.
+
+    var tester = (function () {
+      var probabilityOfCarArrivingEachTimeSlice = 0.1;
+
+      var eastWestTrafficLight: TrafficLight = null;
+      var northSouthTrafficLight = new TrafficLight(
+        "N-S",
+        new RedLightWaitingForTraffic(
+          function() {
+            return eastWestTrafficLight.GetStatus() === StatusOptions.NotHandlingTraffic;
+          }
+        )
+      );
+      eastWestTrafficLight = new TrafficLight(
+        "E-W",
+        new RedLightWaitingForTraffic(
+          function() {
+            return northSouthTrafficLight.GetStatus() === StatusOptions.NotHandlingTraffic;
+          }
+        )
+      );
+  
+      var allTrafficLights = [ northSouthTrafficLight, eastWestTrafficLight ];
+      return {
+        Advance: function () {
+          for (var i = 0; i < allTrafficLights.length; i++) {
+            var trafficLight = allTrafficLights[i];
+            if (Math.random() < probabilityOfCarArrivingEachTimeSlice) {
+              if (trafficLight.GetColour() === ColourOptions.GreenOnly) {
+                Log(
+                  "Car didn't have to queue " + trafficLight.GetTrafficLightId() +
+                  ", went straight through"
+                );
+              }
+              else if (trafficLight.GetColour() === ColourOptions.YellowOnly) {
+                Log(
+                  "Car didn't have to queue " + trafficLight.GetTrafficLightId() +
+                  ", went straight through (naughty!)"
+                );
+              }
+              else {
+                Log("Register car queueing " + trafficLight.GetTrafficLightId() + "..");
+              }
+              trafficLight.RegisterCarQueueing();
+            }
+          }
+          for (var i = 0; i < allTrafficLights.length; i++) {
+            allTrafficLights[i].RegisterPassageOfTime();
+          }
+        }
+      };
+    })();
+
+    function IsBrowser(): boolean {
+      return (typeof(window) !== "undefined");
+    }
+
+    function Log(message): void {
+      if (IsBrowser()) {
+        console.log(message);
+      }
+      else {
+        WScript.Echo(message);
+      }
+    }
+
+    if (IsBrowser()) {
+      setInterval(tester.Advance, 100);
+    }
+    else {
+      while (true) {
+        tester.Advance();
+      }
+    }
+
+## So how did TypeScript treat me?
+
+All in all, I've enjoyed this. There were some potential gotchas like the ordering of classes. There's the concern over the public privates. There's no abstract classes or a "protected" keyword, nor are there nested classes, nor can you declare consts. Buut none of these are the end of the world.
+
+When I first tried it out, for some reason I thought that the default behaviour of "==" and "!=" were going to be changed to act as "===" and "!==". This is not the case and I don't think it's the case for [Dart](https://www.dartlang.org/) or [CoffeeScript](http://coffeescript.org/) either. It *is* the case for [GorillaScript](http://ckknight.github.io/gorillascript/), which I read about last month. This also has support for optional typing (like TypeScript) but also throws in *a lot* of other features such as the equality changes I just mentioned (if you really want the JavaScript "==" and "!=" behaviour then you can use "~=" and "!~=" which I'm choosing to read as "wobbly equals" - which seems appropriate!), immutable-by-default (which I *love* the sound of), constants, generics, promises, all sorts! It even - hold onto your hats for controversy time - uses indentation-based code blocks, rather than curlies (now you know it's crazy! :) I don't know what uptake for this has been like or what sort of support is available but I may well be having a bit of a poke into this at some point.
+
+Back to TypeScript.. I'm fairly sure that this is going to be just an early foray into its abilities for me. I've really liked what I've seen so far and hope to make time to try to use it in more scenarios. Something I really liked, that I found myself doing almost unconsciously to begin with, was not using hungarian notation in the code. Now I know that the idea that I used it *at all* will make some people a little sick in their mouth but I did feel that it acted as a crutch to document some of my intent when writing in a language without type annotations. I don't do it in C#. And I don't do it in TypeScript!
