@@ -134,7 +134,7 @@ and some suggest this variation (quoting the compression value):
 
 These do *not* work. The first results in a "can't uncompress compressed response" after a delay which makes me think that it's doing work. The latter does cause any error but also doesn't include the "Accept-encoding: gzip" HTTP header that I'm looking for.
 
-They both *feel* wrong, anyway; presumably the 9 relates to gzip compression level 9. The compression level should surely be set on the server only, not referenced by the client?? And what *are* these SOAP_COMPRESS_ACCEPT and SOAP_COMPRESSION_GZIP values? These values are just numeric constants, it turns out, which are OR'd together in the first variation. But what's the 9 for; is it supposed to be there at all; is it some other mystery constant?? And surely the quoted version is incorrect unless PHP has some mad string rules that I don't know about (totally possible with my knowledge of PHP but not the case here! :)
+They both *feel* wrong, anyway; presumably the 9 relates to gzip compression level 9. The compression level should surely be set on the server only, not referenced by the client?? And what *are* these SOAP\_COMPRESS\_ACCEPT and SOAP\_COMPRESSION\_GZIP values? These values are just numeric constants, it turns out, which are OR'd together in the first variation. But what's the 9 for; is it supposed to be there at all; is it some other mystery constant?? And surely the quoted version is incorrect unless PHP has some mad string rules that I don't know about (totally possible with my knowledge of PHP but not the case here! :)
 
 The correct version is simply:
 
