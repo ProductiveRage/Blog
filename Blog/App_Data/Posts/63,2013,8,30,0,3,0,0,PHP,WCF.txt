@@ -1,0 +1,186 @@
+﻿## Why do you hate my (WCF) types, PHP??
+
+Last November, I was helping someone consume a WCF Web Service with PHP (in the imaginatively named [Consuming a WCF Web Service from PHP](Post35)). After jumping through some hoops (and reading a _lot_ of unhelpful and/or misleading information on the web) it was working; requests that relied on type names being specified were being accepted, gzip support was being enabled, even some useful debug information was being made available for when problems were encountered. All was well. But there was something that was bugging me for a long time that I only quite recently was able to address -
+
+*Why does the PHP SoapClient so belligerently throw away the type names of response objects?*
+
+It has knowledge of the type name since it must process the response data to populate the associative arrays that represent this data. But the names of the response types are apparently then cast forever into the ether, never to exposed to me. After all, I'm using PHP - I don't want no stinkin' types!
+
+### Is it just me?
+
+I feel I should probably explain why I care so much. To be fair, I imagine that in a large number of cases the type name of the returned data really isn't important. If, for example, I'm querying the Twitter API for a set of Statuses then I know the form of the returned data (and since it returns JSON, there *are* no type names in the responses!). And for a lot of services, I imagine the form of the returned data will be identical from one result to another and, in many of the cases where the forms vary, a form of "property sniffing" will deal with it; does this result have this particular property along with all of the common ones? If so, save it or use it or do whatever with it.
+
+But there are cases where this isn't enough. In that [earlier post](Post35), the example was a web method "GetHotels" which returned hotel data for results that matched a particular set of filters (in that case, the type names were important for the *request* since an array of filters was specified, each filter was a particular WCF class - without the type names, the service couldn't deserialise the request).
+
+Each of the returned hotels has data such as Categories, Awards, and Facilities but only the keys of these Categories, Awards and Facilities are returned. There is a separate web method "GetMetaData" that maps these keys onto names. A language can be specified as part of the meta data request so that the names are provided in the correct language.
+
+Some of the meta data types may have additional data, such as an optional ImageUrl for Awards. Categories can be grouped together, so Categories such "Budget Hotel", "Boutique Hotel" and "Garden Hotel" are all considered to be part of the Category Group "Hotel" whilst "Guest House", "Farmhouse" and "Inn" are all considered part of the "Bed & Breakfast" Category Group.
+
+The natural way to express this in a WCF Web Service (making use of wsdl-supported complex types) is something like the following -
+
+    [ServiceContract]
+    public class HotelService
+    {
+      [OperationContract]
+      public MetaDataEntry[] GetMetaData(MetaDataRequest request)
+      {
+        ..
+      }
+    }
+
+    [DataContact]
+    public class MetaDataRequest
+    {
+      [DataMember]
+      public string APIKey { get; set; }
+
+      [DataMember]
+      public string LanguageCode { get; set; }
+
+      [DataMember]
+      public MetaDataType[] MetaDataTypes { get; set; }
+    }
+
+    public enum MetaDataType
+    {
+      Award,
+      Category,
+      CategoryGroup,
+      Facility
+    }
+
+    [KnownType(AwardMetaDataEntry)]
+    [KnownType(CategoryMetaDataEntry)]
+    [KnownType(CategoryGroupMetaDataEntry)]
+    [KnownType(FacilityMetaDataEntry)]
+    [DataContract]
+    public abstract class MetaDataEntry
+    {
+      [DataMember(IsRequired = true)]
+      public int Key { get; set; }
+
+      [DataMember]
+      public string Name { get; set; }
+    }
+
+    [DataContract]
+    public class AwardMetaDataEntry : MetaDataEntry
+    {
+      [DataMember]
+      public string ImageUrl { get; set; }
+    }
+
+    [DataContract]
+    public class CategoryMetaDataEntry : MetaDataEntry
+    {
+      [DataMember(IsRequired = true)]
+      public int CategoryGroup { get; set; }
+    }
+
+    [DataContract]
+    public class CategoryGroupMetaDataEntry : MetaDataEntry { }
+
+    [DataContract]
+    public class FacilityMetaDataEntry : MetaDataEntry { }
+
+The **MetaDataRequest** allows me to specify which types of meta data that I'm interested in.
+
+So, feasibly, if I wanted to build up a set of Categories to map the keys from the Hotels onto, I could make a request for just the meta data for the Categories. If I then want to map those Categories onto Category Groups, I could make a request for the Category Group meta data.
+
+But why shouldn't I be able to request *all* of the meta data types, loop through them and stash them all away for future reference *all in one go*? I could do this easily enough with a .net client. Or a Java client. But, by default, PHP refuses to allow a distinction to be made between a **CategoryGroupMetaDataEntry** and a **FacilityMetaDataEntry** since they have the same structure and PHP won't tell me type names.
+
+Well.. that's not strictly true. PHP *does* have some means to interrogate type names; the methods "gettype" and "get\_class". If you define a class in your PHP code and pass an instance of it to the "get\_class" method, you will indeed get back the name of that class. "get\_class" may only be given an argument that is an object, as reported by the "gettype" method (see the [get\_class](http://php.net/manual/en/function.get-class.php) and [gettype](http://php.net/manual/en/function.gettype.php) PHP documentation).
+
+But if we try this with the web service call -
+
+    $client = new SoapClient(
+      "http://webservice.example.com/hotelservice.svc?wsdl",
+      array(
+        "compression" => SOAP_COMPRESSION_ACCEPT | SOAP_COMPRESSION_GZIP,
+        "trace" => 1
+      )
+    );
+    $metaDataTypes = $client->GetMetaData(
+      array(
+        "request" => array(  
+          "ApiKey" => "TestKey",
+          "Language" => 1, 
+          "MetaDataTypes" => array(
+            "MetaDataTypeOptions" => array(
+              "Award",
+              "Category",
+              "CategoryGroup",
+              "Facility"
+            )
+          )
+        )
+      )
+    );
+
+we can loop through the returned data and use get\_class to find out that.. they are all apparently "**StdObject**".
+
+This is what I meant by the type names being "thrown away".
+
+### Duck-typing (doesn't work if everything quacks and waddles)
+
+In some cases we can work around this.
+
+For example, to guess that a result is an **AwardMetaDataEntry** we could try
+
+    if (property_exists($metaDataValue, "ImageUrl")) {
+
+and work on the basis that if it exposes an "ImageUrl" property that it is **AwardMetaDataEntry**.
+
+But this won't work for differentiating between a **CategoryGroupMetaDataEntry** and a **FacilityGroupMetaDataEntry** since those response types have no structural differences.
+    
+### Class Mappings
+
+It turns out that the SoapClient *does* offer a way to get what we want, so long as we don't mind declaring PHP classes for every response type that we're interested in.
+
+    class MetaDataEntry
+    {
+      public $Key;
+      public $Name;
+    }
+
+    class AwardMetaDataEntry extends MetaDataEntry
+    {
+      public $ImageUrl;
+    }
+
+    class CategoryMetaDataEntry extends MetaDataEntry
+    {
+      public $CategoryGroup;
+    }
+
+    class CategoryGroupMetaDataEntry extends MetaDataEntry { }
+
+    class FacilityMetaDataEntry extends MetaDataEntry { }
+
+As we can see in the [PHP SoapClient documentation](http://php.net/manual/en/soapclient.soapclient.php), one of the options that can be specified is a "classmap" -
+
+> This option must be an array with WSDL types as keys and names of PHP classes as values
+
+It's a way to say that particular response types should be mapped to particular PHP classes - eg.
+
+    $client = new SoapClient(
+      "http://webservice.example.com/hotelservice.svc?wsdl",
+      array(
+        "compression" => SOAP_COMPRESSION_ACCEPT | SOAP_COMPRESSION_GZIP,
+        "trace" => 1,
+        "classmap" => array(
+          "AwardMetaDataEntry" => "AwardMetaDataEntry",
+          "CategoryMetaDataEntry" => "CategoryMetaDataEntry",
+          "CategoryGroupMetaDataEntry" => "CategoryGroupMetaDataEntry",
+          "FacilityMetaDataEntry" => "FacilityMetaDataEntry"
+        )
+      )
+    );
+
+*Now* when we loop through the response values and call get_class we get the correct names. Success!
+
+(In the above code I've named the PHP classes the same as the WSDL types but, since the mappings all have to be individually specified, the class names don't *have* to be the same. The properties, on the other hand, *do* have to match since there is no facility for custom-mapping them. Any classes that don't have a mapping will continue to be translated into objects of type **StdObject**).
+
+It may well be that this is far from news for many seasoned PHP Developers but when I described the situation (before finding out about the "classmap" option) to someone I was told was experienced and competent they had no suggestion in this direction.
+
+To be honest, I'm not sure how I came across this in the end. If you know that there exists an option to map classes with the SoapClient then it's easy to find; but with only a vague idea that I wanted it to stop throwing away type names, it took me *lots* of reading and clutching at straws with search terms. Interestingly, even *with* this knowledge, I'm still unable to find an article that describes the specific problem I've talked about here.. so maybe it really *is* just me that has encountered it or cares about it!
