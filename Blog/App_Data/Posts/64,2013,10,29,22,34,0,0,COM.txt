@@ -1,0 +1,111 @@
+﻿## What is Nothing?
+
+What a deep existential question!
+
+Well.. maybe not in this context..
+
+Here I'm talking about good old VBScript; a technology at work that just refuses to completely go away. We still have software running on a combination of VBScript and .net. One of them makes use of [Windows Scripting Components](http://windowsitpro.com/scripting/wsh-part-3-windows-script-components); basically VBScript wrapped up to act like a COM component. The advantage is that we can look at replacing areas of legacy code with .net (on-going maintenance and testing concerns are important here but the performance gap between the two technologies is startling too*) without having to throw everything away all at once.
+
+\* *(Not surprising since not only is VBScript interpreted - rather than compiled - but also since it hasn't benefited from optimisation or active development for over a decade).*
+
+One of the downsides of this, however, is dealing with VBScript's oddities. A lot of this is handled very nicely by COM (and .net's COM integrations) at the boundaries - a lot of basic types can be passed from .net to these components (and vice versa). You pass in a .net string and it's happily translated into BSTR (see [Eric's Complete Guide To BSTR Semantics](http://blogs.msdn.com/b/ericlippert/archive/2003/09/12/52976.aspx), before Eric Lippert was a C# genius he was responsible for a lot of work on the VBScript interpreter). Likewise with ints and booleans.
+
+But one of the craziest areas of VBScript is its representations of null. It has three of them. *Three*. And this is where we can get unstuck.
+
+### Empty, Null, Nothing (why, oh why?)
+
+This is a bit of history, if you've ended up at this page looking for the same thing I was (until recently) looking for (how "Nothing" can be represented by .net) then jump down to the next section.
+
+I'm going to draw a parallel to JavaScript here since that effectively has two representations of "null" and will be much more well known.
+
+In JavaScript, if a variable is declared but unintialised then it has type "undefined" - eg.
+
+    var a;
+    alert(typeof(a)); // "undefined"
+
+This means that this variable has no value, we have not given it a value, we don't care at this point what it's value may or may not be.
+
+This is different from explicitly setting a variable to null. This is an intentional application of a value to a variable - eg.
+
+    var a = null;
+    alert(typeof(a)); // "object"
+
+Why it decides to describe "null" as an "object" could be a discussion for another day, but it's sufficient to show that it has been given an actual value, it is not "undefined" any more.
+
+Now these are similar to VBScript's Empty and Null - in VBScript, Empty means that the variable has not been initialised while Null means that it has *explicitly* set to Null. There are occassions where it's useful to say "I have tried to access this item and have found it to be absent" - hence giving it a null value - as opposed to "I haven't even attempted to populate this value".
+
+But Nothing is a different beast. VBScript has different assignment semantics for what it considers to be object references versus primitive types. If you want to set a value to be an "object" type (a VBScript class instance, for example) then you have to use the "SET" keyword -
+
+    Set u = GetUser()
+
+If you omitted the "SET" then it would try to set "u" to what VBScript considers a value type (a string, number, etc..). To do  this it would look for a default (parameter-less) property or function on the object. If it can't find one then it will throw a rather unhelpful "Type mismatch" error.
+
+So far as I can tell, this is solely to try to make some tasks which are already easy even easier. For example, if the GetUser function returns an object reference with a default (and parameter-less) Name property then writing
+
+    WScript.Echo GetUser()
+
+would print out the Name property. This is presumably because
+
+    WScript.Echo GetUser().Name
+
+would be too hard??
+
+By supporting these default member options, a way to say "I don't want a default property, I want the object reference itself" is required. This is what the "SET" keyword is for.
+
+I'm thinking it's total madness. While possibly making some easy things a *tiny* bit easier, it makes some otherwise-not-too-difficult things *really* difficult and convoluted!
+
+The prime example is "Nothing". If you want a function that will return an object then you will call that method using "SET". But this will mean that you can't return Null to indicate no result since Null isn't an object and trying to do what amounts to
+
+    Set u = Null
+
+will result in another unfriendly error
+
+> Object required: 'Null'
+
+*Fantastic.*
+
+So VBScript needs a way to represent an object type that effectively means "no value", but that is different to Empty (since that means not initialised) and Null (since that isn't an object).
+
+### Nothing in .net
+
+For a long time I'd thought that Nothing must somehow be an internal VBScript concept. There were three things that had me half-convinced of this:
+
+1. There was no carryover into VB.Net, there is "Nothing" there but it is equivalent to null in C# - there aren't two values that can be accessed (Null vs Nothing), not even for some sort of backward compability
+2. If you pass Nothing over the COM boundary to a .net COM component, you get a null reference (not some magic other object type)
+3. Multiple web searches failed; "How do I represent Nothing in a COM component to interact with VBScript?" [Crickets..](http://www.youtube.com/watch?v=e2KVj2vVxUs)
+
+Point 2 is partly down to the cleverness of the .net / COM integration where it converts types into native CLR types where it can. VBScript's "Nothing" really could be said to equate to null in an environment where such a hard distinction between value and reference types is unrequired.
+
+But there could be legacy WSC components that have methods that differentiate between an argument that represents Null and one that represents Nothing, so I didn't want to give up completely.
+
+At some point, I had two breakthroughs. I don't know what was different about this web search.. maybe the work I did earlier this year with [COM and IDispatch](Post44) has helped me understand that way of thinking more or perhaps I was just more dogged in my refusing to accept defeat when looking for an answer. But I've finally struck gold! (Wow, such an exaggeration for something that may never be of use to anyone else, ever :)
+
+And as I write it out, it sounds frustratingly rudimentary. But, as I said, I found it incredibly hard to actually piece this together.
+
+In VBScript, all values are of type VARIANT. This can represent booleans, numbers, strings, a pointer to an IDispatch implementation, all sorts.
+
+A VARIANT has a type to indicate what it represents, as can be seen on MSDN: [VARIANT Type Constants](http://msdn.microsoft.com/en-us/library/cc237865.aspx).
+
+To VBScript, Empty means a null VARIANT. No reference to a variant at all.
+
+Null means a VARIANT of type VT_NULL (incidentally, **System.DBNull.Value** maps back and forth onto this over the COM boundary).
+
+Nothing means a VARIANT of type VT_EMPTY. (VBScript internally decides that this is an "object" type, as opposed to Null, which a value type).
+
+So the final puzzle piece; how do we represent this arbitrary VARIANT type in .net?
+
+I found this article (well, chapter from the book ".NET and COM: The Complete Interoperability Guide"): [The Essentials for Using COM in Managed Code](http://www.informit.com/articles/article.aspx?p=27219&seqNum=8) - which contains this magic section
+
+> Because null (Nothing) is mapped to an "empty object" (a VARIANT with type VT_EMPTY) when passed to COM via a System.Object parameter, you can pass new DispatchWrapper(null) or new UnknownWrapper(null) to represent a null object.
+
+And that's it! All you need is
+
+    var nothing = new DispatchWrapper(null);
+
+and you've got a genuine "Nothing" reference that you can pass to VBScript and have it recognise! If you use the VBScript TypeName function then you get "Nothing" reported. That's all there is to to it, it *is* possible!
+
+
+
+
+
+

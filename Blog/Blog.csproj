@@ -181,6 +181,7 @@
     <Content Include="App_Data\Posts\61,2013,8,11,23,45,0,0.txt" />
     <Content Include="App_Data\Posts\62,2013,8,19,21,03,0,0,TypeScript.txt" />
     <Content Include="App_Data\Posts\63,2013,8,30,0,3,0,0,PHP,WCF.txt" />
+    <Content Include="App_Data\Posts\64,2013,10,29,22,34,0,0,COM.txt" />
     <Content Include="App_Data\Posts\7,2011,7,13,20,11,0,0,AutoMapper,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM.txt" />
     <Content Include="Content\Content.less" />
