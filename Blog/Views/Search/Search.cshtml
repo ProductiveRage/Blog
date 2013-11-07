@@ -23,7 +23,7 @@
 else {
 	foreach (var result in Model.Results) {
 					<h3>
-						@Html.ActionLink(result.Post.Title, "ArchiveById", "ViewPost", new { id = result.Post.Id }, new { })
+						@Html.ActionLink(result.Post.Title, "ArchiveBySlug", "ViewPost", new { Slug = result.Post.Slug }, new { })
 					</h3>
 					<p class="SearchResultContent">
 						@Html.RenderPostAsPlainTextWithSearchTermsHighlighted(result.Post, result.SourceLocations, 350, Model.PostContentCache)

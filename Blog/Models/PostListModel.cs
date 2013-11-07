@@ -17,6 +17,7 @@ namespace Blog.Models
 			string optionalCanonicalLinkBase,
 			string optionalGoogleAnalyticsId,
 			string optionalDisqusShortName,
+			IRetrievePostSlugs postSlugRetriever,
 			ICache postContentCache)
 		{
 			if (string.IsNullOrWhiteSpace(title))
@@ -29,6 +30,8 @@ namespace Blog.Models
 				throw new ArgumentNullException("highlights");
 			if (archiveLinks == null)
 				throw new ArgumentNullException("archiveLinks");
+			if (postSlugRetriever == null)
+				throw new ArgumentNullException("postSlugRetriever");
 			if (postContentCache == null)
 				throw new ArgumentNullException("cache");
 
@@ -41,6 +44,7 @@ namespace Blog.Models
 			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			OptionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
+			PostSlugRetriever = postSlugRetriever;
 			PostContentCache = postContentCache;
 		}
 
@@ -90,6 +94,11 @@ namespace Blog.Models
 		/// </summary>
 		public string OptionalDisqusShortName { get; private set; }
 
+		/// <summary>
+		/// This will never be null
+		/// </summary>
+		public IRetrievePostSlugs PostSlugRetriever { get; private set; }
+		
 		/// <summary>
 		/// This will never be null
 		/// </summary>

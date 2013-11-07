@@ -46,7 +46,7 @@ namespace Blog.Helpers.Sidebar
       {
         content.Append("<ul>");
         foreach (var post in posts)
-          content.AppendFormat("<li>{0}</li>", helper.ActionLink(post.Title, "ArchiveById", "ViewPost", new { Id = post.Id }, null));
+          content.AppendFormat("<li>{0}</li>", helper.ActionLink(post.Title, "ArchiveBySlug", "ViewPost", new { Slug = post.Slug }, null));
         content.Append("</ul>");
 		if (renderRSSLinkIfThereAreAnyPosts)
 		{

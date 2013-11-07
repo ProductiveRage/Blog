@@ -33,9 +33,9 @@
 {
 		<item>
 			<title>@post.Title</title>
-			<link>@Url.Action("ArchiveById", "ViewPost", new { Id = post.Id }, Request.Url.Scheme)</link>
-			<guid>@Url.Action("ArchiveById", "ViewPost", new { Id = post.Id }, Request.Url.Scheme)</guid>
-			<description>@Html.Encode(Html.RenderPostForRSS(post, Request.Url, Model.PostContentCache))</description>
+			<link>@Url.Action("ArchiveBySlug", "ViewPost", new { Slug = post.Slug }, Request.Url.Scheme)</link>
+			<guid>@Url.Action("ArchiveBySlug", "ViewPost", new { Slug = post.Slug }, Request.Url.Scheme)</guid>
+			<description>@Html.Encode(Html.RenderPostForRSS(post, Request.Url, Model.PostSlugRetriever, Model.PostContentCache))</description>
 			<pubDate>@post.Posted.ToString("ddd, dd MMM yyyy HH:mm:ss") GMT</pubDate>
 		</item>
 	

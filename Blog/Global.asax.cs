@@ -76,6 +76,12 @@ namespace Blog
 			  new { controller = "StaticContent", action = "ErrorPage404" }
 			);
 
+			routes.MapRoute(
+			  "ArchiveBySlug",
+			  "{slug}",
+			  new { controller = "ViewPost", action = "ArchiveBySlug" }
+			);
+
 			// Even with this rule, I still had to do some configuration with my hosting environment to allow 404s to be processed here
 			// (the default behaviour was to assume it was an unintentional response and to show a standard error page, these needed
 			// redirecting back to here - by telling to display content from /NotFound in my case - to display the custom 404)

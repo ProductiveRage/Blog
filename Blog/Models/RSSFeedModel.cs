@@ -8,16 +8,19 @@ namespace Blog.Models
 {
 	public class RSSFeedModel
 	{
-		public RSSFeedModel(NonNullImmutableList<Post> posts, ICache postContentCache)
+		public RSSFeedModel(NonNullImmutableList<Post> posts, IRetrievePostSlugs postSlugRetriever, ICache postContentCache)
 		{
 			if (posts == null)
 				throw new ArgumentNullException("posts");
 			if (!posts.Any())
 				throw new ArgumentException("posts may not be an empty list");
+			if (postSlugRetriever == null)
+				throw new ArgumentNullException("postSlugRetriever");
 			if (postContentCache == null)
 				throw new ArgumentNullException("postContentCache");
 
 			Posts = posts;
+			PostSlugRetriever = postSlugRetriever;
 			PostContentCache = postContentCache;
 		}
 
@@ -26,6 +29,11 @@ namespace Blog.Models
 		///They will be ordered my posted date, descending.
 		/// </summary>
 		public NonNullImmutableList<Post> Posts { get; private set; }
+		
+		/// <summary>
+		/// This will never be null
+		/// </summary>
+		public IRetrievePostSlugs PostSlugRetriever { get; private set; }
 
 		/// <summary>
 		/// This will never be null

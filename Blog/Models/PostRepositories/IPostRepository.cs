@@ -9,16 +9,21 @@ namespace Blog.Models
 		NonNullImmutableList<Post> GetAll();
 
 		/// <summary>
-		/// This is case insensitive
+		/// This is case insensitive, it will return an empty list if no Posts have the specified tag, it will raise an exception for a null or blank tag
 		/// </summary>
-		NonNullImmutableList<Post> Get(string tag);
+		NonNullImmutableList<Post> GetByTag(string tag);
 
 		/// <summary>
 		/// min is inclusive, max is not
 		/// </summary>
-		NonNullImmutableList<Post> Get(DateTime min, DateTime max);
+		NonNullImmutableList<Post> GetByDateRange(DateTime min, DateTime max);
 
-		NonNullImmutableList<Post> Get(ImmutableList<int> ids);
+		NonNullImmutableList<Post> GetByIds(ImmutableList<int> ids);
+
+		/// <summary>
+		/// This is case sensitive, it will return null if the slug is invalid
+		/// </summary>
+		Post GetBySlug(string slug);
 
 		/// <summary>
 		/// min is inclusive, max is not
