@@ -7,8 +7,8 @@ namespace BlogBackEnd.Models
 	[Serializable]
 	public class Post : PostStub
 	{
-		public Post(int id, DateTime posted, DateTime lastModified, string title, bool isHighlight, string markdownContent, NonNullImmutableList<string> tags)
-			: base(id, posted, lastModified, title, isHighlight)
+		public Post(int id, DateTime posted, DateTime lastModified, string slug, string title, bool isHighlight, string markdownContent, NonNullImmutableList<string> tags)
+			: base(id, posted, lastModified, slug, title, isHighlight)
 		{
 			if (string.IsNullOrWhiteSpace(markdownContent))
 				throw new ArgumentException("Null/blank markdownContent content");

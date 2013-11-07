@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using BlogBackEnd.Models;
 using FullTextIndexer.Common.Lists;
+using FullTextIndexer.Core.Indexes.TernarySearchTree;
 
 namespace Blog.Models
 {
@@ -22,6 +23,9 @@ namespace Blog.Models
 		/// </summary>
 		public NonNullImmutableList<Post> Get()
 		{
+			// We can use this functionality from the FullTextIndexer to generate the Post slug (it will replace accented characters, normalise whitespace,
+			// remove punctuation and lower case the content - all we need to do then is replace spaces with hypens)
+			var stringNormaliser = new DefaultStringNormaliser();
 			var posts = new List<Post>();
 			foreach (var file in _folder.EnumerateFiles("*.txt", SearchOption.AllDirectories))
 			{
@@ -36,6 +40,7 @@ namespace Blog.Models
 						  fileSummary.Id,
 						  fileSummary.PostDate,
 						  file.LastWriteTime,
+						  stringNormaliser.GetNormalisedString(title).Replace(' ', '-'),
 						  title,
 						  fileSummary.IsHighlight,
 						  fileContents,

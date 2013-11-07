@@ -7,7 +7,7 @@ namespace BlogBackEnd.Models
 	[Serializable]
 	public class PostStub
 	{
-		public PostStub(int id, DateTime posted, DateTime lastModified, string title, bool isHighlight)
+		public PostStub(int id, DateTime posted, DateTime lastModified, string slug, string title, bool isHighlight)
 		{
 			if (string.IsNullOrWhiteSpace(title))
 				throw new ArgumentException("Null/blank title content");
@@ -15,7 +15,8 @@ namespace BlogBackEnd.Models
 			Id = id;
 			Posted = posted;
 			LastModified = lastModified;
-			Title = title;
+			Slug = slug.Trim();
+			Title = title.Trim();
 			IsHighlight = isHighlight;
 		}
 
@@ -26,7 +27,12 @@ namespace BlogBackEnd.Models
 		public DateTime LastModified { get; private set; }
 
 		/// <summary>
-		/// This will never be null or empty
+		/// This will never be null or empty nor have any leading or trailing whitespace
+		/// </summary>
+		public string Slug { get; private set; }
+
+		/// <summary>
+		/// This will never be null or empty nor have any leading or trailing whitespace
 		/// </summary>
 		public string Title { get; private set; }
 

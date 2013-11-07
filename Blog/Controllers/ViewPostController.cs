@@ -38,11 +38,27 @@ namespace Blog.Controllers
 		public ActionResult ArchiveById(int? id)
 		{
 			if (id == null)
-				throw new HttpException(404, "Not found");
+				return new HttpNotFoundResult();
 
-			var post = _postRepository.Get(new[] { id.Value }.ToImmutableList()).FirstOrDefault();
+			var post = _postRepository.GetByIds(new[] { id.Value }.ToImmutableList()).FirstOrDefault();
 			if (post == null)
-				throw new HttpException(404, "Not found");
+				return new HttpNotFoundResult();
+
+			return RedirectToActionPermanent(
+				"ArchiveBySlug",
+				new { Slug = post.Slug }
+			);
+		}
+
+		[Stopwatch]
+		public ActionResult ArchiveBySlug(string slug)
+		{
+			if (string.IsNullOrWhiteSpace(slug))
+				return new HttpNotFoundResult();
+
+			var post = _postRepository.GetBySlug(slug);
+			if (post == null)
+				return new HttpNotFoundResult();
 
 			return View(
 				"Index",
@@ -56,6 +72,7 @@ namespace Blog.Controllers
 					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
+					new PostSlugRetriever(_postRepository),
 					_cache
 				)
 			);
@@ -65,13 +82,13 @@ namespace Blog.Controllers
 		public ActionResult ArchiveByTag(string tag)
 		{
 			if (string.IsNullOrWhiteSpace(tag))
-				throw new HttpException(404, "Invalid tag");
+				return new HttpNotFoundResult();
 
 			return View(
 				"Index",
 				new PostListModel(
 					tag.Trim(),
-					_postRepository.Get(tag),
+					_postRepository.GetByTag(tag),
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
@@ -79,6 +96,7 @@ namespace Blog.Controllers
 					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
+					new PostSlugRetriever(_postRepository),
 					_cache
 				)
 			);
@@ -89,12 +107,12 @@ namespace Blog.Controllers
 		{
 			var valid = ((month != null) && (month.Value >= 1) && (month.Value <= 12) && (year != null));
 			if (!valid)
-				throw new HttpException(404, "Not found");
+				return new HttpNotFoundResult();
 
 			var startDate = new DateTime(year.Value, month.Value, 1);
-			var posts = _postRepository.Get(startDate, startDate.AddMonths(1));
+			var posts = _postRepository.GetByDateRange(startDate, startDate.AddMonths(1));
 			if (posts.Count() == 0)
-				throw new HttpException(404, "Not found");
+				return new HttpNotFoundResult();
 
 			return View(
 				"Index",
@@ -108,6 +126,7 @@ namespace Blog.Controllers
 					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
+					new PostSlugRetriever(_postRepository),
 					_cache
 				)
 			);
@@ -118,8 +137,31 @@ namespace Blog.Controllers
 		{
 			var mostRecentPostDate = _postRepository.GetMaxPostDate();
 			if (mostRecentPostDate == null)
-				throw new HttpException(404, "Not found");
+				return new HttpNotFoundResult();
 			return ArchiveByMonth(mostRecentPostDate.Value.Month, mostRecentPostDate.Value.Year);
+		}
+
+		private class PostSlugRetriever : IRetrievePostSlugs
+		{
+			private readonly IPostRepository _postRepository;
+			public PostSlugRetriever(IPostRepository postRepository)
+			{
+				if (postRepository == null)
+					throw new ArgumentNullException("postRepository");
+
+				_postRepository = postRepository;
+			}
+
+			/// <summary>
+			/// This will never return null or blank, it will raise an exception if the id is invalid or if otherwise unable to satisfy the request
+			/// </summary>
+			public string GetSlug(int postId)
+			{
+				var post = _postRepository.GetByIds(new[] { postId }.ToImmutableList()).FirstOrDefault(p => p.Id == postId);
+				if (post == null)
+					throw new ArgumentException("Invalid postId: " + postId);
+				return post.Slug;
+			}
 		}
 	}
 }

@@ -29,7 +29,7 @@
 @foreach (var post in Model.Posts)
 {
 				<div class="Content">
-					@Html.RenderPost(post, Model.PostContentCache)
+					@Html.RenderPost(post, Model.PostSlugRetriever, Model.PostContentCache)
 					@if (Model.IsSinglePostView)
 					{
 						<div id="disqus_thread"></div>
@@ -54,7 +54,7 @@
 					else
 					{
 						<p class="Comments">
-							<a href="/Read/@post.Id#disqus_thread" data-disqus-identifier="@post.Id">Comments</a>
+							<a href="/@post.Slug#disqus_thread" data-disqus-identifier="@post.Id">Comments</a>
 						</p>
 					}
 				</div>

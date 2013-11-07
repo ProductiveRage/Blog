@@ -24,7 +24,7 @@ namespace Blog.Models
 		/// <summary>
 		/// This is case insensitive
 		/// </summary>
-		public NonNullImmutableList<Post> Get(string tag)
+		public NonNullImmutableList<Post> GetByTag(string tag)
 		{
 			tag = (tag ?? "").Trim();
 			if (tag == "")
@@ -38,7 +38,7 @@ namespace Blog.Models
 		/// <summary>
 		/// min is inclusive, max is not
 		/// </summary>
-		public NonNullImmutableList<Post> Get(DateTime min, DateTime max)
+		public NonNullImmutableList<Post> GetByDateRange(DateTime min, DateTime max)
 		{
 			if (min > max)
 				throw new ArgumentOutOfRangeException("min", "must be <= max");
@@ -48,7 +48,7 @@ namespace Blog.Models
 			);
 		}
 
-		public NonNullImmutableList<Post> Get(ImmutableList<int> ids)
+		public NonNullImmutableList<Post> GetByIds(ImmutableList<int> ids)
 		{
 			if (ids == null)
 				throw new ArgumentNullException("ids");
@@ -56,6 +56,18 @@ namespace Blog.Models
 			return new NonNullImmutableList<Post>(
 				_postRetriever.Get().Where(p => ids.Contains(p.Id)).OrderByDescending(p => p.Posted)
 			);
+		}
+
+		/// <summary>
+		/// This is case sensitive, it will return null if the slug is invalid
+		/// </summary>
+		public Post GetBySlug(string slug)
+		{
+			slug = (slug ?? "").Trim();
+			if (slug == "")
+				throw new ArgumentException("Null/empty slug specified");
+
+			return _postRetriever.Get().FirstOrDefault(p => p.Slug == slug);
 		}
 
 		/// <summary>

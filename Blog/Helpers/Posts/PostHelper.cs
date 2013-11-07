@@ -18,12 +18,14 @@ namespace Blog.Helpers.Posts
 {
 	public static class PostHelper
 	{
-		public static IHtmlString RenderPost(this HtmlHelper helper, Post post, ICache cache)
+		public static IHtmlString RenderPost(this HtmlHelper helper, Post post, IRetrievePostSlugs postSlugRetriever, ICache cache)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
 			if (post == null)
 				throw new ArgumentNullException("post");
+			if (postSlugRetriever == null)
+				throw new ArgumentNullException("postSlugRetriever");
 			if (cache == null)
 				throw new ArgumentNullException("cache");
 
@@ -37,12 +39,12 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			var content = GetRenderableContent(helper, post, true, true, true);
+			var content = GetRenderableContent(helper, post, true, true, true, postSlugRetriever);
 			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
 
-		public static IHtmlString RenderPostForRSS(this HtmlHelper helper, Post post, Uri requestHostUrl, ICache cache)
+		public static IHtmlString RenderPostForRSS(this HtmlHelper helper, Post post, Uri requestHostUrl, IRetrievePostSlugs postSlugRetriever, ICache cache)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
@@ -50,6 +52,8 @@ namespace Blog.Helpers.Posts
 				throw new ArgumentNullException("post");
 			if (requestHostUrl == null)
 				throw new ArgumentNullException("requestHostUrl");
+			if (postSlugRetriever == null)
+				throw new ArgumentNullException("postSlugRetriever");
 			if (cache == null)
 				throw new ArgumentNullException("cache");
 
@@ -63,7 +67,7 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			var content = GetRenderableContent(helper, post, false, false, false);
+			var content = GetRenderableContent(helper, post, false, false, false, postSlugRetriever);
 			var doc = new HtmlDocument();
 			doc.LoadHtml(content);
 			MakeUrlsAbsolute(doc, "a", "href", requestHostUrl.Scheme, requestHostUrl.Host, requestHostUrl.Port);
@@ -78,16 +82,19 @@ namespace Blog.Helpers.Posts
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
 
-		private static string GetRenderableContent(HtmlHelper helper, Post post, bool includeTitle, bool includePostedDate, bool includeTags)
+		private static string GetRenderableContent(HtmlHelper helper, Post post, bool includeTitle, bool includePostedDate, bool includeTags, IRetrievePostSlugs postSlugRetriever)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
 			if (post == null)
 				throw new ArgumentNullException("post");
+			if (postSlugRetriever == null)
+				throw new ArgumentNullException("postSlugRetriever");
 
 			var markdownContent = HandlePostLinks(
 				helper,
-				includeTitle ? ReplaceFirstLineHashHeaderWithPostLink(post.MarkdownContent, post.Id) : RemoveTitle(post.MarkdownContent)
+				includeTitle ? ReplaceFirstLineHashHeaderWithPostLink(post.MarkdownContent, post.Id) : RemoveTitle(post.MarkdownContent),
+				postSlugRetriever
 			);
 
 			var content = new StringBuilder();
@@ -120,12 +127,14 @@ namespace Blog.Helpers.Posts
 		/// <summary>
 		/// Update any markdown links where the target is of the form "Post{0}" to replace with the real url
 		/// </summary>
-		private static string HandlePostLinks(HtmlHelper helper, string content)
+		private static string HandlePostLinks(HtmlHelper helper, string content, IRetrievePostSlugs postSlugRetriever)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
 			if (string.IsNullOrEmpty(content))
 				return content;
+			if (postSlugRetriever == null)
+				throw new ArgumentNullException("postSlugRetriever");
 
 			var url = new UrlHelper(helper.ViewContext.RequestContext);
 			return Regex.Replace(
@@ -133,9 +142,10 @@ namespace Blog.Helpers.Posts
 				@"\]\(Post(\d+)\)",
 				delegate(Match match)
 				{
+					var id = int.Parse(match.Groups[1].Value);
 					return String.Format(
 						"]({0})",
-						url.Action("ArchiveById", "ViewPost", new { Id = int.Parse(match.Groups[1].Value) })
+						url.Action("ArchiveBySlug", "ViewPost", new { Slug = postSlugRetriever.GetSlug(id) })
 					);
 				},
 				RegexOptions.Multiline

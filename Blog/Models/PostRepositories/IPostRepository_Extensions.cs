@@ -19,7 +19,7 @@ namespace Blog.Models
 				var startDate = new DateTime(max.Value.Year, max.Value.Month, 1);
 				while (true)
 				{
-					var postCount = repo.Get(startDate, startDate.AddMonths(1)).Count();
+					var postCount = repo.GetByDateRange(startDate, startDate.AddMonths(1)).Count();
 					if (postCount > 0)
 					{
 						months = months.Add(new ArchiveMonthLink(
