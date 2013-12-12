@@ -28,6 +28,18 @@ body
 			font-size: 12px;
 			line-height: 18px;
 
+			// Even if "pre" tags are given a 100% width to limit them to their container, they don't seem to go for it - so we'll just
+			// force them down to particular widths for given breakpoints and forego a fully-flexible solution
+			overflow-x: auto;
+			@media screen and (min-width: 65em) and (max-width: 70em) { width: 60em; }
+			@media screen and (min-width: 60em) and (max-width: 65em) { width: 55em; }
+			@media screen and (min-width: 55em) and (max-width: 60em) { width: 50em; }
+			@media screen and (min-width: 50em) and (max-width: 55em) { width: 45em; }
+			@media screen and (min-width: 45em) and (max-width: 50em) { width: 40em; }
+			@media screen and (min-width: 40em) and (max-width: 45em) { width: 35em; }
+			@media screen and (min-width: 30em) and (max-width: 40em) { width: 30em; }
+			@media screen and (min-width: 20em) and (max-width: 30em) { width: 20em; }
+
 			> code
 			{
 				display: block;
@@ -156,11 +168,20 @@ body
 			.RounderBorders(4px);
 			border: 2px solid silver;
 
-			// Remove the floating on wide images when in reduced layout mode to try to ensure that text alongside wouldn't get smushed up
+			&.NoBorder { border: none; }
+
+			// Remove the floating on wide images when in reduced layout mode to try to ensure that text alongside wouldn't get smushed up..
 			&.WideImage
 			{
-				@media screen and (max-width: 70em) { float: none; }
+				@media screen and (max-width: 70em)
+				{
+					float: none;
+					width: 100%;
+				}
 			}
+
+			// .. or for images with the class "AlwaysFullWidth"
+			&.AlwaysFullWidth { float: none; }
 		}
 
 		p.Comments
