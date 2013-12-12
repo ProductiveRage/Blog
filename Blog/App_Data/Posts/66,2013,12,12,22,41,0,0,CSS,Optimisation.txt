@@ -1,0 +1,194 @@
+﻿## (Pseudo) Source Mapping with LESS
+
+I have a component that is set up to load LESS stylesheets with what is essentially
+
+    var styleSheetLoader = new CachingLoader(
+      new MinifyingLoader(
+        new DotLessCompilingLoader(
+          new ImportFlatteningLoader(
+            new FromDiskLoader()
+          )
+        )
+      )
+    );
+
+This works great in terms of efficient delivery of content; the LESS styles are compiled into vanilla CSS, the **ImportFlatteningLoader** inserts referenced content in place of @import statements to minimise http requests so long as the referenced files are all in the same folder. This same-folder restriction allows the **CachingLoader** to compare a cached-entry's-last-modified date against the most-recently-modified-date-of-any-file-in-the-folder to see if the cached data should be expired, layering on a time-based-expiration cache of a few seconds so that during periods of high traffic disk access is constrained.
+
+*Side note: Since dotLess can deal with imports it might seem a bit strange that I have **ImportFlatteningLoader** and **FromDiskLoader** references in there but that's largely because the component is based on what I wrote about last year; [On-the-fly CSS Minification](Post20). I just shoved the [dotLess](http://www.dotlesscss.org/) processor into the chain.*
+
+The problem is that when I'm editing styles and relying on web developer tools, everything appears to be in line 1 of "style.less"
+
+<img alt="Minified Content Always Shows Styles on Line 1 of the Stylesheet" src="/Content/Images/Posts/StylesWithoutMarkerIds.png" class="NoBorder AlwaysFullWidth" />
+
+The way that I've tried to address this is with a "**SourceMappingMarkerInjectingLoader**" and an "**InjectedIdTidyingLoader**". The former will push ids into selectors that indicate where the styles originated in the source - eg. "Content.less\_123" (meaning line 123 in the file "Content.less") whilst the latter will tidy up any unnecessary styles that are the result of the LESS compilation.
+
+If, for example, one of the imported stylesheets has the filename "test.less" and the content
+
+    a.test
+    {
+      color: #00f;
+      &:hover { color: #00a; }
+    }
+
+then the **SourceMappingMarkerInjectingLoader** will rewrite this as
+
+    #test.less_1, a.test
+    {
+      color: #00f;
+      #test.less_4, &:hover { color: #00a; }
+    }
+
+but when the LESS processing has been applied, this will become
+
+    #test.less_1,a.test{color:#00f}
+    #test.less_1 #test.less_4,#test.less_1:hover,a.test #test.less_4,a.test:hover{color:#00a}
+
+On that second line, the fourth selector ("a.test:hover") is the only one that has any direct use; it is what the original source would have been compiled to. The first three selectors ("#test.less\_1 #test.less\_4", "#test.less\_1:hover" and "a.test #test.less_4") are *not* of direct use but the selector element "#test.less\_4" *is* useful since it indicates where in the source that the original selector originated. So most of the content in those first three selectors can be discarded and replaced only with "#test.less\_4".
+
+This is what the **InjectedIdTidyingLoader** is for. If the component is initialised with
+
+    var styleSheetLoader = new CachingLoader(
+      new MinifyingLoader(
+        new InjectedIdTidyingLoader(
+          new DotLessCompilingLoader(
+            new ImportFlatteningLoader(
+              new SourceMappingMarkerInjectingLoader(
+                new FromDiskLoader()
+              )
+            )
+          )
+        )
+      )
+    );
+
+then the web dev tools show something more like
+
+<img alt="Minified Content with Source Mapping Marker Ids" src="/Content/Images/Posts/StylesWithMarkerIds.png" class="NoBorder AlwaysFullWidth" />
+
+Much more useful! Each style block still shows "**Styles.less (line 1)**" in big bold text, but each selector set includes ids to indicate the source filename and line number. While this content will bloat the uncompressed file size of the generated CSS, the filenames will likely be duplicated over and over, which lends itself very well to gzip'ing. (You can inspect the styles on this blog for an example of this process in action).
+
+### Performance problems
+
+There is a problem, though. When the LESS source files start to get large and - more significantly - increasingly deeply-nested, the content that the **DotLessCompilingLoader** generates from the nested "Source Mapping Marker Ids" balloons. In one case, I had 116kb (which, granted, is *a lot* of rules) explode past 6mb. That's a huge amount of CSS that needs parsing and unnecessary selectors trimming from.
+
+Incidentally, the size of the delivered CSS (with "tidied" markers ids) was 119kb, an overhead of 17%. When gzip'd, the content without marker ids was 15.6kb while the content *with* marker ids was 18.9kb, an overhead of 20%. 
+
+### Is this necessary at all?
+
+As an aside, I expect that one day we will have well-integrated cross-browser [Source Mapping](https://developers.google.com/chrome-developer-tools/docs/css-preprocessors) support that will make these injected markers unnecessary but it still seems to be early days on this front. It seems like the compile-to-JavaScript languages are making a lot of use of the Source Mapping support that some browsers have (CoffeeScript, for example) but for LESS it seems a lot patchier (for the .net component, anyway; less.js has [this](https://twitter.com/addyosmani/status/380820562794131456/photo/1)). SASS seems better still (see [Debugging SASS with Source Maps](http://snugug.com/musings/debugging-sass-source-maps)).
+
+But these solutions still need browser support. The recent builds of Chrome and Firefox will be fine. But with IE, even with the just-released IE11, you're going to be out of luck.
+
+So while these "Source Mapping Marker Ids" add overhead to the delivered content (and processing overhead, but I'm about to talk about improving that significantly) they do at least work across all browsers.
+
+### Addressing the performance problems
+
+My last post was about my first stabs at optimising the id-tidying process (see [Optimising the CSS Processor - ANTS and algorithms](Post65)). I made some good strides but I wasn't happy with all of the approaches that I took and it still didn't perform as well as I would haved liked with source files that contained many deeply-nested selectors.
+
+If the problem I was trying to solve was that the LESS compiler was emitting too much content, maybe what I really needed to do was work *with it* rather than tidying up after it. The [code is on GitHub](https://github.com/dotless/dotless) so I figured I'd dive in and see what I could find!
+
+### dotLess Plugins
+
+After downloading the code and building it locally, I found the "Plugins" folder under dotLess / src / dotLess.Core. Seeing this was an indication that the author had developed the project with a view to making it extensible without having to change its own source.
+
+Searching for "dotLess plugins" will first lead you to people writing "function plugins" (a way to declare new functions that the parser will process as if they had been built into the core system) but digging deeper there are mentions of "visitor plugins". I found this article very useful: [The world of LESS](http://www.scottlogic.com/blog/2012/11/16/the-world-of-less.html). The phrase "visitor plugins" refers to the [Visitor Design Pattern](http://en.wikipedia.org/wiki/Visitor_pattern). In terms of dotLess, it allows you to intercept every instantiation of a LESS structure and either allow it through or replace it with something of your own. You can do this either before or after "evaluation" (where LESS mixins and values are replaced with CSS styles and nested selectors are flattened).
+
+What I wanted to do was write a visitor plugin that would take post-evaluation content and rewrite **Ruleset** instances whose selector sets needed tidying.
+
+A post-evaluation **Ruleset** is essentially a set of selectors (such as "#test.less\_1 #test.less\_4, #test.less\_1:hover, a.test #test.less\_4, a.test:hover") and a set of rules (such as "color: #00a;").
+
+So I want to grab these **Ruleset** instances and replace them with instances whose selector sets have been tidied where necessary. So "#test.less\_1 #test.less\_4, #test.less\_1:hover, a.test #test.less\_4, a.test:hover" will become "#test.less\_4, a.test:hover".
+
+Digging further through the code, it turns out that there are some types that inherit from **Ruleset** that shouldn't be messed with, such as the top-level "**Root**" type. So the plugin will need to target specific **Ruleset** types, not just any instances that inherits it.
+
+So what I come up with is
+
+    private class SelectorRewriterVisitorPlugin : VisitorPlugin
+    {
+      private readonly InsertedMarkerRetriever _markerIdRetriever;
+      public SelectorRewriterVisitorPlugin(InsertedMarkerRetriever markerIdRetriever)
+      {
+        if (markerIdRetriever == null)
+          throw new ArgumentNullException("markerIdRetriever");
+
+        _markerIdRetriever = markerIdRetriever;
+      }
+
+      public override VisitorPluginType AppliesTo
+      {
+        get { return VisitorPluginType.AfterEvaluation; }
+      }
+
+      public override Node Execute(Node node, out bool visitDeeper)
+      {
+        visitDeeper = true;
+        if (node.GetType() == typeof(Ruleset))
+        {
+          var ruleset = (Ruleset)node;
+          if (ruleset != null)
+          {
+            return new MarkerIdTidyingRuleset(ruleset.Selectors, ruleset.Rules, _markerIdRetriever)
+            {
+              Location = ruleset.Location
+            };
+          }
+        }
+        return node;
+      }
+    }
+
+    /// <summary>
+    /// This should never return null, nor a set containing any null or blank entries - all markers
+    /// should be of the format "#id.class"
+    /// </summary>
+    public delegate IEnumerable<string> InsertedMarkerRetriever();
+
+The **MarkerIdTidyingRuleset** is a class that inherits from **Ruleset** and rewrites its own selectors to remove the ones it doesn't need. The code isn't particularly complex or innovative, but it's too long to include here. It in the CSSMinifier project, though, so if you want to see it then you can find it on Bitbucket [here](https://bitbucket.org/DanRoberts/cssminifier/src/727611baa56acb70c659094245a3a20dc3efeb65/CSSMinifier/FileLoaders/DotLessCssCssLoader.cs) (it's a nested class of the **DotLessCssCssLoader** so it's in that linked file somewhere!).
+
+The **VisitorPlugin** class, that the **SelectorRewriterVisitorPlugin** inherits, is in the dotLess source and makes writing visitor plugins easy.
+
+The only part that isn't *as* easy is registering the plugin. There isn't a collection that you can add an **IPlugin** implementation directly to, but **LessEngine** instances have a "Plugins" set whose elements are of type **IPluginConfigurator** - these are classes that know how to instantiate particular plugins.
+
+So I had to write:
+
+    private class SelectorRewriterVisitorPluginConfigurator : IPluginConfigurator
+    {
+      private readonly InsertedMarkerRetriever _markerIdRetriever;
+      public SelectorRewriterVisitorPluginConfigurator(InsertedMarkerRetriever markerIdRetriever)
+      {
+        if (markerIdRetriever == null)
+          throw new ArgumentNullException("markerIdRetriever");
+
+        _markerIdRetriever = markerIdRetriever;
+      }
+
+      public IPlugin CreatePlugin() { return new SelectorRewriterVisitorPlugin(_markerIdRetriever); }
+      public IEnumerable<IPluginParameter> GetParameters() { return new IPluginParameter[0]; }
+      public void SetParameterValues(IEnumerable<IPluginParameter> parameters) { }
+      public string Name { get { return "SelectorRewriterVisitorPluginConfigurator"; } }
+      public string Description { get { return Name; } }
+      public Type Configurates { get { return typeof(SelectorRewriterVisitorPlugin); } }
+    }
+
+and then instantiate a **LessEngine** with
+
+    var engine = new LessEngine();
+    engine.Plugins = new[] { 
+      new SelectorRewriterVisitorPluginConfigurator(_markerIdRetriever)
+    };
+
+### WINNING!
+
+Since I started writing this article, a big project at work has used this component and the final size of the combined output is over 200kb. I said earlier that 116kb of minified content is a lot of styles, well this clearly tops that! In fairness, it's a large and complex site and it's chock full of responsive goodness to make it render beautifully on mobiles tiny and large, tablets and desktop.
+
+Before the id-tidying was handled with a dotLess visitor plugin (where there was an entirely separate processing step to tidy up the unnecessary marker-id selectors) the build process was taking almost 20 seconds. Not acceptable. *With* the visitor plugin approach, this is now just over 3 seconds. Much more palatable. And, like I found in the last post, it's another example of how changing the algorithm can sometimes have dramatic improvements over trying to micro-optimise the current approach. Or, perhaps, a reminder that the quickest way to do something might be not to do it!
+
+### Show me the code..
+
+If you want to get at the code, it's all on Bitbucket: The [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier). There's a "CSSMinifierDemo" (ASP.net MVC) project in there that has a **[CSSController](https://bitbucket.org/DanRoberts/cssminifier/src/46930a68eec0e047af44a54cb900bff57b2ee7af/CSSMinifierDemo/Controllers/CSSController.cs)** class that import-flattens, injects pseudo-source-mapping marker ids, compiles LESS down to vanilla CSS, minifies, caches to memory and disk (invalidating when source files change), deals with 304s and with supporting gzip'ing responses.
+
+The primary project that utilises this at work doesn't use ASP.net but I do use MVC for this blog and it also seemed like a natural way to construct a full demonstration.
+
+### Mild disclaimer
+
+I've become a bit of a dotLess advocate over the last year or so and dipping into the code here coincided with a colleague at work complaining about dotLess not working with Bootstrap 3. Finding the code approachable (and not being happy with this bad-mouthing I was hearing of my beloved dotLess!), I've fixed most of the problems and had pull requests merged into the [master repository](https://github.com/dotless/dotless/commits/master). And now a NuGet package is available (see [dotless v1.4 released](http://www.tigraine.at/2013/12/10/dotless-v14-released)). This has been my first foray into contributing to an open source project and, especially considering some of the stories I've heard about people being ignored or rejected, it's been an absolute joy. I might have to look for more projects that I care about that I can help!
