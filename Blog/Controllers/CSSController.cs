@@ -82,6 +82,7 @@ namespace Blog.Controllers
 
 			var cssLoader = (new EnhancedNonCachedLessCssLoaderFactory(
 				relativePathMapper,
+				SourceMappingMarkerInjectionOptions.Inject,
 				ErrorBehaviourOptions.LogAndRaiseException,
 				new NullLogger()
 			)).Get();
