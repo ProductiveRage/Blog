@@ -183,12 +183,15 @@
     <Content Include="App_Data\Posts\63,2013,8,30,0,3,0,0,PHP,WCF.txt" />
     <Content Include="App_Data\Posts\64,2013,10,29,22,34,0,0,COM.txt" />
     <Content Include="App_Data\Posts\65,2013,11,11,20,37,0,0,CSS,Optimisation.txt" />
+    <Content Include="App_Data\Posts\66,2013,12,12,22,41,0,0,CSS,Optimisation.txt" />
     <Content Include="App_Data\Posts\7,2011,7,13,20,11,0,0,AutoMapper,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM.txt" />
     <Content Include="Content\Content.less" />
     <Content Include="Content\Images\Posts\FluidLayouts.png" />
     <Content Include="Content\Images\Posts\FluidLayoutsGallery.png" />
     <Content Include="Content\Images\Posts\ProfilingTheProcessor.png" />
+    <Content Include="Content\Images\Posts\StylesWithMarkerIds.png" />
+    <Content Include="Content\Images\Posts\StylesWithoutMarkerIds.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError1.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError2.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError3.png" />
