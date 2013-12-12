@@ -231,7 +231,7 @@ I'm going to jump straight to the first code I've got in use. There's a controll
 
 ### The minification
 
-I've used a very straight-forward minification approach that I borrowed from the fella -
+I've used a very straight-forward minification approach that I borrowed from this fella -
 
 [Efficient stylesheet minification in C#](http://madskristensen.net/post/Efficient-stylesheet-minification-in-C.aspx)
 
