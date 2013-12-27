@@ -61,13 +61,21 @@ namespace Blog.Models
 		/// <summary>
 		/// This is case sensitive, it will return null if the slug is invalid
 		/// </summary>
-		public Post GetBySlug(string slug)
+		public PostMatchDetails GetBySlug(string slug)
 		{
 			slug = (slug ?? "").Trim();
 			if (slug == "")
 				throw new ArgumentException("Null/empty slug specified");
 
-			return _postRetriever.Get().FirstOrDefault(p => p.Slug == slug);
+			var allPosts = _postRetriever.Get();
+			var preciseMatch = allPosts.FirstOrDefault(p => p.Slug == slug);
+			if (preciseMatch != null)
+				return new PostMatchDetails(preciseMatch, PostMatchDetails.PostMatchTypeOptions.PreciseMatch);
+
+			var alias = allPosts.FirstOrDefault(p => p.RedirectFromSlugs.Contains(slug));
+			if (alias != null)
+				return new PostMatchDetails(alias, PostMatchDetails.PostMatchTypeOptions.Alias);
+			return null;
 		}
 
 		/// <summary>

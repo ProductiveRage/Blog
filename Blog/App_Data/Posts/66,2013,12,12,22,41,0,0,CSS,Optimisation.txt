@@ -1,4 +1,4 @@
-﻿## (Pseudo) Source Mapping with LESS
+﻿## Cross Browser (Pseudo) Source Mapping with LESS
 
 I have a component that is set up to load LESS stylesheets with what is essentially
 

@@ -1,0 +1,3 @@
+# These are redirect slug entries, entered as From / To pairs separated by whitespace
+# Blank lines and those starting with a hash are ignored
+pseudo-source-mapping-with-less cross-browser-pseudo-source-mapping-with-less

@@ -56,15 +56,23 @@ namespace Blog.Controllers
 			if (string.IsNullOrWhiteSpace(slug))
 				return new HttpNotFoundResult();
 
-			var post = _postRepository.GetBySlug(slug);
-			if (post == null)
+			var postMatch = _postRepository.GetBySlug(slug);
+			if (postMatch == null)
 				return new HttpNotFoundResult();
+
+			if (postMatch.PostMatchType == PostMatchDetails.PostMatchTypeOptions.Alias)
+			{
+				return RedirectToActionPermanent(
+					"ArchiveBySlug",
+					new { Slug = postMatch.Post.Slug }
+				);
+			}
 
 			return View(
 				"Index",
 				new PostListModel(
-					post.Title,
-					new NonNullImmutableList<Post>(new[] { post }),
+					postMatch.Post.Title,
+					new NonNullImmutableList<Post>(new[] { postMatch.Post }),
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
