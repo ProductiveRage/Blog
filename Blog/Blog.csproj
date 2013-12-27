@@ -103,6 +103,7 @@
     <Compile Include="Helpers\Timing\StopwatchAttribute.cs" />
     <Compile Include="Misc\Constants.cs" />
     <Compile Include="Models\ArchiveMonthLink.cs" />
+    <Compile Include="Models\PostRepositories\PostMatchDetails.cs" />
     <Compile Include="Models\RSSFeedModel.cs" />
     <Compile Include="Models\ISideBarContentModel.cs" />
     <Compile Include="Models\ICommonSiteConfigModel.cs" />

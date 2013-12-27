@@ -23,12 +23,34 @@ namespace Blog.Models
 		/// </summary>
 		public NonNullImmutableList<Post> Get()
 		{
+			// The redirects set contains tuples From, To slugs (blank lines and those starting with a "#" are ignored, as are any that don't have any whitespace)
+			const string redirectsFilename = "Redirects.txt";
+			var redirectsFile = _folder.GetFiles(redirectsFilename).FirstOrDefault();
+			IEnumerable<Tuple<string, string>> redirects;
+			if (redirectsFile == null)
+				redirects = new List<Tuple<string, string>>();
+			else
+			{
+				redirects = readFileContents(redirectsFile)
+					.Replace("\r\n", "\n")
+					.Replace("\r", "\n")
+					.Split('\n')
+					.Select(entry => entry.Trim())
+					.Where(entry => (entry != "") && !entry.StartsWith("#") && entry.Any(c => char.IsWhiteSpace(c)))
+					.Select(entry => new string(entry.Select(c => char.IsWhiteSpace(c) ? ' ' : c).ToArray()))
+					.Select(entry => entry.Split(new[] { ' ' }, 2))
+					.Select(values => Tuple.Create(values[0], values[1]));
+			}
+
 			// We can use this functionality from the FullTextIndexer to generate the Post slug (it will replace accented characters, normalise whitespace,
 			// remove punctuation and lower case the content - all we need to do then is replace spaces with hypens)
 			var stringNormaliser = new DefaultStringNormaliser();
 			var posts = new List<Post>();
-			foreach (var file in _folder.EnumerateFiles("*.txt", SearchOption.AllDirectories))
+			foreach (var file in _folder.EnumerateFiles("*.txt", SearchOption.TopDirectoryOnly))
 			{
+				if (file.Name.Equals(redirectsFilename, StringComparison.InvariantCultureIgnoreCase))
+					continue;
+
 				var fileSummary = tryToGetFileSummaryEntry(file.Name);
 				if (fileSummary != null)
 				{
@@ -36,11 +58,16 @@ namespace Blog.Models
 					var title = tryToGetTitle(fileContents);
 					if (title != null)
 					{
+						var slug = stringNormaliser.GetNormalisedString(title).Replace(' ', '-');
+						var redirectsForPost = new NonNullOrEmptyStringList(
+							redirects.Where(r => r.Item2 == slug).Select(r => r.Item1)
+						);
 						posts.Add(new Post(
 						  fileSummary.Id,
 						  fileSummary.PostDate,
 						  file.LastWriteTime,
-						  stringNormaliser.GetNormalisedString(title).Replace(' ', '-'),
+						  slug,
+						  redirectsForPost,
 						  title,
 						  fileSummary.IsHighlight,
 						  fileContents,

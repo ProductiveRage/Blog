@@ -23,7 +23,7 @@ namespace Blog.Models
 		/// <summary>
 		/// This is case sensitive, it will return null if the slug is invalid
 		/// </summary>
-		Post GetBySlug(string slug);
+		PostMatchDetails GetBySlug(string slug);
 
 		/// <summary>
 		/// min is inclusive, max is not

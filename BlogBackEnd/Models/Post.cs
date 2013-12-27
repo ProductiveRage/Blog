@@ -7,9 +7,20 @@ namespace BlogBackEnd.Models
 	[Serializable]
 	public class Post : PostStub
 	{
-		public Post(int id, DateTime posted, DateTime lastModified, string slug, string title, bool isHighlight, string markdownContent, NonNullImmutableList<string> tags)
+		public Post(
+			int id,
+			DateTime posted,
+			DateTime lastModified,
+			string slug,
+			NonNullOrEmptyStringList redirectFromSlugs,
+			string title,
+			bool isHighlight,
+			string markdownContent,
+			NonNullImmutableList<string> tags)
 			: base(id, posted, lastModified, slug, title, isHighlight)
 		{
+			if (redirectFromSlugs == null)
+				throw new ArgumentNullException("redirectFromSlugs");
 			if (string.IsNullOrWhiteSpace(markdownContent))
 				throw new ArgumentException("Null/blank markdownContent content");
 			if (tags == null)
@@ -17,9 +28,15 @@ namespace BlogBackEnd.Models
 			if (tags.Any(t => t.Trim() == ""))
 				throw new ArgumentException("Blank tag specified");
 
+			RedirectFromSlugs = redirectFromSlugs;
 			MarkdownContent = markdownContent;
 			Tags = new NonNullOrEmptyStringList(tags.Distinct());
 		}
+
+		/// <summary>
+		/// This will never be null (but may be empty if there are no redirects for this Post)
+		/// </summary>
+		public NonNullOrEmptyStringList RedirectFromSlugs { get; private set; }
 
 		/// <summary>
 		/// This will never return null or empty
