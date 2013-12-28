@@ -104,6 +104,34 @@ And that's it! All you need is
 
 and you've got a genuine "Nothing" reference that you can pass to VBScript and have it recognise! If you use the VBScript TypeName function then you get "Nothing" reported. That's all there is to to it, it *is* possible!
 
+### Follow-up: ComVisible return types  (28th Dec 2013)
+
+I've done some more experimenting with this since I found some legacy code that I'd written a few years ago that infuriatingly seemed to manage to return Nothing from a method *without* explicitly specifying it with the **DispatchWrapper** as above.
+
+It turns out that if the return type of a method is a class that has the [ComVisible(true)] attribute then returning null from .net will result in VBScript interpreting the response as Nothing. However, if the return type is not a type with that attribute then it will *not* be translated into null.
+
+    public ComVisibleType Get(int id)
+    {
+      return null; // VBScript will interpet this as Nothing
+    }
+
+    public object Get(int id)
+    {
+      return null; // VBScript will interpet this as Empty
+    }
+
+    [ComVisible(true)]
+    public class ComVisibleType
+    {
+      public string Name { get; set; }
+    }
+
+
+
+
+
+
+
 
 
 
