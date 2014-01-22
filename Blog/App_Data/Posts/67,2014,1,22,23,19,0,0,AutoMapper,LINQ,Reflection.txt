@@ -1,0 +1,326 @@
+﻿## Reflection and C# optional constructor arguments 
+### Bonus provocative headline: Like AutoMapper, but 100x faster!
+
+I overheard someone at work bemoaning the fact that StructureMap doesn't seem to support optional constructor arguments (which, having a quick scout around the internet, does indeed seem to be the case, though there are solutions out there such as [Teaching StructureMap About C# 4.0 Optional Parameters and Default Values](http://www.sep.com/sep-blog/2010/06/04/teaching-structuremap-about-c-4-0-optional-parameters-and-default-values)).
+
+This put me in mind of the "[Compilable Type Converter](http://bitbucket.org/DanRoberts/compilabletypeconverter)" project I wrote a couple of years ago. It started off life as a way to try to easily extend AutoMapper to apply all of its cleverness to constructor arguments as well as properties. So instead of using the properties on one object to populate the properties of another object, it would call a constructor on the destination class and pass in values taken from properties on the source object. (AutoMapper allows constructors to be used for creating new instances, using the "ConvertUsing" method, but it doesn't do its magic with name mappings and type conversions).
+
+It then grew to generate conversion LINQ Expressions, which were compiled for performance. And from there it became a standalone component that could perform mappings without AutoMapper at all! It could still be used with AutoMapper since the converters it generated could be used in "ConvertUsing" calls but the property-to-constructor-argument mappings would be created automatically instead of manually. And if non-compilable type converters (not compiled to LINQ Expression and so functional but slower) were being generated with my project, there were classes to utilise AutoMapper to help perform the type conversions.
+
+The last thing I had done to it was add in support so that it could generate compiled converters that would populate the desination object using property setters (like AutoMapper does) instead of by-constructor.
+
+I wrote a couple of posts about this a long time ago, but they were early posts and they weren't written all that well, so I'm embarassed to link to them here. :)
+
+Anyway.. the point is, I was fairly confident that the Compilable Type Converter also did not support optional constructor arguments. And I didn't actually know how optional constructor arguments would look in the reflected information (the converter uses reflection to analyses the source and destination types and decide how to perform the conversion, but then generates a LINQ Expression to do the work which should have performance comparable to custom hand-written conversion code) so it seemed like a good opportunity to brush off an old project and have a bit of fun with it!
+
+### .net's representation of optional constructor arguments
+
+This is the easy bit. I hadn't known how easy until I looked into it, but very easy.
+
+Say there is a class
+
+    public class TypeWithOptionalConstructorArguments
+    {
+      public TypeWithOptionalConstructorArguments(string name, int number = 1)
+      {
+        // Do initialisation work..
+      }
+
+      // Have the rest of the class here..
+    }
+
+then to determine that the *number* argument is optional, we interrogate information about the constructor -
+
+    var constructorParameters = typeof(TypeWithOptionalConstructorArguments)
+      .GetConstructor(new[] { typeof(string), typeof(int) })
+      .GetParameters();
+
+    var numberParameter = constructorParameters[1];
+    var numberParameterType = numberParameter.ParameterType;
+    var isNumberParameterOptional = numberParameter.IsOptional;
+    var numberParameterDefaultValue = numberParameter.DefaultValue;
+
+Here we find that *numberParameterType* is int, *isNumberParameterOptional* is true and *numberParameterDefaultValue* is 1. If we considered the first parameter then IsOptional would be false.
+
+### Incorporating this into the Compilable Type Converter
+
+Before I give a quick run-down of how I made my code "optional-constructor-argument aware", I'll go quickly through the core concepts it uses when trying to generate a conversion.
+
+There are Property Getters which will take a value from a property on the source type in order to satisfy a value required to generate the destination type (this value may be a constructor argument or a property, depending upon whether a by-constructor or by-property-setter conversion is desired). Property Getters come in several varieties; there is one that will map a source value if the source value's type may be assigned directly to the destination type (ie. the source value matches the destination value or inherits from it / implements it). There is one that will map enum values - from one enum to another, according to a naming convention (this convention is determined by a Name Matcher, see below). There is another one that will perform one specific type translation, so if a converter is generated for mapping between **SNested** and **DNested** then a new Property Getter may be created that will help convert type **SParent** to **DParent** if **SParent** has a property with type **SNested** that needs to be mapped to a property on **DParent** with type **DNested**. There's another that's very similar but for enumerable types, so given an **SNested** -> **DNested** converter it can help map **SParent** to **DParent** if **SParent** has a property of type **IEnumerable&lt;SNested&gt;** and **DParent** has a property of type **IEnumerable&lt;DNested&gt;**.
+
+Property Getters are created by Property Getter Factories. When a conversion request is being analysed, the Property Getter Factories will be asked "can you perform a mapping from Src to Dest for the property on Dest named Prop?" (the property on Dest may be an actual property or it may be a constructor argument). The factory will look at all of the properties on the Src type and see which, if any, it would map onto Prop based upon the source property's name and type. The type matching depends upon what sort of Property Getter the factory can create (whether that be an assignable-to getter, an enum-translating getter, etc.. all of the options I just described above) and what name matching approach it will use. The name matching depends upon the Name Matcher that was provided to the factory at instantiation.
+
+Name Matchers simply answer the question "are these property/argument names equivalent?", the basic implementation in the project is the **CaseInsensitiveSkipUnderscoreNameMatcher**. This ignores underscores and case when comparing names, so "Title" and "title" and considered to be the same, as are "Person_Name" and "personName".
+
+Finally, when a by-constructor conversion is being generated, there may be multiple constructors which may be satisfied (ie. all of their constructor arguments may be provided with values from the source object's properties). In this case, a decision will need to be made as to which constructor to use. For this, there is a Constructor Prioritiser. Each may-be-satisifed-constructor is represented by the fully-generated converter that would use that constructor. The prioritiser must then pick one to be used as the converter that should be used for that translation.
+
+The only Constructor Prioritiser implementation that I currently have is an **ArgsLengthTypeConverterPrioritiser**. This simply picks the constructor which has the most arguments, the thinking being that this must be the constructor that uses the most data from the source type and so will result in the best-populated destination instance possible.
+
+However, if there are two constructors, one with four compulsory arguments and one with five arguments total, but two of them optional, then the five-argument constructor may no longer be the best bet. If a conversion is available that explicitly populates those five values with data from the source object, then this is probably still the best match. But if the only conversion that uses that five-argument constructor is actually relying on the default values for those two optional arguments then it's only actually populating *three* constructor arguments from the source data, so surely the four-argument constructor is better!
+
+### A quick(ish) explanation of how I introduced optional constructor arguments
+
+So I have a **CompilableTypeConverterByConstructorFactory**. This has a method Get&lt;TSource, TDest&gt;() which will try return an **ICompilableTypeConverter&lt;TSource, TDest&gt;** that maps from **TSource** to **TDest**. If it can't create such a type converter then it will throw an exception.
+
+The particular implementation of **ICompilableTypeConverter&lt;TSource, TDest&gt;** returned from this class will be a **CompilableTypeConverterByConstructor&lt;TSource, TDest&gt;**.
+
+This class previously required a **ConstructorInfo** and a set of Property Getters for each argument in that constructor. The factory's job was to select the best **ConstructorInfo** and provide those Property Getters from the Property Getter Factories that it had access to. The constructor of the **CompilableTypeConverterByConstructor&lt;TSource, TDest&gt;** class would do some validation to ensure that the number of Property Getters matched the number of constructor arguments for the specified constructor, and that the types returned by the Property Getters matched the constructor's arguments types.
+
+The change I made was for the **CompilableTypeConverterByConstructor&lt;TSource, TDest&gt;** to also take a **ICompilableConstructorDefaultValuePropertyGetter** set - Property Getters which are associated with a particular constructor argument which has a default value, and which just return this default value when a value is requested.
+
+These Default Value Property Getters would only be specified by the Type Converter Factory if there was no Property Getter that could otherwise provide that constructor argument with a value - if it's possible to get data from the source object for a constructor argument then there's no point using the argument's default value!
+
+The benefit of providing two distinct sets of Property Getters (those relying upon default values and those not) to the **CompilableTypeConverterByConstructor&lt;TSource, TDest&gt;** is that it was possible to add another public property to it; the *NumberOfConstructorArgumentsMatchedWithNonDefaultValues* (this is the total number of arguments that the target constructor has minus the number of Default Value Property Getters). And the benefit of *this* is that it allows for a Constructor Prioritiser to consider the number of constructor arguments that were populated with data from the source object, as opposed to the *total* number of constructor arguments fulfilled, regardless of how many actually had to fall back on to using default values. Which addresses the problem I outlined in the section above.
+
+### Code updates
+
+While I was making these changes and experimenting with various scenarios (trying to re-familiarise myself with exactly how everything worked) I found it interesting to note how some I've changed some coding conventions over the years. Particularly, I disliked a method on the **ITypeConverterFactory** interface -
+
+    /// <summary>
+    /// This will return null if unable to generate the specified converter
+    /// </summary>
+    ITypeConverter<TSource, TDest> Get<TSource, TDest>();
+
+
+From some sides, this doesn't sound all that bad. And it's not uncommon to find code out there that does the same sort of thing; try to get the requested value and return null if unable to.
+
+As a rule, though, I don't like this *at all*. I prefer to avoid nulls wherever humanly possible and explicitly indicate the possibility of their presence where they must crop up.
+
+If a class exists where a property may be null since the data is not required for that particular structure, then I will prefix that property with "Optional". If a method may be expected to return null then I will prefix it with "TryTo". This isn't a perfect system by any means but it's a convention that I've found useful.
+
+So I could change the Get method above to
+
+    /// <summary>
+    /// This will return null if unable to generate the specified converter
+    /// </summary>
+    ITypeConverter<TSource, TDest> TryToGet<TSource, TDest>();
+
+
+if not being able to return the requested converter is not an error condition.
+
+However, for the cases a converter could *not* be generated to perform the specified **TSource** -> **TDest** mapping, the caller has no additional information - all they have is a null! And I suspect that someone trying to get a converter by calling a "Get" method would indeed consider it an error condition if it didn't actually return a converter.
+
+So I changed it to
+
+    /// <summary>
+    /// This will throw an exception if unable to generate the specified converter, it will never
+    /// return null
+    /// </summary>
+    ITypeConverter<TSource, TDest> Get<TSource, TDest>();
+
+
+I then changed the Type Converter Factories to throw custom exceptions indicating what property could not be set on the target type or what constructor arguments could not be mappped. Changing the contract so that it is considered an error condition when a mapping could not be created resulted in more information being availble to the caller, more *useful and important* information.
+
+### Static convenience wrapper
+
+Since I felt like I was cooking on gas at this point, I thought I'd address another problem with this project; trying to use this code for the first time (if you'd just cloned the project, for example) is difficult! I've got a ReadMe file in the project that tells you how to initialise a converter factory and then generate types but it's quite a lot of work to do so!
+
+In some of my other projects I've included "convenience wrappers" to do the fiddly work of initialising everything for the most common case so that the code is as easy as possible to get working with. For example, the [CSSParser](https://bitbucket.org/DanRoberts/cssparser) has the static **Parser** class, with its method "ParseCSS" and "ParseLESS" (with method signatures that will read from strings or from **TextReader**s). The [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier) has the **DefaultNonCachedLessCssLoaderFactory** and **EnhancedNonCachedLessCssLoaderFactory** which can be initialised with only an ASP.Net "Server" reference. And, of course, AutoMapper is phenonemally easy to get going with since there is a static **Mapper** class with CreateMap and Map methods (amongst many others). So I thought that *my* Type Converter library would benefit from something similar!
+
+It can't get much simpler than this:
+
+    Converter.CreateMap<MutablePersonDetails.RoleDetails, ImmutablePersonDetails.RoleDetails>();
+    var dest = Converter.Convert<MutablePersonDetails, ImmutablePersonDetails>(source);
+
+The "source" objectin this example is initialised with
+
+    var source = new MutablePersonDetails
+    {
+      Name = "Henry",
+      Roles = new List<MutablePersonDetails.RoleDetails>
+      {
+        new MutablePersonDetails.RoleDetails
+        {
+          Title = "Head Penguin Cleaner",
+          ClearanceLevel = ClearanceLevelOptions.Maximum
+        }
+      }
+    };
+
+(The actual classes for the source and destination types will be included later on for completion's sake).
+
+The types **MutablePersonDetails.RoleDetails** and **ImmutablePersonDetails.RoleDetails** are considered "nested" as they are not the target of the primary mapping (which is from **MutablePersonDetails** to **ImmutablePersonDetails**). There are properties on the source and destination types which are sets of these **RoleDetails** nested types.
+
+So first a mapping for the nested types is created. The **Converter** class is able to use this mapping to generate mappings between sets of these types; so creating a **MutablePersonDetails.RoleDetails** to **ImmutablePersonDetails.RoleDetails** mapping means that a **List&lt;MutablePersonDetails.RoleDetails&gt;** to **IEnumerable&lt;ImmutablePersonDetails.RoleDetails&gt;** becomes available as well.
+
+The *Convert* call will implicitly try to create a suitable mapping if one is not already available, this is why no explicit call to *CreateMap* is required for **MutablePersonDetails** to **ImmutablePersonDetails**.
+
+The mapping here was a "by-constructor" mapping (which is what I originally started this project for), it takes property values from the source object and uses them to populate constructor arguments on the destination type to create a new instance of it. But "by-property-setter" mappings are also supported, so we could also create a mapping in the opposite direction to that above:
+
+    Converter.CreateMap<ImmutablePersonDetails.RoleDetails, MutablePersonDetails.RoleDetails>();
+    var dest = Converter.Convert<ImmutablePersonDetails, MutablePersonDetails>(source);
+
+The source and destination classes in the examples are as follow:
+
+    public class MutablePersonDetails
+    {
+      public string Name { get; set; }
+      public List<RoleDetails> Roles { get; set; }
+    
+      public class RoleDetails
+      {
+        public string Title { get; set; }
+        public ClearanceLevelOptions ClearanceLevel { get; set; }
+      }
+    }
+
+    public class ImmutablePersonDetails
+    {
+      public ImmutablePersonDetails(string name, IEnumerable<RoleDetails> roles)
+      {
+        if (string.IsNullOrWhiteSpace(name))
+          throw new ArgumentException("Null/blank name specified");
+        if (roles == null)
+          throw new ArgumentNullException("roles");
+
+        Name = name;
+
+        Roles = roles.ToList().AsReadOnly();
+        if (Roles.Any(role => role == null))
+          throw new ArgumentException("Null reference encountered in roles set");
+      }
+
+      public string Name { get; private set; }
+      public IEnumerable<RoleDetails> Roles { get; private set; }
+
+      public class RoleDetails
+      {
+        public RoleDetails(string title, ClearanceLevelOptions clearanceLevel)
+        {
+          if (string.IsNullOrWhiteSpace(title))
+            throw new ArgumentException("Null/blank title specified");
+          if (!Enum.IsDefined(typeof(ClearanceLevelOptions), clearanceLevel))
+            throw new ArgumentOutOfRangeException("clearanceLevel");
+
+          Title = title;
+          ClearanceLevel = clearanceLevel;
+        }
+
+        public string Title { get; private set; }
+        public ClearanceLevelOptions ClearanceLevel { get; private set; }
+      }
+    }
+
+    public enum ClearanceLevelOptions
+    {
+      Regular,
+      Maximum
+    }
+
+
+### Ignoring properties / using default constructor arguments
+
+If the above classes were changed such that **MutablePersonDetails.RoleDetails** no longer has a *ClearanceLevel* property and the **ImmutablePersonDetails.RoleDetails** constructor's *clearanceLevel* argument is assigned a default value..
+
+    // Nested type of MutablePersonDetails
+    public class RoleDetails
+    {
+      public string Title { get; set; }
+    }
+
+    // Nested type of ImmutablePersonDetails
+    public RoleDetails(
+      string title,
+      ClearanceLevelOptions clearanceLevel = ClearanceLevelOptions.Regular)
+
+.. then the **Converter** will take this into account and still generate the expected mapping with:
+
+    Converter.CreateMap<MutablePersonDetails.RoleDetails, ImmutablePersonDetails.RoleDetails>();
+    var dest = Converter.Convert<MutablePersonDetails, ImmutablePersonDetails>(source);
+
+If we reversed this such that the **MutablePersonDetails.RoleDetails** still has a ClearanceLevel property but the **ImmutablePersonDetails.RoleDetails** does *not*..
+
+    // Nested type of MutablePersonDetails
+    public class RoleDetails
+    {
+      public string Title { get; set; }
+      public ClearanceLevelOptions ClearanceLevel { get; set; }
+    }
+
+    // Nested type of ImmutablePersonDetails
+    public class RoleDetails
+    {
+      public RoleDetails(string title)
+      {
+        if (string.IsNullOrWhiteSpace(title))
+          throw new ArgumentException("Null/blank title specified");
+        Title = title;
+      }
+      public string Title { get; private set; }
+    }
+
+.. then the mapping will fail as the **Converter** will throw an exception if it can't map every property on the target when performing a by-property-setter conversion. *Unless* it is explicitly instructed to ignore the property -
+
+    Converter.BeginCreateMap<ImmutablePersonDetails.RoleDetails, MutablePersonDetails.RoleDetails>()
+      .Ignore(
+        r => r.ClearanceLevel
+      )
+      .Create();
+    var dest = Converter.Convert<ImmutablePersonDetails, MutablePersonDetails>(source);
+
+The *BeginCreateMap* allows for exceptions to be made to the normal mapping process. The **Create** call (at the end of the *BeginCreateMap*, *Ignore*, *Create* chain) is important since the work to try to generate the converter will not be performed without that call (and all of the **BeginCreateMap** and any subsequent calls in that chain will be ignored without *Create* being called).
+
+This is different to the AutoMapper approach since AutoMapper will take in information about how the mappings should be created but not use it until a conversion is required. This means that mappings can be specified in any order with AutoMapper; the following would be fine, for example -
+
+    Mapper.CreateMap<ImmutablePersonDetails, MutablePersonDetails>();
+    Mapper.CreateMap<ImmutablePersonDetails.RoleDetails, MutablePersonDetails.RoleDetails>();
+
+AutoMapper doesn't mind the mappings for the nested type appearing after the mapping for the "containing type" since it won't try to use this information until it actually performs a conversion.
+
+My **Converter** class, however, generates the converters when *CreateMap* (or *Convert* is called). So a mapping for the nested types must be specified before the containing type as a converter for the containing type can't be generated without knowing how to convert the nested types! While I think there are advantages to the flexibility of AutoMapper's approach (not having to worry about converter dependencies; not having to worry about the order in which mappings are specified) I also think there are advantages to my approach since an exception will be raised as soon as a mapping is requested that can not be created (along with information about what properties or constructor arguments could not be satisfied).
+
+Another advantage of the converters being generated as the mappings are specified is that the **Converter** is keeping track of them and can provide a reference to any of them through a call to *GetConverter*. The converters are all immutable and if a converter is returned from the *GetConverter* method then no further changes to the **Converter** class may affect it. This is reassuring in that the converter may be used elsewhere without having to worry about the mutability of the static **Converter** class but it also has performance benefits; calls to the **Converter**'s *Convert* method (and *CreateMap* and *GetConverter* methods) require cache lookups and locks. If you use a converter reference delivered by the *GetConverter* method then you don't need to worry about these lookups and locks. Which brings me neatly to..
+
+### The Compilable Type Converter's Performance
+
+First off, the Compilable Type Converter isn't intended to compete feature-for-feature with AutoMapper. AutoMapper is a well-rounded library with all sorts of functionality that address all sorts of edge cases. For example, I only encountered the *BeforeMap* and *AfterMap* calls when looking into it more deeply to write this article! It also offers [object model flattening](https://automapper.codeplex.com/wikipage?title=Flattening) and retrieval of data through Get methods rather than properties. I don't have any intention of supporting any of these, though I *do* intend to add some custom property mappings at some point. Something like
+
+    Converter.BeginCreateMap<ImmutablePersonDetails.RoleDetails, MutablePersonDetails.RoleDetails>()
+      .Custom(
+        dest => dest.ClearanceLevel,
+        src => src.GetClearanceLevel()
+      )
+      .Create();
+
+(Let's not forget the killer feature of my library - for me, at least - is that it performs the name matching magic from properties onto constructor arguments so that immutable classes can be instantiated by the mappers).
+
+So anyway.. making performance comparisons between the two libraries is probably not all that productive. But since I've banged on about the Compilable Type Converter producing LINQ-Expression-compiled converters, I'm going to anyway! :)
+
+We'll stick with the **ImmutablePersonDetails** to **MutablePersonDetails** mapping that was in the earlier examples. 
+
+There are two aspects that need considering - the startup time and the conversion time. If the Compilable Type Converter can perform conversions faster than AutoMapper but with a greater initialisation cost (which we'd expect since there is expensive LINQ Expression compilation going on) then there will have to be a certain number of conversion performed before we "break even" on the startup time. But after that, it should be all win!
+
+So I've set up a test program that times the initialisation processes, repeated in a loop. At the end of each loop, the *Reset* method is called for both the **Mapper** and **Converter** (these calls are outside of the initialisation work that is timed, since we're not interested in the efficiency of the *Reset* methods). The last loop doesn't call *Reset* so that everything is ready for the next section of the program, where I time a conversion from an **ImmutablePersonDetails** instance to a new **MutablePersonDetails** (over and over again).
+
+The init sections looks like this (basically the same as we've already seen above). We have to actually perform one mapping in the init code since AutoMapper postpones doing work until a mapping is actually requested, as I've already spoken about.
+
+    Mapper.CreateMap<ImmutablePersonDetails, MutablePersonDetails>();
+    Mapper.CreateMap<ImmutablePersonDetails.RoleDetails, MutablePersonDetails.RoleDetails>();
+    var destAutoMapperInitialise = Mapper.Map<ImmutablePersonDetails, MutablePersonDetails>(source);
+
+    Converter.CreateMap<ImmutablePersonDetails.RoleDetails, MutablePersonDetails.RoleDetails>();
+    var converter = Converter.GetConverter<ImmutablePersonDetails, MutablePersonDetails>();
+    var destCompilableTypeConverterInitialise = converter.Convert(source);
+
+Then there are three operations that are individually timed in the "convert loop":
+
+    // Convert using AutoMapper
+    Mapper.Map<ImmutablePersonDetails, MutablePersonDetails>(source);
+
+    // Convert using the Compilable Type Converter, through the static convenience wrapper
+    Converter.Convert<ImmutablePersonDetails, MutablePersonDetails>(source);
+
+    // Convert using the Compilable Type Converter, using the converter reference from a GetConverter
+    // call in the init phase (this will be quicker as the cache lookups and locks in the convenience
+    // wrapper are not required)
+    converter.Convert(source);
+
+I've run this whole process half a dozen times and got comparable results each time. The last time I ran it, the average time to initialise **AutoMapper was 8ms** and to initialise the **Compilable Type Converter was 41ms** (average taken over 100 repeated initialisations). The average time (taken over 100,000 loops) to perform the conversions was **310 ticks for AutoMapper**, **46 ticks for the Compilable Type Converter via the convenience wrapper** and **3 ticks for the Compilable Type Converter via the *converter* reference** that was obtained as part of the initialisation work.
+
+The standout result here is that the Compilable Type Converter was able to perform the conversion 100x faster.
+
+*100x faster!*
+
+That's good times! :)
+
+However, this ignores the initialisation overhead. If you were only ever going to perform a single conversion then speed of the initialised converter is more than offset by the additional initialisation time required. However, if you're expecting to perform a lot of these conversions then this initialisation overhead should be easily offset. (My original aim for this work was to translate a WCF web service's public-facing mutable classes into their internal immutable counterparts, so there *would* be many conversions in that case). In the example above, it would take 349 conversions to break even if using the **Converter** wrapper and only 300 if using the *converter* reference directly.
