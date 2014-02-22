@@ -103,5 +103,21 @@ namespace Blog.Models
 		/// This will never be null
 		/// </summary>
 		public ICache PostContentCache { get; private set; }
+
+		/// <summary>
+		/// If this is not a page that search engines should store in their index, but that links should be followed from, so that the pages that
+		/// SHOULD be stored can be located, then this should be set to true. This helps prevent the spiders from confusing the content of the
+		/// individual posts with content of the pages that include those posts (such as the home page or monthly archives)
+		/// </summary>
+		public bool MarkPageAsFollowNoIndex
+		{
+			get
+			{
+				// If this is a Single Post View (meaning it is intended to show one particular Post, not just that a search was performed which
+				// happened to match on a single Post) then we want search engine to index that as the primary location of that content and to
+				// ignore it if it appears on the home page. So return true (indicating "follow, noindex") UNLESS it's a Single Post View.
+				return !IsSinglePostView;
+			}
+		}
 	}
 }
