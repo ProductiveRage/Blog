@@ -1,0 +1,509 @@
+﻿## Entity Framework projections to Immutable Types (IEnumerable vs IQueryable)
+
+Last month I was looking back into one of my old projects that was inspired by AutoMapper but for mapping to immutable types - those that are initialised by a single constructor call, rather than by setting properties on a mutable type (see [Bonus provocative headline: Like AutoMapper, but 100x faster](Post67)). I had a fairly good idea of what scenarios I wanted to use it in and  had no intention of replicating the entire wide range of functionality that AutoMapper supports. However, something I *was* particularly taken with was the recently(ish) added support for LINQ auto-projections.
+
+Projections are when data is retrieved from an **IQueryable** source by translating the required properties onto either a particular class or an anonymous type - eg.
+
+    using (var context = new AlbumDataEntities())
+    {
+      var albums = context.Albums
+        .Select(album => new {
+          Key = album.AlbumKey,
+          Name = album.Name
+        });
+
+The clever thing about **IQueryable** and these projections is that the data source (Entity Framework, for example) can construct a query to retrieve only the data required; only the data that is needed to map those projected properties.
+
+*Auto-projection* means that, if the mappings follow naming conventions, AutoMapper will pull over all of the properties' values by magic. Meaning you don't have to write the boring Key = album.AlbumKey, Name = album.Name code for each property in a mapping.
+
+### IQueryable vs IEnumerable
+
+The **IEnumerable** type in .net allows for lazy initialisation such that data is only processed as it is requested. For a really simple example, the following code starts off with a data "source" that will generate up to ten million objects, returned as an enumerable set. On this we call Take(5), which returns another enumerable set that will only enumerate the first five items. Until ToArray is called, none of the data is actually delivered and none of the objects are createad. Even when ToArray *is* called, only five of the source objects are actually initialised as that is how many are actually required - the remaining 9,999,995 objects that *could* have been created are not since they are not required. Lazy evaulation in action!
+
+    var fiveItemsFromLargeEnumerableRange =
+      Enumerable.Range(1, 10000000).Select(i => new { Name = "Item" + i })
+        .Take(5)
+        .ToArray();
+
+**IEnumerable** can be thought to operate on in-memory data sets. The data *itself* may not originate from an in-memory source. Above it does, but the source could also be something delivering lines from a log file or rows from a database. Each entry in the data, though, is fully loaded when required and then processed in memory. Although each entity is only loaded when required, if the loading of each entity is expensive and only a subset of its data is required for the operation at hand, then even this form of lazy evaluation can become a burden. **IEnumerable** sets do not inherently expose a way to "partially load" the entities.
+
+It's worth noting at this point that many ORMs (including Entity Framework) support "lazy loading" of data for child properties to try to address this very point; the data for the properties of the returned objects is not loaded until the properties are accessed. At this point the database (or whatever data source is being used) is hit *again* to retrieve this information. The downside to this is that the data that *is* accessed may require multiple database hits for each entity when only a single query may have been required if "eagerly" loading all of the data for the entity. But if "eager loading" is used and only a subset of the data is required then *too much* data was being pulled down!
+
+**IQueryable** sets have similar intentions to **IEnumerable** but a different approach, they are more tightly tied to the data source. Where **IEnumerable** sets may be considered to be in-memory (for each entity), **IQueryable** sets are all prepared in the data source and only the data that is required for each entity is returned.
+
+To illustrate with an example, say we have data about albums. There's an Albums table with AlbumKey, Name, Year and ArtistKey fields. There's a Tracks table with TrackKey, AlbumKey, TrackNumber and Name fields. And there's an Artists table with fields ArtistKey and Name.
+
+If I point Entity Framework at this then it will generate a model to dip into all this data. The simplest retrieval is probably for all Album names -
+
+    using (var context = new AlbumDataEntities())
+    {
+      var allAlbumNames = context.Albums
+        .Select(album => album.Name)
+        .OrderBy(name => name);
+
+      // Calling ToString on an Entity Framework IQueryable pointing at a SQL database
+      // returns the SQL that will be executed to perform the query
+      var allAlbumNamesQuery = allAlbumNames.ToString();
+      var allAlbumNamesResults = allAlbumNames.ToArray();
+
+      Console.WriteLine("Query:");
+      Console.WriteLine(allAlbumNamesQuery);
+      Console.WriteLine();
+
+      Console.WriteLine("Results:");
+      Console.WriteLine(string.Join(Environment.NewLine, allAlbumNamesResults));
+    }
+
+This shows that the SQL executed was
+
+    SELECT 
+      [Extent1].[Name] AS [Name]
+      FROM [dbo].[Albums] AS [Extent1]
+      ORDER BY [Extent1].[Name] ASC
+
+Which is pretty much what you would hope for.. but clever when you think about it. It's done some analysis of the request we've described and realised that it only needs to consider one particular column from that one table, even though it's all configured to do so much more.
+
+If instead we request 
+
+    var allCombinedAlbumAndTrackNames = context.Albums
+      .SelectMany(album => album.Tracks.Select(track => new {
+        AlbumName = album.Name,
+        TrackName = track.Name,
+        TrackNumber = track.TrackNumber
+      }))
+      .OrderBy(combinedEntry => combinedEntry.AlbumName)
+      .ThenBy(combinedEntry => combinedEntry.TrackNumber)
+      .Select(combinedEntry => combinedEntry.AlbumName + "/" + combinedEntry.TrackName);
+
+then the following SQL is executed:
+
+    SELECT 
+      [Project1].[C1] AS [C1]
+      FROM ( SELECT 
+        [Extent1].[Name] + N'/' + [Extent2].[Name] AS [C1], 
+        [Extent1].[Name] AS [Name], 
+        [Extent2].[TrackNumber] AS [TrackNumber]
+        FROM  [dbo].[Albums] AS [Extent1]
+        INNER JOIN [dbo].[Tracks] AS [Extent2]
+        ON [Extent1].[AlbumKey] = [Extent2].[AlbumKey]
+      )  AS [Project1]
+      ORDER BY [Project1].[Name] ASC, [Project1].[TrackNumber] ASC
+
+This was not such a simple translation to make - this query got mapped into an interim anonymous type, there are multiple sorts and the final values are constructucted by concatenating two of the fields in the interim type.
+
+One more, for fun..
+
+    var namesOfTheFiveAlbumsWithTheGreatestNumberOfTracks = context.Albums
+      .OrderByDescending(album => album.Tracks.Count())
+      .Select(album => album.Name)
+      .Take(5);
+
+results in:
+
+    SELECT TOP (5)
+      [Project1].[Name] AS [Name]
+      FROM ( SELECT 
+        [Extent1].[Name] AS [Name], 
+        (SELECT 
+          COUNT(1) AS [A1]
+          FROM [dbo].[Tracks] AS [Extent2]
+          WHERE [Extent1].[AlbumKey] = [Extent2].[AlbumKey]) AS [C1]
+        FROM [dbo].[Albums] AS [Extent1]
+      )  AS [Project1]
+      ORDER BY [Project1].[C1] DESC
+
+This has not only performed an aggregate operation (by considering the number of Tracks per Album) but has also incorporated the "Take(5)" into the query. It is not possible for this query to return more than five results from the database. This is another example of how the request is translated into something handled by the data source that ensures that it can deliver the bare minimum data. Were the "Take(5)" call not translated into part of the query then potentially more data would be returned than necessary. The first five results could be isolated in a similar "in-memory" operation to that in the 1,000,000 item **IEnumerable** example earlier, but it wouldn't be as efficient to do so.
+
+So *all* of these demonstrate various ways in which **IQueryable** ensures that the minimum amount of data required is transmitted from the data source. None of them even touch the Artists table since none of the requests asked for Artist data! The **IQueryable** implementation is what performs this magic, whether that be Entity Framework, NHibernate, SubSonic or whatever - it is responsible for translating expressions into SQL (or whatever language the backing data source uses; it could be another SQL-like database or it could be a document database such as [MongoDB](http://www.mongodb.org/)).
+
+### Applying this to mappings
+
+In the above examples, ToArray() was used to force the retrieval / evaluation of the information. This could just as easily have been a call to ToList() or been a loop that enumerated through the data.
+
+With **IEnumerable** sets, the source data is not run through until it is explicitly enumerated. With **IQueryable**, the data is not retrieved from the source until the **IQueryable** reference is treated as an **IEnumerable**. This is possible since **IQueryable** implements **IEnumerable** and so any method that can operate on **IEnumerable** may also operate on **IQueryable**. But what's important here is that as soon as this is done, the **IQueryable** reference will then "become" an **IEnumerable** reference and the underlying data request will have been made in order for this to happen.
+
+The clever thing above, where the "Take(5)" method resulted in "SELECT TOP (5)" becoming part of the SQL query, comes about as LINQ has a load of extension methods for operating against **IQueryable** as well **IEnumerable** - so as well as
+
+    public static IEnumerable<TSource> Take<TSource>(
+      this IEnumerable<TSource> source,
+      int count
+    );
+
+there is also
+
+    public static IQueryable<TSource> Take<TSource>(
+      this IQueryable<TSource> source,
+      int count
+    );
+
+The latter ensures that an **IQueryable** *remains* as an IQueryable and so postpones its evaluation.
+
+By the way, I *am* finally approaching the point of this post now, so bear with me! :)
+
+The LINQ "Select" extension method similarly has alternative method signatures. The more common version is
+
+    public static IEnumerable<TResult> Select<TSource, TResult>(
+      this IEnumerable<TSource> source,
+      Func<TSource, TResult> selector
+    );
+
+where a particular transformation is performed upon each item in a **IEnumerable** set.
+
+But there is a corresponding signature
+
+    public static IQueryable<TResult> Select<TSource, TResult>(
+      this IQueryable<TSource> source,
+      Expression<Func<TSource, TResult>> selector
+    );
+
+where an **Expression** will be translated by the **IQueryable** provider into the language of the underlying data source (but since the **IQueryable** reference remains as an **IQueryable** this translation won't happen *yet*).
+
+The difference between **Expression&lt;Func&lt;TSource, TResult&gt;&gt;** and **Func&lt;TSource, TResult&gt;** is subtle but important. The compiler is clever enough that often you needn't even be aware that you're passing an **Expression**. Above we were performing various manipulations (such as wrapping data up in anonymous types and combining fields with string concatenation) without having to think about it. But if we tried to do something like
+
+    var nextId = 0;
+    var allAlbumNamesWithExternallGeneratedIds = context.Albums
+      .Select(album => new { Name = album.Name, Id = ++nextId })
+      .OrderBy(name => name);
+
+we'd get a compiler error
+
+> An expression tree may not contain an assignment operator
+
+So, unfortunately, it's not just any old lambda (aka anonymous function) that can be translated into an **Expression**. A different problem is encountered if we attempt to use AutoMapper to process the data - eg.
+
+    Mapper.CreateMap<Album, AlbumStub>();
+    var allAlbumKeyAndNames = context.Albums
+      .Select(album => Mapper.Map<Album, AlbumStub>(album))
+      .OrderBy(name => name);
+
+where the target class is
+
+    public class AlbumStub
+    {
+      public int AlbumKey { get; set; }
+      public string Name { get; set; }
+    }
+
+This will result in a **NotSupportedException** being raised by Entity Framework with the following message:
+
+> LINQ to Entities does not recognize the method 'AlbumStub Map\[Album,AlbumStub\](ProjectionExamples.AlbumStub)' method, and this method cannot be translated into a store expression.
+
+What has happened here is that the compiler has recognised
+
+    album => Mapper.Map<Album, AlbumStub>(album)
+
+as a valid **Expression** but when the query provider has tried to work its magic and translate it into SQL, it doesn't know what to do.
+
+We could try a different approach and call:
+
+    Mapper.CreateMap<Album, AlbumStub>();
+    var allAlbumKeyAndNames = context.Albums
+      .Select(Mapper.Map<Album, AlbumStub>)
+      .OrderBy(name => name);
+
+But here the Select method that has been called is the Select method that works against **IEnumerable** and so all of the data in the *context.Albums* object graph has been evaluated. Even though we only want the Album Keys and Names, *all* of the Album, Track and Artist data has been retrieved. At the point at which the **IQueryable** was forced into operating as an **IEnumerable** it had to be evaluated, and the provider is given no way way of knowing that only the Album Keys and Names are required. What a waste!
+
+(Incidentally, exactly the same problem was being exhibited by my "[Compiler Type Converter](https://bitbucket.org/DanRoberts/compilabletypeconverter)" code, this isn't something particular to AutoMapper).
+
+But back in February 2011, the author of AutoMapper wrote an article talking about this and how he'd been doing some work to improve the situation ([Autoprojecting LINQ queries](http://lostechies.com/jimmybogard/2011/02/09/autoprojecting-linq-queries/)). I believe that it became a standard part of the library in the August 2013 3.0 release (according to the [GitHub Release Notes](https://github.com/AutoMapper/AutoMapper/releases/tag/v3.0.0)).
+
+The way it works is by adding some extension methods for **IQueryable** that work with AutoMapper. The above example now becomes:
+
+    Mapper.CreateMap<Album, AlbumStub>();
+    var allAlbumKeyAndNames = context.Albums
+      .OrderBy(name => name);
+      .Project().To<AlbumStub>();
+
+The ".Project().To&lt;AlbumStub&gt;()" converts the **IQueryable** set into an **IEnumerable** but it does so in such a manner that only the minimum data is requested from the data source. So in this example, there will be no joins to the Tracks or Artists tables, nor will the ArtistKey field of the Album table even be mentioned in the underlying query! The "OrderBy" call is moved up so that it operates against the **IQueryable** and can be performed by SQL rather than retrieving the data from the db and having to sort it in-memory (which is what would happen if OrderBy was called after Project..To since it would be operating against an **IEnumerable** reference rather than an **IQueryable**).
+
+There are some limitations to the projections that can be performed (which are documented in the AutoMapper GitHub wiki page [Queryable Extensions](https://github.com/AutoMapper/AutoMapper/wiki/Queryable-Extensions)). One problem that I found early on is that, while with **IEnumerable** mappings you could map to an immutable type such as
+
+    public class ImmutableAlbumStub
+    {
+      public ImmutableAlbumStub(int albumKey, string name)
+      {
+        if (string.IsNullOrWhiteSpace(name))
+          throw new ArgumentException("Null/blank name specified");
+        AlbumKey = albumKey;
+        Name = name;
+      }
+      public int AlbumKey { get; private set; }
+      public string Name { get; private set; }
+    }
+
+by using
+
+    Mapper.CreateMap<Album, ImmutableAlbumStub>()
+      .ConstructUsing(a => new ImmutableAlbumStub(a.AlbumKey, a.Name));
+
+if you attempt this using this mapping with Project..To results you'll receive an **ArgumentException** with the message
+
+> 'ProjectionExamples.ImmutableAlbumStub' does not have a default constructor
+
+Hmm. Bummer.
+
+But, on the whole, I thought that this general "autoprojecting" thing was an awesome idea! And one that I wanted to steal (er.. I mean incorporate into my own code :)
+
+### Auto-Projecting to Immutable Types (with the Compilable Type Converter)
+
+At its core, the problem is that we need to be able to provide **Expression**-based type converters that we can use with the **IQueryable**-based extension methods. Being able to do this will allow the **IQueryable** provider to analyse the **Expressions** and retrieve the bare minimum data required to satisfy the operation. I figured that this would be a walk in the park since the **ICompilableTypeConverter** is all about this - that's what enables its conversions to be compiled and be so fast!
+
+Unfortunately, the very idea of analysing arbitrary expressions and translating them into SQL (or whatever) is a complex matter and, since this translation is handled by the query provider, it may vary from one provider to another. So far I've only tested this with Entity Framework and it's Entity Framework's limitations that I've encountered and worked with / around.
+
+The first problem is to do with the handling of null values. If we continue with the album data model and imagine that it's actually optional to assign an artist to an album, then in such a case there would be a null ArtistKey on the Album database record. This would mean that the Artist property on the corresponding instance of the Entity-Framework-generated class would also be null. But if I try to map this onto another type structure such as with
+
+    var albumsWithArtists = context.Albums
+      .Select(a => new {
+        Name = a.Name,
+        Artist = (a.Artist == null) ? null : new { Name = a.Artist.Name }
+      });
+
+then we get another **NotSupportedException** as soon as the data is evaluated, this time with the message
+
+> Unable to create a null constant value of type 'Anonymous type'. Only entity types, enumeration types or primitive types are supported in this context.
+
+Unfortunately, this is - broadly speaking - what happens in the type converters that my code generates. And something similar happens with properties that are enumerable. The Tracks property, for example:
+
+    var albumsWithTrackNames = context.Albums
+      .Select(a => new {
+        Name = a.Name,
+        TrackNames = (a.Tracks == null) ? null : a.Tracks.Select(t => t.Name)
+      });
+
+> Cannot compare elements of type 'System.Collections.Generic.ICollection`1[[ProjectionExamples.Album, ProjectionExamples, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'. Only primitive types, enumeration types and entity types are supported.
+
+This second one doesn't seem all that unreasonable from Entity Framework's side; if there are no tracks associated with an album then an empty Tracks list would be recorded against an **Album** instance, not a null Tracks reference. Unfortunately my conversion methods *don't* assume this and just performing this null checking makes Entity Framework throw its toys out of the pram. We can't even check for nulls and then resort to a default empty array -
+
+    var albumsWithTrackNames = context.Albums
+      .Select(a => new {
+        Name = a.Name,
+        TrackNames = (a.Tracks == null) ? new string[0] : a.Tracks.Select(t => t.Name)
+      });
+
+as that will result in the same error.
+
+And then, the killer:
+
+    var albumsAsImmutableTypes = context.Albums
+      .Select(a => new ImmutableAlbum(a.AlbumKey, a.Name));
+
+This results in a **NotSupportedException** with the message
+
+> Only parameterless constructors and initializers are supported in LINQ to Entities.
+
+Oh dear.
+
+Soooooo...
+
+The approach I took to address this was two-fold. First, assume that all lists will be empty if there is no data for them and so assume that lists will never be null. Second, perform two mappings for each translation. Firstly to interim objects that have only the required properties, this is done while dealing with **IQueryable** data. And *then* map these interim types to the real destination objects, this is done after pushing the interim results into an **IEnumerable** set so that the limitations of the query provider no longer apply. The interim objects all have an "is-initialised" property on them so that if the source object is null then it can be mapped to an interim object with its "is-initialised" flag set to false, otherwise the flag will be set to true. When the interim types are mapped to the destination types, instances with "is-initialised" set to false will be mapped to null references.
+
+This means that only the minimum required data will be retrieved but that the data may be mapped to immutable objects *and* that Entity Framework's awkward behaviour around nulls can be side-stepped. It's a bit like an automated version of
+
+    var albumsAsImmutableTypes = context.Albums
+      .Select(a => (a == null) ? new { AlbumKey = a.AlbumKey, Name = a.Name })
+      .AsEnumerable()
+      .Select(a => new ImmutableAlbumStub(a.AlbumKey, a.Name));
+
+but without having to write that interim mapping by hand.
+
+When building the mappings, first an "ideal mapping" is generated from the source types (the Entity Framework types) to the destination types (the **ImmutableAlbumStub**). This will never be used directly but performing this work reveals what property mappings are required and allows the interim types to be constructed to expose only the minimum required data.
+
+Since there is an overhead to performing this work (when not dealing with **IQueryable** data the "ideal mapping" is fine to use and none of this extra work is required) and since there are some tweaks to behaviour (such as the assumption that enumerable sets will never be null), I created a separate static class to use, the **ProjectionConverter**. It works as follows (this example includes a mapping of nested types so that it's not as simple as the album "stub" example above):
+
+    ProjectionConverter.CreateMap<Track, ImmutableTrack>();
+    ProjectionConverter.CreateMap<Album, ImmutableAlbum>();
+    using (var context = new ProjectionTestEntities1())
+    {
+      var albumsWithTrackListings = context.Albums
+        .Project().To<ImmutableAlbum>();
+
+The target classes are:
+
+    public class ImmutableAlbum
+    {
+      public ImmutableAlbum(string name, IEnumerable<ImmutableTrack> tracks)
+      {
+        if (string.IsNullOrWhiteSpace(name))
+          throw new ArgumentException("Null/blank name specified");
+        if (tracks == null)
+          throw new ArgumentNullException("tracks");
+
+        Name = name;
+        Tracks = tracks.ToList().AsReadOnly();
+        if (Tracks.Any(t => t == null))
+          throw new ArgumentException("Null reference encountered in tracks set");
+      }
+
+      /// <summary>
+      /// This will never be null or blank
+      /// </summary>
+      public string Name { get; private set; }
+
+      /// <summary>
+      /// This will never be null nor contain any null references
+      /// </summary>
+      public IEnumerable<ImmutableTrack> Tracks { get; private set; }
+    }
+
+    public class ImmutableTrack
+    {
+      public ImmutableTrack(int number, string name)
+      {
+        if (string.IsNullOrWhiteSpace(name))
+          throw new ArgumentException("Null/blank name specified");
+        if (number < 1)
+          throw new ArgumentOutOfRangeException("number must be greater than zero");
+
+        Number = number;
+        Name = name;
+      }
+
+      /// <summary>
+      /// This will always be greater than zero
+      /// </summary>
+      public int Number { get; private set; }
+
+      /// <summary>
+      /// This will never be null or blank
+      /// </summary>
+      public string Name { get; private set; }
+    }
+
+The *Project* and *To* methods are **IQueryable** extensions in my "[Compilable Type Converter](https://bitbucket.org/DanRoberts/compilabletypeconverter)" project, not the ones in AutoMapper. All of the same options that I talked about [last time](Post67) are available for the projections (so some or all of the target types may be initialised by-property-setter instead of by-constructor), the big difference is that the **ProjectionConverter** must be used instead of the regular **Converter**.
+
+And with that, I'm done! **IQueryable**-based mappings to immutable types are now possible in a simple and efficient manner!
+
+### Bonus material: Dynamic "anonymous" types
+
+The interim types that are generated by the code are created dynamically. The **ProjectionConverter** maintains a dictionary of generated types so if a mapping is required that requires an iterim type with the exact same set of properties as an interim type that has been used before, then a new instance of that type will be created, rather than having to build an entirely new type and then creating an instance of that. Obviously, the first time that any mapping is generated, some new types will have to be built.
+
+Since the C# compiler uses anonymous types, I'd wondered if there was some .net mechanism to generate these types on-the-fly. But after doing some testing (by compiling some code and investigating the output using [ildasm](http://msdn.microsoft.com/en-us/library/f7dy01k1(v=vs.110).aspx)), it would seem that the compiler analyses the source code at compile time and bakes in classes to the IL that may be used for all of the required anonymous types. So that was a no-go.
+
+But a few years ago I'd been experimenting with a similar topic, so I was able to dust off and repurpose some old code. Which was convenient! All that I required was for a new type to be created with a particular set of non-indexed read-and-write properties. It doesn't need any methods, fields or events, it doesn't need any static properties, it doesn't need any read-only or write-only fields. It just requires a simple set of gettable/settable instance properties with particular names and types. I used the following to achieve this:
+
+    using System;
+    using System.Reflection;
+    using System.Reflection.Emit;
+    using System.Threading;
+
+    namespace CompilableTypeConverter.QueryableExtensions.ProjectionConverterHelpers
+    {
+      public class AnonymousTypeCreator
+      {
+        public static AnonymousTypeCreator DefaultInstance
+          = new AnonymousTypeCreator("DefaultAnonymousTypeCreatorAssembly");
+
+        private readonly ModuleBuilder _moduleBuilder;
+        public AnonymousTypeCreator(string assemblyName)
+        {
+          if (string.IsNullOrWhiteSpace(assemblyName))
+            throw new ArgumentException("Null/blank assemblyName specified");
+
+          var assemblyBuilder = Thread.GetDomain().DefineDynamicAssembly(
+            new AssemblyName(assemblyName),
+            AssemblyBuilderAccess.Run
+          );
+          _moduleBuilder = assemblyBuilder.DefineDynamicModule(
+            assemblyBuilder.GetName().Name,
+            false // emitSymbolInfo (not required here)
+          );
+        }
+
+        public Type Get(AnonymousTypePropertyInfoSet properties)
+        {
+          if (properties == null)
+            throw new ArgumentNullException("properties");
+
+          var typeName = "<>AnonymousType-" + Guid.NewGuid().ToString("N");
+          var typeBuilder = _moduleBuilder.DefineType(
+            typeName,
+            TypeAttributes.Public
+               | TypeAttributes.Class
+               | TypeAttributes.AutoClass
+               | TypeAttributes.AnsiClass
+               | TypeAttributes.BeforeFieldInit
+               | TypeAttributes.AutoLayout
+          );
+
+          var ctorBuilder = typeBuilder.DefineConstructor(
+            MethodAttributes.Public,
+            CallingConventions.Standard,
+            Type.EmptyTypes // constructor parameters
+          );
+          var ilCtor = ctorBuilder.GetILGenerator();
+          ilCtor.Emit(OpCodes.Ldarg_0);
+          ilCtor.Emit(OpCodes.Call, typeBuilder.BaseType.GetConstructor(Type.EmptyTypes));
+          ilCtor.Emit(OpCodes.Ret);
+
+          foreach (var property in properties)
+          {
+            // Prepare the property we'll add get and/or set accessors to
+            var propBuilder = typeBuilder.DefineProperty(
+              property.Name,
+              PropertyAttributes.None,
+              property.PropertyType,
+              Type.EmptyTypes
+            );
+            var backingField = typeBuilder.DefineField(
+              property.Name,
+              property.PropertyType,
+              FieldAttributes.Private
+            );
+
+            // Define get method
+            var getFuncBuilder = typeBuilder.DefineMethod(
+              "get_" + property.Name,
+              MethodAttributes.Public
+               | MethodAttributes.HideBySig
+               | MethodAttributes.NewSlot
+               | MethodAttributes.SpecialName
+               | MethodAttributes.Virtual
+               | MethodAttributes.Final,
+              property.PropertyType,
+              Type.EmptyTypes
+            );
+            var ilGetFunc = getFuncBuilder.GetILGenerator();
+            ilGetFunc.Emit(OpCodes.Ldarg_0);
+            ilGetFunc.Emit(OpCodes.Ldfld, backingField);
+            ilGetFunc.Emit(OpCodes.Ret);
+            propBuilder.SetGetMethod(getFuncBuilder);
+
+            // Define set method
+            var setFuncBuilder = typeBuilder.DefineMethod(
+              "set_" + property.Name,
+              MethodAttributes.Public
+               | MethodAttributes.HideBySig
+               | MethodAttributes.SpecialName
+               | MethodAttributes.Virtual,
+              null,
+              new Type[] { property.PropertyType }
+            );
+            var ilSetFunc = setFuncBuilder.GetILGenerator();
+            ilSetFunc.Emit(OpCodes.Ldarg_0);
+            ilSetFunc.Emit(OpCodes.Ldarg_1);
+            ilSetFunc.Emit(OpCodes.Stfld, backingField);
+            ilSetFunc.Emit(OpCodes.Ret);
+            propBuilder.SetSetMethod(setFuncBuilder);
+          }
+
+          return typeBuilder.CreateType();
+        }
+
+        private static MethodInfo MethodInfoInvokeMember = typeof(Type).GetMethod(
+          "InvokeMember",
+          new[] {
+            typeof(string),
+            typeof(BindingFlags),
+            typeof(Binder),
+            typeof(object),
+            typeof(object[])
+          }
+        );
+      }
+    }
+
+The **AnonymousTypePropertyInfoSet** data that is used to generate new classes is just a set of **PropertyInfo** instances that don't have the same property name used for multiple different property types and that ensures that none of the properties are indexed. It also overrides the Equals and GetHashCode method so that it can be used as a key in a dictionary of interim types to prevent creating more types that necessary. In essence, really it's an **IEnumerable&lt;PropertyInfo&gt;** with a few bells and whistles.
+
+(These files can be found in the Bitbucket project at [AnonymousTypeCreator.cs](https://bitbucket.org/DanRoberts/compilabletypeconverter/src/f6d122508b580f70b95eb4520dd35d7fb354f42f/CompilableTypeConverterQueryableExtensions/ProjectionConverterHelpers/AnonymousTypeCreator.cs?at=default) and [AnonymousTypePropertyInfoSet.cs](https://bitbucket.org/DanRoberts/compilabletypeconverter/src/f6d122508b580f70b95eb4520dd35d7fb354f42f/CompilableTypeConverterQueryableExtensions/ProjectionConverterHelpers/AnonymousTypePropertyInfoSet.cs?at=default) while the dynamic type creation is required by the [PropertyConverter.cs](https://bitbucket.org/DanRoberts/compilabletypeconverter/src/f6d122508b580f70b95eb4520dd35d7fb354f42f/CompilableTypeConverterQueryableExtensions/ProjectionConverter.cs?at=default)).
+
+And on that note, I really am done!
