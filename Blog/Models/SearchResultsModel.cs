@@ -85,6 +85,6 @@ namespace Blog.Models
 		/// SHOULD be stored can be located, then this should be set to true. This helps prevent the spiders from confusing the content of the
 		/// individual posts with content of the pages that include those posts (such as the home page or monthly archives)
 		/// </summary>
-		public bool MarkPageAsFollowNoIndex { get { return false; } }
+		public bool MarkPageAsFollowNoIndex { get { return true; } }
 	}
 }
