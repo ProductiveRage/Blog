@@ -445,3 +445,24 @@ The WSC content is as follows:
     </package>
 
 I've not been able to get to the bottom of *why* this fails and it's not exactly a common problem - most people left WSCs back in the depths of time.. along with VBScript! But for the meantime we're stuck with them since the thought of trying to migrate the *entire* codebase fills me with dread, at least splitting it this way means we can move over piecemeal and re-write isolated components of the code at a time. And then one day the old cruft will have gone! And people will consider the earlier migration code the new "old cruft" and the great cycle can continue!
+
+**Update (2nd May 2014):** It turns out that if
+
+    var src = Microsoft.VisualBasic.Interaction.GetObject(
+      Path.Combine(
+        new FileInfo(this.GetType().Assembly.FullName).DirectoryName,
+        "TestSrc.wsc"
+      )
+    );
+
+is altered to read
+
+    var src = Microsoft.VisualBasic.Interaction.GetObject(
+      "script:"
+      Path.Combine(
+        new FileInfo(this.GetType().Assembly.FullName).DirectoryName,
+        "TestSrc.wsc"
+      )
+    );
+
+then this test will pass! I'll leave the content here for posterity but it struck me while flipping through this old post that I had seen and addressed this problem since writing this.
