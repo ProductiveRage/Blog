@@ -124,4 +124,4 @@ The really insane thing is that I just can't make this fit into everything else 
 
 I am genuinely astonished that I've never had to look into the extent of the sheer lunacy of these constructs before now. But, on the other hand, is the fact that I've not had to and that, generally, *it's just worked*, something that says a lot about the language designers? Or am I just getting a case of Stockholm Syndrome?!
 
-One thing is for sure, though; next time I question the sanity of any given language or product feature and vent about how it could be much better or make more sense, I think I'll be taking a step back, a deep breath and just thinking "it could be worse, it's not as bad as VBScript's (RE)DIM".
+One thing is for sure, though; next time I question the sanity of any given language or product feature and vent about how it could be much better or make more sense, I think I'll be taking a step back, a deep breath and just bearing in mind **"it could be worse, it's not as bad as VBScript's (RE)DIM"**.
