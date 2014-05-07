@@ -1,0 +1,127 @@
+﻿## VBScript is DIM
+
+At work, we still have some projects that are are written in VBScript (aka "Classic ASP"). Projects that are important to the company and its bottom line. Which, yes, is madness.
+
+> I'm working in C# and C++, languages specifically designed for implementing complex software written by large teams. VBScript is not such a language -- it was designed for simple administration and web scripts
+
+**(Eric Lippert, 2004: [Error Handling in VBScript, Part Three](http://blogs.msdn.com/b/ericlippert/archive/2004/08/25/error-handling-in-vbscript-part-three.aspx))**
+
+> Classic ASP was replaced almost 12 years ago to the day with the platform that remains Microsoft’s framework of choice for building web sites today – ASP.NET. You could forgive someone for persevering with classic ASP a decade ago, perhaps even 5 years ago, but today? I don’t think so. If you’re running this platform today to host anything of any value whatsoever on the web, you’ve got rocks in your head.
+
+**(Troy Hunt, 2014: [Here’s how Bell was hacked – SQL injection blow-by-blow](http://www.troyhunt.com/2014/02/heres-how-bell-was-hacked-sql-injection.html))**
+
+> VBScript; if you thought its ass would age like wine.. if you mean it turns to vinegar, it does. If you mean it gets better with age, it don't.
+
+**(Paraphrasing of [Marsellus Wallace](http://www.imdb.com/character/ch0001789/quotes), Pulp Fiction)**
+
+During one particularly perverse investigation, I came to question the sanity of one of the most basic constructs in the language; the DIM statement. If you have Option Explicit enabled, you have to use DIM for all variables that you intend to access. Unless you happen to use REDIM, which can operate as a kind of implicit DIM. Even though its intention is to alter the state of a variable already declared. One of the strange things I observed about DIM is that it appears to hoist the variable declaration to the top of the current block scope, a bit like JavaScript. This is why something like the following does not result in an error (please excuse the code formatting and colouring here, the pretty-print script I use doesn't seem to like VBScript.. I'm sure it's not the only one) -
+
+    ' Writes out "Empty"
+    Option Explicit
+    WScript.Echo TypeName(a)
+    Dim a
+
+It writes out "Empty" rather than *Variable is undefined: 'a'* which is the VBScript equivalent of the compile error you would get if you tried to do the same sort of thing with C#, which requires variables to be declared *before* use.
+
+Sidebar: When I said that REDIM can act as an "implicit DIM", I mean that that following does not raise an error 
+
+    ' Writes out "Variant()"
+    Option Explicit
+    ReDim a(0)
+    WScript.Echo TypeName(a)
+
+Even though *Option Explicit* is specified and even though ReDim is expected to affect an already-declared variable, this does not error as it implicitly declares the array *a* before settings its dimensions.
+
+Back to DIM, it's worth noting that it is raised to a form of block level scope, so that if there is a DIM statement inside an IF conditional, it will be raised to the scope of either the current function (or property) or to the top of the "outermost scope" if this is code in a script that is not in a class *or* function *or* property -
+
+    ' Writes out "Empty"
+    Option Explicit
+    WScript.Echo TypeName(a)
+    If (False) Then
+        Dim a
+    End If
+
+Even though the body of the conditional is never entered, the DIM is hoisted up to the top of the current scope.
+
+Now, to take a brief segue. The REDIM statement, as already mentioned, is primarily intended to alter an already-declared variable. The REDIM statement (being intended to resize arrays) is invalid, for example, if there are no array dimensions specified, such as with
+
+    ' Throws a compilation error "Expected '('"
+    ReDim a
+
+or
+
+    ' Throws a compilation error "Syntax error"
+    ReDim a()
+
+Perhaps its most common use is with something like
+
+    Dim a()
+    ReDim a(1)
+    WScript.Echo UBound(a)
+
+Let's not worry ourselves with the fact that the target reference need not even be an array, such as with
+
+    Dim a
+    ReDim a(1)
+    WScript.Echo UBound(a)
+
+And let's not worry for now about the fact that there are special cases for variables that were declared with a DIM that specified dimensions; they must be treated as being locked in size
+
+    ' Throws a runtime error "This array is fixed or temporarily locked"
+    Dim a(1)
+    ReDim a(2)
+
+Where I think REDIM really starts to come into its own is when we combine the facts that REDIM appears to act as if there was an implicit DIM whose variable it was affecting and the fact that DIM'd variables are hoisted to the top of the scope -
+
+    ' Throws a runtime error "Variable is undefined: 'a'"
+    Option Explicit
+    WScript.Echo TypeName(a)
+    ReDim a(0)
+
+Right. Excellent. This is not what I would have expected. We are coming now to possibly my favourite. REDIM will act as an implicit DIM in only a limited way; though DIM'd variables are hoisted up in block scope, REDIM'd variables are not.
+
+When DIM'd variables are hoisted, they are hoisted to the top of the block scope - so IF and WHILE constructs are meaningless to a DIM (as we saw with the *If (False) Then* example earlier). REDIM, on the other hand, has other ideas -
+
+    ' Throws a runtime error "Variable is undefined: 'a'"
+    Option Explicit
+    If (False) Then
+        ReDim a(0)
+    End If
+    WScript.Echo TypeName(a)
+
+but
+
+    ' Writes out "Variant()"
+    Option Explicit
+    If (True) Then
+        ReDim a(0)
+    End If
+    WScript.Echo TypeName(a)
+
+This means that variables can actually be conditionally declared. *Conditionally declared!* Such a concept doesn't even exist in languages such as C# and JavaScript! JavaScript is hardly a paragon of virtue in terms of how it deals with declarations of variables and their scope (if we forget all about Option Explicit and DIM and REDIM then it's interesting to note that undeclared variables in VBScript are only "implicitly declared" in the current block scope, unlike JavaScript's decision to promote them to the global scope) but it doesn't *anything* quite as crazy as this.
+
+What's really bizarre is that VBScript's interpreter clearly has the ability to pick up on such inconsistencies. The behaviour of the following example
+
+    ' Throws a compilation error "Name redefined"
+    ReDim a(2)
+    Dim a
+
+makes sense if we consider REDIM to implicitly DIM a variable at the point at which the REDIM appears (if the variable has not already been declared). The "Name redefined" error occurs regardless of the presence or absence of "Option Explicit" - it is a compilation error whilst "Option Explicit" will only throw runtime errors\*.
+
+\* (This makes Option Explicit particularly awkward to retrofit to scripts that were not written with it from the get-go since any resulting errors are runtime errors and will only be raised if a code path is followed where an undeclared variable is accessed, unlike if static analysis was performed to identify undeclared variables before the script was run).
+
+Where it really gets bizarre is the following -
+
+    ' ALSO throws a compilation error "Name redefined"
+    If (False) Then
+        ReDim a(2)
+    End If
+    Dim a
+
+Since this *is* a compilation error then it *is* being identified by static analysis - it is being thrown by considering the content of the script and is not an error that has occurred from *executing* the script.
+
+The really insane thing is that I just can't make this fit into everything else we've seen. If a REDIM would result in an implicit DIM that was hoisted to the top of the scope (like explicit DIM statements are) then this error would make perfect sense. But since we've seen that a REDIM can *conditionally declare* a variable, and the REDIM in this case is inside an unreachable code path, then surely it can't pose a problem for the DIM statement that *will* be executed! And yet it does.
+
+I am genuinely astonished that I've never had to look into the extent of the sheer lunacy of these constructs before now. But, on the other hand, is the fact that I've not had to and that, generally, *it's just worked*, something that says a lot about the language designers? Or am I just getting a case of Stockholm Syndrome?!
+
+One thing is for sure, though; next time I question the sanity of any given language or product feature and vent about how it could be much better or make more sense, I think I'll be taking a step back, a deep breath and just thinking "it could be worse, it's not as bad as VBScript's (RE)DIM".
