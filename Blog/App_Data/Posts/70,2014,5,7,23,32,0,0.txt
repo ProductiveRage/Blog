@@ -1,0 +1,267 @@
+﻿## Happy Logging
+
+I started a project recently and got to the point where some of the classes needed a way to write out warnings and other debug messages so I started hashing out a quick **ILogEvents** interface, as I've done for other projects.
+
+And stopped, wondering if I had half a dozen different projects with very similar logging requirements that I'd written similar code for. There are some reasons that I've allowed this duplication of effort to occur; some code was for internal work projects whereas some was for my personal projects. Some projects had specific requirements like writing requests and responses into particular columns in a database.. but most of the time, general purpose logging-this-or-that boils down to the same sorts of things.
+
+Now, in fairness, through writing this "same sort of thing" over various iterations in varios scenarios, I've refined it down somewhat - which is good - but now I'm past the point where it changes significantly from implementation to implementation. The time for churning this code out over and over for my general purpose logging needs has been and gone!
+
+### What do I really want from a logger?
+
+Although it seems obvious at a first glance what a logger should do (log messages, duh) there are some requirements - or maybe ideals - that I'd like.
+
+1. Each message should have a Log Level (so that I can filter messages to only include Warnings and Errors, if that seems appropriate at the time)
+
+1. There should be delayed evaluation of messages' contents (so that it's possible to generate detailed and expensive-to-generate messages - eg. serialised object graphs - with almost zero cost if those log messages don't end up being recorded anywhere)
+
+1. I want a way to buffer messages so that writes to disk, for example, can be batched up (ideally having a single "write thread" to avoid file locking issues) - in some scenarios this could probably be considered equivalent to saying that it should be possible for the logging to be asynchronous so that callers never have to wait for log requests to succeed before carrying on with their real work (just push the messages onto the buffer and move on)
+
+1. Convenience methods should exist for the most common logging calls, including calls that will ignore any logging errors (if a call to log a warning failed, what am I going to do with a warning about logging the warning.. try to log it?!)
+
+1. The framework should be simple-to-use, without any magic (I had to integrate with a library that used log4net once, I didn't like the static references or how incredibly difficult it seemed to be to configure it programatically)
+
+A follow-on from points 3 (about batching) and 4 (about error handling) is that it should to try to log as much as possible if things go wrong. For example, if a batch of six log messages are to be written and it turns out that one of those messages throws an exception when its message content is evaluated, then that one message should be ignored and the others written. This is a bit different to how I would normally like to write code (fail as fast as possible and identify what failed) but for logging it feels like it makes sense.
+
+### The Interface
+
+So this is my solution. I call it "Happy Logging" since it seems almost impossible to come up with a name for a logging framework that is neither boring nor generic. Instead I thought I'd come up with something cheery and memorable! (You can find ["Happy Logging" on Bitbucket](https://bitbucket.org/DanRoberts/happylogging)).
+
+The core interface itself is very simple, a logger implementation needs to be able to deal with a set of messages. There may be zero, one or multiple entries in that set, but it's considered an error condition to pass a null *messages* reference (the implementation should raise an exception).
+
+    public interface ILogEvents
+    {
+      /// <summary>
+      /// This should throw an exception for a null messages set. Whether exceptions are
+      /// thrown due to any other issues (eg. null references within the messages set,
+      /// messages whose ContentGenerator delegates throw exceptions, file or database
+      /// exceptions if file-writing or database-access is attempted while recording
+      /// the messages, etc..) will vary depending upon the implementation.
+      /// </summary>
+      void Log(IEnumerable<LogEventDetails> messages);
+    }
+
+    public class LogEventDetails
+    {
+      public LogEventDetails(
+        LogLevel logLevel,
+        DateTime logDate,
+        int managedThreadId,
+        Func<string> contentGenerator,
+        Exception optionalException)
+      {
+        if (!Enum.IsDefined(typeof(LogLevel), logLevel))
+          throw new ArgumentOutOfRangeException("logLevel");
+        if (contentGenerator == null)
+          throw new ArgumentNullException("contentGenerator");
+        var content = contentGenerator();
+        if (string.IsNullOrWhiteSpace(content))
+          throw new ArgumentException("Null/empty content specified");
+
+        LogLevel = logLevel;
+        LogDate = logDate;
+        ManagedThreadId = managedThreadId;
+        ContentGenerator = contentGenerator;
+        OptionalException = optionalException;
+      }
+
+      public LogLevel LogLevel { get; private set; }
+
+      public DateTime LogDate { get; private set; }
+
+      public int ManagedThreadId { get; private set; }
+
+      /// <summary>
+      /// This will never be null
+      /// </summary>
+      public Func<string> ContentGenerator { get; private set; }
+
+      /// <summary>
+      /// This may be null as it is optional information (there is no guarantee that it
+      /// will be non-null even if the LogLevel is Error)
+      /// </summary>
+      public Exception OptionalException { get; private set; }
+    }
+
+    public enum LogLevel
+    {
+      Debug,
+      Info,
+      Warning,
+      Error
+    }
+
+I considered documenting this interface with stricter expected behaviour regarding null entries in the set but logger implementations have more to worry aboun that just null messages. Since the messages' *ContentGenerator* delegates aren't executed until the messages actually need to be logged, there's no way to know if they're going to throw an exception or not until that time. So it seemed to me that it was best to leave it up to the logger implementation to deal with "dodgy messages" (null references or messages whose *ContentGenerators* blow up). This way it is an explicit expectation that the logger will have to do so, and something that the implementation writer should be aware of (since it's expressed in the interface's doc comment!).
+
+The thing to take away from all this talk about exception-handling is that it should be something for the implementation to worry about rather than the caller. The caller should just be able to hand off some information and go about its day!
+
+To this end, there are a range of extension methods with two main purposes: exception-ignoring and call abbreviation. This relates to point 4 in my original list; I want to be able to write convenient log-writing code. Most of the time I don't want to have to care if the logging failed (since, again, what can I do with this information) and a lot of the time I don't want to specify a batch of fully-specified messages. I might want to just record some particular warning message text for a condition encountered - it's happened right now, so I don't want to have to specify **DateTime.Now** and it's happened on the current thread, so I don't want to have to specify **Thread.CurrentThread.ManagedThreadId**. And there was no exception so I don't have an exception reference to log information about. All I want to do is specify a log level and a content generator delegate and be done with it:
+
+    _logger.LogIgnoringAnyError(LogLevel.Warning, () => "Something strange happened");
+
+These are what the extension methods are for.
+
+The first takes all of the information for a single log message and abbreviates the code required to log it (the caller doesn't have to create a **LogEventDetails** instance and wrap it in an enumerable set). But it doesn't provide any exception-hiding.
+
+The second method (the first of the *LogIgnoringAnyError* methods) calls the first method but wraps its in a try..catch so that any exceptions don't bubble up to the caller.
+
+Then there are two further variations. The first doesn't have a *logDate* argument (it passes along **DateTime.Now**) or a *managedThreadId* (it passes along **Thread.CurrentThread.ManagedThreadId**). The second doesn't take *logDate* or *managedThreadId* arguments, nor does it take an *exception* argument, it passes that along as null. This final extension method takes the bare minimum information possible (Log Level and content generator) and this is the method used in the above example.
+
+    public static class ILogEvents_Extensions
+    {
+        public static void Log(
+          this ILogEvents logger,
+          LogLevel logLevel,
+          DateTime logDate,
+          int managedThreadId,
+          Func<string> contentGenerator,
+          Exception exception)
+        {
+            if (logger == null)
+                throw new ArgumentNullException("logger");
+
+            logger.Log(new[] { new LogEventDetails(
+              logLevel,
+              logDate,
+              managedThreadId,
+              contentGenerator,
+              exception
+            )});
+        }
+
+        public static void LogIgnoringAnyError(
+          this ILogEvents logger,
+          LogLevel logLevel,
+          DateTime logDate,
+          int managedThreadId,
+          Func<string> contentGenerator,
+          Exception exception)
+        {
+            if (logger == null)
+                throw new ArgumentNullException("logger");
+
+            try
+            {
+                Log(logger, logLevel, logDate, managedThreadId, contentGenerator, exception);
+            }
+            catch { }
+        }
+
+        public static void LogIgnoringAnyError(
+          this ILogEvents logger,
+          LogLevel logLevel,
+          Func<string> contentGenerator,
+          Exception exception)
+        {
+            if (logger == null)
+                throw new ArgumentNullException("logger");
+
+            LogIgnoringAnyError(
+              logger,
+              logLevel,
+              DateTime.Now,
+              Thread.CurrentThread.ManagedThreadId,
+              contentGenerator,
+              exception
+            );
+        }
+
+        public static void LogIgnoringAnyError(
+          this ILogEvents logger,
+          LogLevel logLevel,
+          Func<string> contentGenerator)
+        {
+            if (logger == null)
+                throw new ArgumentNullException("logger");
+
+            LogIgnoringAnyError(logger, logLevel, contentGenerator, null);
+        }
+    }
+
+### The exciting stuff, the implementations!
+
+Ok, now we're through the intro, let's get to the real meat! There are implementations **ConsoleLogger** and **TraceLogger** (for when you want to write to the Console or to Trace), there's a **NullLogger** (for when you want to disable logging) and there's a **FilteredLogger** (that wraps another logger but only passes through messages with particular log levels). There's a **CombinedLogger** (which wraps multiple loggers and passes through messages to all of them) and there's a **FileLogger** (which writes messages immediately to disk). The **FileLogger** may either be provided a hard-coded filename or be given a delegate that generates a filename for every write (this makes it easy to write log files whose filename includes the current date and time).
+
+The **ConsoleLogger**, **TraceLogger** and **FileLogger** all write out message details in a default format that can overridden if required.
+
+But this is still child's play. 
+
+I said right at the start that one of my aims was to be able to buffer messages / process them asynchronously. For scenarios like this, there is the **ThrottlingLogger**, which places all messages onto an internal queue and periodically flushes its queue's contents to another logger. The flushing period can be based upon a minimum frequency (in terms of time) or upon an upper limit on the number of items in the queue (or both!).
+
+The primary constructor for this class is
+
+    public ThrottlingLogger(
+      ILogEvents logger,
+      TimeSpan mimimumFrequency,
+      int maximumNumberOfBufferedItems,
+      ErrorBehaviourOptions individualLogEntryErrorBehaviour)
+
+The *individualLogEntryErrorBehaviour* argument may take a value of either "Ignore" or "ThrowException". This is the behaviour to apply when an issue is encountered with a single message within a set, whether that be a null message reference or one whose *ContentGenerator* throws an exception. The default value should be considered to be "Ignore" for most cases.
+
+(Note that the **ConsoleLogger**, **TraceLogger** and **FileLogger** also have constructors where an *individualLogEntryErrorBehaviour* may be specified, this is not something that is specific to the **ThrottlingLogger**).
+
+Many of the loggers in the solution have alternate "shorthand" constructors, where sensible default values are used. For the **ThrottlingLogger** it is of the form
+
+    public ThrottlingLogger(ILogEvents logger)
+
+where *mimimumFrequency* is provided with a default value of 2 seconds, *maximumNumberOfBufferedItems* a default of 50 and *individualLogEntryErrorBehaviour* a default of "Ignore".
+
+For a long-running service that logs its information to disk (which is one of the most comon cases that I need this sort of thing for), these seem like appropriate starting values.
+
+It should be noted that, for such a service, it would make most sense for a single logger reference to be used by all request threads, otherwise there could still be contention when flushing the messages to disk. The **ThrottlingLogger** uses a **ConcurrentQueue** internally and so is thread-safe for pushing messages to. If a single **ThrottlingLogger** is used by all threads then it will mean that only one thread will ever be writing the disk log at a time, which will avoid any "file in use" IO errors that more naive disk-writing log mechanisms may risk.
+
+Your favourite IoC framework can help with this, if that's what floats your boat. (Personally, I think you can go a long way before needing to rely upon a full "framework" to handle all of your dependencies, but let's not get bogged down with all that here).
+
+### Error BackTracking
+
+Ok! So far, so good. But now I want to go one step further and support what I've heard called "opportunistic logging". One of the big problems with logging is trying to work out what to log and when. If you log *everything* then your log files get big quick (or your-favoured-persistence-mechanism takes up a lot of space quickly - maybe you're logging to SQL, for example). The CPU cost of logging may also become a factor if your detailed (ie. Debug level) messages perform complicated analysis or serialisation of complex data structures. However, if you don't log *enough*, then when things go wrong the logs don't give you enough clues!
+
+This is where opportunistic logging comes in, the logger will queue up messages and - when things are going well - throw most of them away. But when an Error message is recorded, the logger will flush everything out of its queue, writing away all of the information leading up to the problem. Since messages contents' are lazily-evaluated, potentially-expensive Debug messages can be prepared but the overhead of evaluating their content not be paid unless there is an error scenario in which the cost will be worth it.
+
+So you get compact logs when things are going well and detailed logs when things go wrong. The best of both worlds!
+
+The primary constructor for the **ErrorWithBackTrackLogger** class is:
+
+    public ErrorWithBackTrackLogger(
+      ILogEvents logger,
+      int maximumNumberOfHistoricalMessagesToMaintain,
+      int maximumNumberOfHistoricalMessagesToIncludeWithAnErrorEntry,
+      HistoryLoggingBehaviourOptions historyLoggingBehaviour,
+      ErrorBehaviourOptions individualLogEntryErrorBehaviour)
+
+There *are* some complications to bear in mind. The logger is going to be maintaining a queue of messages, most of which shouldn't be required. Depending upon how many requests are being handled and how chatty (in terms of logging) the processing of these requests is, this in-memory queue could get big quickly. This is why the **ErrorWithBackTrackLogger** has a *maximumNumberOfHistoricalMessagesToMaintain*; to put a cap on it. But it's another balancing act around not wanting to maintain too many queued messages at any one time, weighed against the need to have enough messages in the queue that when a "backlog" is written with an error that *enough* history is written to be useful.
+
+In addition to this, you need to specify whether the backlog written includes *all* messages in the queue or just the messages whose *managedThreadId* matches that of the Error log message. For the more common cases that I encounter, I would specify "IncludePrecedingMessagesFromTheSameThreadOnly" for the *historyLoggingBehaviour* argument but "IncludeAllPrecedingMessages" is the alternative.
+
+Like the other logger implementations, this class has a shorthand constructor
+
+    public ErrorWithBackTrackLogger(ILogEvents logger)
+
+which uses default values of 1000 for *maximumNumberOfHistoricalMessagesToMaintain*, 100 for *maximumNumberOfHistoricalMessagesToIncludeWithAnErrorEntry*, "IncludePrecedingMessagesFromTheSameThreadOnly" for *historyLoggingBehaviour* and "Ignore" for *individualLogEntryErrorBehaviour*. These feel like sensible starting values that may be easily tweaked if different use cases require it.
+
+Just to clarify: *maximumNumberOfHistoricalMessagesToMaintain* is the cap on the queue size and *maximumNumberOfHistoricalMessagesToIncludeWithAnErrorEntry* is the cap on the number of backlog messages that will be flushed out with any error. If you had a service that was only ever going to service a single request at a time or if you had a case where you wanted to flush *all* queued log messages (and not just those that originated on the same thread) with an Error message, then these two values may as well be set to the same value. However, if requests are concurrent, independent and have a dedicated (managed) thread each, then it makes sense for *maximumNumberOfHistoricalMessagesToMaintain* to be larger since it must maintain backlog information for all of the requests that are being processed at any given time.
+
+### Combining loggers
+
+To conclude, let's look at putting some of these loggers together:
+
+    var logger = new CombinedLogger(
+      new FilteredLogger(
+        new TraceLogger(),
+        LogLevel.Info, LogLevel.Warning, LogLevel.Error
+      ),
+      new ThrottlingLogger(
+        new ErrorWithBackTrackLogger(
+          new FileLogger(
+            () => new FileInfo("Error " + DateTime.Now.ToString("yyyy-MM-dd") + ".log")
+          )
+        )
+      )
+    );
+
+This will write all messages with level Info, Warning and Error to the Trace (so if you have a Trace Listener attached to the process you can see most of what's happening as it happens) but it will also be on the look out for any Error messages and, when encountered, will flush a backlog of messages to an error log on disk. The error log's filename will include today's date and the log file writer backs off a **ThrottlingLogger** to ensure that, in the unfortunate event of multiple requests erroring at the same time, there is only a single thread trying to write to the disk. It would be bad if some of this valuable error log information could not be written to disk because multiple threads were trying to do it simultaneously and one thread prevented the others due to file locking!
+
+In the above example, the only log level not being passed to the **TraceLogger** is Debug. This is the log level that I would recommend be used for any expensive messages, such as serialised representations of requests, responses or interim state. This ensures that the work to generate those messages is not performed unless it's really useful, like when an error has occurred and we want all the information we can get (the **ErrorWithBackTrackLogger** writes messages for *all* log levels).
+
+And with that, we're done! This library is simple enough that I can happily use it with any new project that I start but it can also be easily configured to handle amost every situation I've needed a logger for that I can think of in the last few years. A lot of unusual cases can probably be dealt with by tweaking values on the current loggers or by extending the functionality by writing a new implementation (such as one to write to a persistence mechanism other than disk).
+
+[Happy Logging](https://bitbucket.org/DanRoberts/happylogging) indeed! :)
