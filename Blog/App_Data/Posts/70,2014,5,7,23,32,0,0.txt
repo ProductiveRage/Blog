@@ -53,9 +53,6 @@ The core interface itself is very simple, a logger implementation needs to be ab
           throw new ArgumentOutOfRangeException("logLevel");
         if (contentGenerator == null)
           throw new ArgumentNullException("contentGenerator");
-        var content = contentGenerator();
-        if (string.IsNullOrWhiteSpace(content))
-          throw new ArgumentException("Null/empty content specified");
 
         LogLevel = logLevel;
         LogDate = logDate;
@@ -265,3 +262,40 @@ In the above example, the only log level not being passed to the **TraceLogger**
 And with that, we're done! This library is simple enough that I can happily use it with any new project that I start but it can also be easily configured to handle amost every situation I've needed a logger for that I can think of in the last few years. A lot of unusual cases can probably be dealt with by tweaking values on the current loggers or by extending the functionality by writing a new implementation (such as one to write to a persistence mechanism other than disk).
 
 [Happy Logging](https://bitbucket.org/DanRoberts/happylogging) indeed! :)
+
+### Update (8th May 2014)
+
+Following feedback, I've got a couple of updates.
+
+Firstly, the **LogEventDetails** implementation I originally posted was executing the *contentGenerator* delegate to ensure that it wasn't null or blank. This is crazy, since it totally negates the effort to enable lazily-evaluated messages! So I've removed that from the code here and on Bitbucket. I also tweaked the default message formatter to deal with the case of an empty message (that code is just in the repo, it's not in this post).
+
+I then added another extension method for logging exceptions -
+
+    public static void LogIgnoringAnyError(this ILogEvents logger, Exception error)
+    {
+      if (logger == null)
+        throw new ArgumentNullException("logger");
+
+      // If there's no error then there's nothing to log, but this method is not supposed
+      // to throw an error when operating against a logger implementation. (A null logger
+      // reference means it's NOT operating against an actual logger, which is why the
+      // ArgumentNullException above is acceptable).
+      if (error == null)
+        return;
+
+      LogIgnoringAnyError(logger, LogLevel.Error, () => "", error);
+    }
+
+I'm sure that someone left a comment saying that it's a bit awkward to log errors when you need to specify a content generator, but you have no content to add other than what is in the exception. Weirdly, I can't see this comment any more! I don't know if the author removed it in a manner that means I can't see that it ever existed.. Nonetheless, I thought this was a good idea!
+
+This method takes only an exception argument (if null is passed then no logging is performed), so now you can log in a manner such as
+
+    try
+    {
+      AttemptSomething();
+    }
+    catch(Exception e)
+    {
+      _logger.LogIgnoringError(e);
+      throw;
+    }
