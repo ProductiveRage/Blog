@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Web;
 using System.Web.Mvc;
 using System.Web.Mvc.Html;
+using Blog.Models;
 using BlogBackEnd.Caching;
 using BlogBackEnd.FullTextIndexing;
 using BlogBackEnd.Models;
@@ -18,7 +19,7 @@ namespace Blog.Helpers.Posts
 {
 	public static class PostHelper
 	{
-		public static IHtmlString RenderPost(this HtmlHelper helper, Post post, IRetrievePostSlugs postSlugRetriever, ICache cache)
+		public static IHtmlString RenderPost(this HtmlHelper helper, PostWithRelatedPostStubs post, IRetrievePostSlugs postSlugRetriever, ICache cache)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
@@ -44,7 +45,7 @@ namespace Blog.Helpers.Posts
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
 
-		public static IHtmlString RenderPostForRSS(this HtmlHelper helper, Post post, Uri requestHostUrl, IRetrievePostSlugs postSlugRetriever, ICache cache)
+		public static IHtmlString RenderPostForRSS(this HtmlHelper helper, PostWithRelatedPostStubs post, Uri requestHostUrl, IRetrievePostSlugs postSlugRetriever, ICache cache)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
@@ -82,7 +83,13 @@ namespace Blog.Helpers.Posts
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
 
-		private static string GetRenderableContent(HtmlHelper helper, Post post, bool includeTitle, bool includePostedDate, bool includeTags, IRetrievePostSlugs postSlugRetriever)
+		private static string GetRenderableContent(
+			HtmlHelper helper,
+			PostWithRelatedPostStubs post,
+			bool includeTitle,
+			bool includePostedDate,
+			bool includeTags,
+			IRetrievePostSlugs postSlugRetriever)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
@@ -103,9 +110,24 @@ namespace Blog.Helpers.Posts
 			content.Append(
 				MarkdownHelper.TransformIntoHtml(markdownContent)
 			);
+			if (post.RelatedPosts.Any())
+			{
+				content.Append("<div class=\"Related\">");
+				content.Append("<h3>You may also be interested in</h3>");
+				content.Append("<ul>");
+				foreach (var relatedPost in post.RelatedPosts)
+				{
+					content.AppendFormat(
+						"<li>{0}</li>",
+						helper.ActionLink(relatedPost.Title, "ArchiveBySlug", "ViewPost", new { Slug = relatedPost.Slug }, null)
+					);
+				}
+				content.Append("</ul>");
+				content.Append("</div>");
+			}
 			if (includePostedDate)
 				content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
-			if (includeTags && (post.Tags.Any()))
+			if (includeTags && post.Tags.Any())
 			{
 				content.Append("<div class=\"Tags\">");
 				content.Append("<label>Tags:</label>");
