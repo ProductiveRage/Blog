@@ -72,7 +72,9 @@ namespace Blog.Controllers
 				"Index",
 				new PostListModel(
 					postMatch.Post.Title,
-					new NonNullImmutableList<Post>(new[] { postMatch.Post }),
+					GetPostsWithRelatedPostStubs(
+						new NonNullImmutableList<Post>(new[] { postMatch.Post })
+					),
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
@@ -96,7 +98,9 @@ namespace Blog.Controllers
 				"Index",
 				new PostListModel(
 					tag.Trim(),
-					_postRepository.GetByTag(tag),
+					GetPostsWithRelatedPostStubs(
+						_postRepository.GetByTag(tag)
+					),
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
@@ -126,7 +130,7 @@ namespace Blog.Controllers
 				"Index",
 				new PostListModel(
 					new DateTime(year.Value, month.Value, 1).ToString("MMMM yyyy"),
-					posts,
+					GetPostsWithRelatedPostStubs(posts),
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
@@ -147,6 +151,27 @@ namespace Blog.Controllers
 			if (mostRecentPostDate == null)
 				return new HttpNotFoundResult();
 			return ArchiveByMonth(mostRecentPostDate.Value.Month, mostRecentPostDate.Value.Year);
+		}
+
+		private NonNullImmutableList<PostWithRelatedPostStubs> GetPostsWithRelatedPostStubs(NonNullImmutableList<Post> posts)
+		{
+			if (posts == null)
+				throw new ArgumentNullException("posts");
+
+			return posts
+				.Select(post => new PostWithRelatedPostStubs(
+					post.Id,
+					post.Posted,
+					post.LastModified,
+					post.Slug,
+					post.RedirectFromSlugs,
+					post.Title,
+					post.IsHighlight,
+					post.MarkdownContent,
+					_postRepository.GetByIds(post.RelatedPosts).Cast<PostStub>().ToNonNullImmutableList(),
+					post.Tags
+				))
+				.ToNonNullImmutableList();
 		}
 
 		private class PostSlugRetriever : IRetrievePostSlugs

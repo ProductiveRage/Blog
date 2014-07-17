@@ -39,7 +39,22 @@ namespace Blog.Controllers
 			Response.ContentType = "text/xml";
 			return View(
 				new RSSFeedModel(
-					posts.Sort((x, y) => -x.Posted.CompareTo(y.Posted)).Take(_maximumNumberOfPostsToPublish).ToNonNullImmutableList(),
+					posts
+						.Sort((x, y) => -x.Posted.CompareTo(y.Posted))
+						.Take(_maximumNumberOfPostsToPublish)
+						.Select(post => new PostWithRelatedPostStubs(
+							post.Id,
+							post.Posted,
+							post.LastModified,
+							post.Slug,
+							post.RedirectFromSlugs,
+							post.Title,
+							post.IsHighlight,
+							post.MarkdownContent,
+							_postRepository.GetByIds(post.RelatedPosts).Cast<PostStub>().ToNonNullImmutableList(),
+							post.Tags
+						))
+						.ToNonNullImmutableList(),
 					new PostSlugRetriever(posts),
 					_cache
 				)

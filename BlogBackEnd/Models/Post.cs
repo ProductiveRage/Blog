@@ -16,13 +16,16 @@ namespace BlogBackEnd.Models
 			string title,
 			bool isHighlight,
 			string markdownContent,
-			NonNullImmutableList<string> tags)
+			ImmutableList<int> relatedPosts,
+			NonNullOrEmptyStringList tags)
 			: base(id, posted, lastModified, slug, title, isHighlight)
 		{
 			if (redirectFromSlugs == null)
 				throw new ArgumentNullException("redirectFromSlugs");
 			if (string.IsNullOrWhiteSpace(markdownContent))
 				throw new ArgumentException("Null/blank markdownContent content");
+			if (relatedPosts == null)
+				throw new ArgumentNullException("relatedPostIds");
 			if (tags == null)
 				throw new ArgumentNullException("tags");
 			if (tags.Any(t => t.Trim() == ""))
@@ -30,7 +33,8 @@ namespace BlogBackEnd.Models
 
 			RedirectFromSlugs = redirectFromSlugs;
 			MarkdownContent = markdownContent;
-			Tags = new NonNullOrEmptyStringList(tags.Distinct());
+			RelatedPosts = relatedPosts;
+			Tags = tags;
 		}
 
 		/// <summary>
@@ -42,6 +46,11 @@ namespace BlogBackEnd.Models
 		/// This will never return null or empty
 		/// </summary>
 		public string MarkdownContent { get; private set; }
+
+		/// <summary>
+		/// This will never be null (though it may be an empty set)
+		/// </summary>
+		public ImmutableList<int> RelatedPosts { get; private set; }
 
 		/// <summary>
 		/// This will never return null nor any (case-sensitive) duplicates

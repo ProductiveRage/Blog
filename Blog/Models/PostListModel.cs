@@ -9,7 +9,7 @@ namespace Blog.Models
 	{
 		public PostListModel(
 			string title,
-			NonNullImmutableList<Post> posts,
+			NonNullImmutableList<PostWithRelatedPostStubs> posts,
 			NonNullImmutableList<PostStub> recent,
 			NonNullImmutableList<PostStub> highlights,
 			NonNullImmutableList<ArchiveMonthLink> archiveLinks,
@@ -56,7 +56,7 @@ namespace Blog.Models
 		/// <summary>
 		/// This will never return null
 		/// </summary>
-		public NonNullImmutableList<Post> Posts { get; private set; }
+		public NonNullImmutableList<PostWithRelatedPostStubs> Posts { get; private set; }
 
 		/// <summary>
 		/// This may be used to determine - for example - whether comments should be enabled in the view (if they are only to be enabled when viewing

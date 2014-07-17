@@ -71,6 +71,7 @@ namespace Blog.Models
 						  title,
 						  fileSummary.IsHighlight,
 						  fileContents,
+						  fileSummary.RelatedPostIds,
 						  fileSummary.Tags
 						));
 					}
@@ -145,39 +146,50 @@ namespace Blog.Models
 			else
 				return null;
 
-			var tags = segments.ToList();
-			tags.RemoveRange(0, 8);
+			var relatedPostIds = new List<int>();
+			var tags = new List<string>();
+			foreach (var relatedPostIdOrTag in segments.Skip(8))
+			{
+				int relatedPostId;
+				if (int.TryParse(relatedPostIdOrTag, out relatedPostId))
+					relatedPostIds.Add(relatedPostId);
+				else
+					tags.Add(relatedPostIdOrTag);
+			}
 
 			return new FileSummaryEntry(
 				id,
 				postDate,
 				isHighlight,
-				tags.Select(t => t.Trim()).Where(t => t != "").ToNonNullImmutableList()
+				relatedPostIds.ToImmutableList(),
+				new NonNullOrEmptyStringList(
+					tags.Select(t => t.Trim()).Where(t => t != "").Distinct()
+				)
 			);
 		}
 
 		private class FileSummaryEntry
 		{
-			private int _id;
-			private DateTime _postDate;
-			private bool _isHighlight;
-			private NonNullImmutableList<string> _tags;
-			public FileSummaryEntry(int id, DateTime postDate, bool isHighlight, NonNullImmutableList<string> tags)
+			public FileSummaryEntry(int id, DateTime postDate, bool isHighlight, ImmutableList<int> relatedPostIds, NonNullOrEmptyStringList tags)
 			{
+				if (relatedPostIds == null)
+					throw new ArgumentNullException("relatedPostIds");
 				if (tags == null)
 					throw new ArgumentNullException("tags");
 				if (tags.Any(t => t.Trim() == ""))
 					throw new ArgumentException("Blank tag specified");
 
-				_id = id;
-				_postDate = postDate;
-				_isHighlight = isHighlight;
-				_tags = tags;
+				Id = id;
+				PostDate = postDate;
+				IsHighlight = isHighlight;
+				RelatedPostIds = relatedPostIds;
+				Tags = tags;
 			}
-			public int Id { get { return _id; } }
-			public DateTime PostDate { get { return _postDate; } }
-			public NonNullImmutableList<string> Tags { get { return _tags; } }
-			public bool IsHighlight { get { return _isHighlight; } }
+			public int Id { get; private set; }
+			public DateTime PostDate { get; private set; }
+			public ImmutableList<int> RelatedPostIds { get; private set; }
+			public NonNullOrEmptyStringList Tags { get; private set; }
+			public bool IsHighlight { get; private set; }
 		}
 	}
 }

@@ -8,7 +8,7 @@ namespace Blog.Models
 {
 	public class RSSFeedModel
 	{
-		public RSSFeedModel(NonNullImmutableList<Post> posts, IRetrievePostSlugs postSlugRetriever, ICache postContentCache)
+		public RSSFeedModel(NonNullImmutableList<PostWithRelatedPostStubs> posts, IRetrievePostSlugs postSlugRetriever, ICache postContentCache)
 		{
 			if (posts == null)
 				throw new ArgumentNullException("posts");
@@ -28,7 +28,7 @@ namespace Blog.Models
 		/// This will never return null nor empty (if there are no Posts to list in an RSS Feed then a 404 should have been returned).
 		///They will be ordered my posted date, descending.
 		/// </summary>
-		public NonNullImmutableList<Post> Posts { get; private set; }
+		public NonNullImmutableList<PostWithRelatedPostStubs> Posts { get; private set; }
 		
 		/// <summary>
 		/// This will never be null
