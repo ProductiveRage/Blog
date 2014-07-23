@@ -1,0 +1,292 @@
+## JavaScript dependencies that work with Brackets, Node and in-browser
+
+**tl;dr** - I wanted to create a JavaScript package I could use in an [Adobe Brackets](http://brackets.io) extension *and* release to [npm](https://www.npmjs.org) for use with [Node.js](http://nodejs.org) *and* have work in the browser as an old-school script tag import. It turned out that my knowledge of JavaScript dependency management was woefully out of date and while I came up with this solution..
+
+    /*jslint vars: true, devel: true, nomen: true, indent: 4, maxerr: 50 */
+    /*global define, require, module */
+    (this.define || function (f) { "use strict"; var n = "dependencyName", r = f((typeof (require) === "undefined") ? function () { } : require); if ((typeof (module) !== "undefined") && module.exports) { module.exports = r; } else { this[n] = r; } }).call(this, function (require) {
+      "use strict";
+
+      return {
+        // Dependency interface goes here..
+      };
+    });
+
+.. there may very well have plenty of room for improvement - but the meandering journey to get here taught me a lot (and so if there is a better solution out there, I'll happily switch over to it and chalk this all up to a learning experience!).
+
+This is the story of how I arrived at the cryptic jumble of characters above.
+
+### Back to the beginning
+
+I've been working on an extension for [Adobe Brackets](http://brackets.io), an editor I've been trying out recently and liking for writing JavaScript and LESS stylesheets in particular. I used to instinctively go to Visual Studio for everything, but recently it's gone from starting up in a couple of seconds to taking over 40 if not a minute (I think it was since I installed Xamarin and then NuGet for VS 2010 that it got really bad, but it might have been something else and I'm unfairly misassigning blame).
+
+Brackets is written in JavaScript and its extensions are JavaScript modules, the API seems excellent so far. I like that linting of files is, by default, enabled on save. It has JSLint checks built in for JavaScript files and JSLint is specified in the [Brackets Coding Conventions](https://github.com/adobe/brackets/wiki/Brackets-Coding-Conventions). I actually quite like a good coding convention or style guide - it takes the guess work out of a lot of decisions and, in writing a Brackets extension, I thought I'd jump right in and try to make sure that I write everything "Brackets style".
+
+Although I have written a lot of JavaScript in the past (and continue to do so), I've gotten out of touch with modern dependency management. JavaScript dependencies for projects at work are based on a custom dependency manager of sorts and my personal projects tend to be a bit more ad hoc.
+
+### Good practices for browser scripts, leading into Node.js
+
+I started off writing a module in my normal manner, which tends to involve wrapping the code in an [IIFE](http://en.wikipedia.org/wiki/Immediately-invoked_function_expression) and then exporting public references into a fixed namespace. This works fine if the JavaScript is being loaded directly into a web page - eg.
+
+    (function () {
+
+      var myModule = this.myModule || {};
+      myModule.AwesomeProcessor = {
+        Process: function (value) {
+          // Whatever..
+        };
+      }
+
+    }());
+
+This allows code elsewhere in the page to call "myModule.AwesomeProcessor.Process(value)" and ensures that any private methods and variables used to describe the "AwesomeProcessor" don't leak out and that nothing in global scope gets stomped over (unless there's already a "myModule.AwesomeProcessor" somewhere).
+
+Then I looked into Node.js, since it's on my list of things to know more about, that I currently know very little about. I knew that there was some sort of standard dependency management system for it since I've seen "npm" mentioned all over the place. I went to [npmjs.org](https://www.npmjs.org) to try to find out more about how this worked. Not knowing where to start, I plucked out the first name that came to mind: [Underscore](https://github.com/jashkenas/underscore), to see if it was listed. I clicked through to its [GitHub](https://github.com/jashkenas/underscore) page to see how it was arranged and found
+
+    // Establish the root object, `window` in the browser, or `exports` on the server.
+    var root = this;
+
+Flipping to information specifically about writing Node.js modules (why didn't I just start [here](http://nodejs.org/docs/latest/api/modules.html#modules_modules)??) I find that the *exports* reference is one that properties can be set on that will be part of the object returned from a "requires" call. For example, if I have a script that requests a dependency be loaded with
+
+    var simple = require('./simplest-module-ever');
+
+and the file "simplest-module-ever.js" contains
+
+    exports.answer = 42;
+
+then simple will be set to an object with a property "answer" with value 42. Easy!
+
+This example was taken directly from "[Creating Custom Modules](http://howtonode.org/creating-custom-modules)" on "How to Node", so thanks to Aaron Blohowiak! :)
+
+Unlike the "exports.answer" example above, the Underscore file is contained within an interesting IIFE -
+
+    (function() {
+
+      // Establish the root object, `window` in the browser, or `exports` on the server.
+      var root = this;
+
+      // The rest of the file..
+
+    }.call(this));
+
+The ".call(this)" at the bottom ensures that the "this" reference is maintained inside the function, so that when it's loaded into Node "this" is the "exports" reference that may be added to and in the browser "this" is the window, which also may have properties set on it. But the IIFE means that if it *is* being loaded in the browser that no global state is stomped on or private references leaked. When loaded into Node, some clever magic is done that ensures that the content is loaded in its own scope and that it doesn't leak anything out, which is why no IIFE is present on the "[Creating Custom Modules](http://howtonode.org/creating-custom-modules)" example.
+
+It's also worth noting on that page, that "Node implements [CommonJS Modules 1.0](http://www.commonjs.org/specs/modules/1.0)", which is helpful information when trying to compare all of the different mechanism that different solutions use.
+
+At this point, I did't know the difference between RequireJS, CommonJS, AMD; I had just heard the names. And didn't really know what else could be out there that I *hadn't* heard of!
+
+### What does Brackets use?
+
+Having considered the above, I then came to realise that I hadn't actually looked into how Brackets deals with modules - which was somewhat foolish, considering a Brackets extension was to be my end goal! Part of the reason for this is that I got sidelined looking into pushing a package onto [npmjs](https://www.npmjs.org), but I'll talk about that another day, I don't want to stumble too far from my dependency implementation adventure right now.
+
+I learned from [Writing Brackets extension - part 1](http://artoale.com/tutorial/brackets/2013/09/30/writing-brackets-extension-01) that
+
+>  Brackets extensions use the AMD CommonJS Wrapper
+
+and that this essentially means that each file has a standard format
+
+    define(function (require, exports, module) {
+    
+    });
+
+where define is a method that is provided by the dependency management system that calls an anonymous factory method that it provides with function arguments "require" (for nested dependencies), "export" (the same as with Node) and "module" (which I'm not going to talk about until further down). The factory method returns an object which is the dependency that has been loaded.
+
+The advantage of it being a non-immediately invoked function is that it can be dealt with asynchronously (which is what the A in AMD stands for) and only evaluated when required.
+
+To mirror the example earlier, this could be
+
+    define(function (require, exports, module) {
+    
+      return {
+        Process: function (value) {
+          // Whatever..
+        };
+      }
+
+    });
+
+This dependency would be the "AwesomeProcessor" dependency and no namespace would be required to avoid clashes, since calling code requiring this dependency would state
+
+    var awesomeProcessor = require("awesomeprocessor");
+
+and scoping is cleverly handled so that no global state may be affected.
+
+The define method may also be called with a reference to return directly as the dependency - eg.
+
+    define({
+      Process: function (value) {
+        // Whatever..
+      }
+    });
+
+in which case the dependency is not lazily instantiated, but otherwise the pattern is very similar.
+
+### So I can't have one file work with Node *and* with Brackets?? :(
+
+Now I had my npm module that I wanted to use as a Brackets dependency, but the two formats looked completely different.
+
+There has been a lot written about this, particularly there is the "[UMD (Universal Module Definition)](https://github.com/umdjs/umd)" code on GitHub with lots of patterns of ways to have modules that combine support for a variety of dependency managers, but when I looked at some of the examples I wasn't sure exactly what each was doing and I couldn't tell immediately which example (if any) would address the combination I was interested in; to work with Node *and* with Brackets *and* as a browser script.
+
+After some more stumbling around, I encounted [A Simplified Universal Module Definition](http://webreflection.blogspot.co.uk/2013/01/a-simplified-universal-module-definition.html) which had this pattern to work with "define" if it was present -
+
+    (this.define || function(){})(
+    this.what = function(){
+      var Hello = "Hello";
+      return {
+        ever: function () {
+          console.log(Hello);
+        }
+      };
+    }());
+
+I liked the look of this, it's compact and clever!
+
+When loaded using AMD, the "define" method is called using the dependency-reference-passed-as-argument approach, as opposed to factory-function-for-instantiating-dependency-reference-passed-as-argument. The argument passed is "this.what = function() { .. }" which is *not* an equality check, it will set "this.what" to the return value of the anonymous function and also pass on that value to the define method - it's like
+
+    return a = "MyName";
+
+this will set a to "MyName" and then return "a" (which is, of course, now "MyName").
+
+So that works in my Brackets scenario just fine (note that the "this" reference is a temporary object in the Brackets case, and the setting of the "what" property on it effectively results in nothing happening - it is the fact that a reference is passed to the "define" method that makes things happen).
+
+When loaded into Node, where "define" is not available, it calls an anonymous "empty function" (one that performs no action), performing the "this.what = function() { .. }" work to pass as the argument. The argument is ignored as the empty function does nothing, but the "this.what" reference has been set. This works for the browser as well!
+
+It took me a couple of minutes to wrap my head around this, but I appreciated it when it clicked!
+
+One thing I didn't like, though, was that there seemed to be an "extra" object reference required in Node. If that file was my "what" dependency loaded in with
+
+    var a = require("what");
+
+then to get at the "ever" function, I need to access
+
+    a.what.ever();
+
+I would rather be able to say
+
+    var what = require("what");
+    what.ever();
+
+This is how it would appear in the Brackets, since the reference to "what" is returned directly.
+
+However, in the browser, this is desirable behaviour if I'm loading this with a script tag, since "this" will be window reference (ie. the global scope) and so after including the script tag, I'll be able to say
+
+    what.ever();
+
+as "what" will have been added to the global scope.
+
+### More on Node packages
+
+So I've already found that "this" in a Node package is an alias onto "exports", which allows us to declare what to return as the elements of the dependency. Well, it turns out that there are more references available within the dependency scope. For example, the "require" function is available so that dependencies that the current dependency depend on may be loaded. The "exports" reference is available *and* a "module" reference is available. Interestingly, these are the same three references passed into the "define" method - so it's the same information, just exposed in a different manner.
+
+It further turns out that "exports" is an alias onto an "exports" property on "module". However, the property on "module" can be overwritten completely, so (in a Node package)
+
+    module.exports = function(){
+      var Hello = "Hello";
+      return {
+        ever: function () {
+          console.log(Hello);
+        }
+      };
+    };
+
+could be used such that
+
+    var what = require("what");
+    what.ever();
+
+*does* work. Which is what I wanted! But now there's a requirement that the "module" reference be available, which is no good for the browser.
+
+So I chopped and changed things around such that the there-is-no-define-method-available route (ie. Node and the browser, so far as I'm concerned) calls a factory method and either sets "module.exports" to the return value or sets "this.what" to the return value. For the case where there *is* a "define" method (ie. Brackets), the factory method will be passed into it - no funny business required.
+
+    (this.define || function (factory) {
+
+      var result = factory();
+      if ((typeof (module) !== "undefined") && module.exports) {
+        module.exports = result;
+      else {
+        this.what = result;
+      }
+
+    }).call(this, function () {
+
+      var Hello = "Hello";
+      return {
+        ever: function () {
+          console.log(Hello);
+        }
+      };
+
+    });
+
+### Final tweaks
+
+At this point, it was shaping up well, but there were a couple of other minor niggles I wanted to address.
+
+In the browser, if the file is being loaded with a script tag, then any other dependencies should also be loaded through script tag(s) - so if "dependency2" requires "dependency1" in order to operate, then the "dependency1" script should be loaded before "dependency2". But in Node and Brackets, I want to be able to load them through calls to "require".
+
+This means that I wanted any "require" calls to be ignored when the script is loaded in the browser. This may be contentious, but it made sense to me.. and if you wanted a more robust dependency-handling mechanism for use in the browser, well [RequireJS](http://requirejs.org) actually *is* intended for in-browser use - so you could use that to deal with complicated dependencies instead of relying on the old-fashioned script tag method!
+
+Also for the browser case, that named "what" reference is not as obvious as it could be - and it *should* be obvious since it needs to vary for each dependency.
+
+Finally, since I'm using Brackets and its on-by-default JSLint plugin, I wanted the code to meet those exacting style guide standards (using the [Brackets Coding Conventions](https://github.com/adobe/brackets/wiki/Brackets-Coding-Conventions) options).
+
+So these requirements lead to
+
+    /*jslint vars: true, devel: true, nomen: true, indent: 4, maxerr: 50 */
+    /*global define, require, module */
+    (this.define || function (factory) {
+
+      "use strict";
+
+      var dependencyName = "what",
+          result = factory((typeof (require) === "undefined") ? function () { } : require);
+
+      if ((typeof (module) !== "undefined") && module.exports) {
+          module.exports = result;
+      } else {
+          this[dependencyName] = result;
+      }
+
+    }).call(this, function (require) {
+
+      "use strict";
+
+      var Hello = "Hello";
+      return {
+        ever: function () {
+          console.log(Hello);
+        }
+      };
+
+    });
+
+A "require" argument is passed to the factory method now. For the Brackets case, this is fine since a "requires" argument is passed when "define" calls the factory method anyway. When "define" does not exist but the environment has a "require" method available, then this will be passed to the factory method (for Node). If there *isn't* a "require" method available then the "require" passed will be an empty function; this is for the browser case.
+
+The only other important change is a string to specify the dependency name, right at the start of the content - so it's easy to see straight away what needs changing if this template is copy-pasted for other modules.
+
+Minified, this becomes
+
+    /*jslint vars: true, devel: true, nomen: true, indent: 4, maxerr: 50 */
+    /*global define, require, module */
+    (this.define || function (f) { "use strict"; var n = "what", r = f((typeof (require) === "undefined") ? function () { } : require); if ((typeof (module) !== "undefined") && module.exports) { module.exports = r; } else { this[n] = r; } }).call(this, function (require) {
+
+      "use strict";
+
+      var Hello = "Hello";
+      return {
+        ever: function () {
+          console.log(Hello);
+        }
+      };
+
+    });
+
+The only part that needs to change between files is the value of "n" (which was named "dependencyName" before minification).
+
+### The end (probably not really the end)
+
+So.. I've achieved what I originally set out to do, which was to create a package that could be used by Node, Brackets or direct-in-the-browser.
+
+But more importantly, I've learnt a lot about some of the modern methods of dealing with dependencies in JavaScript. I suspect that there's a reasonable chance that I will change this template in the future, possibly to one of the "[UMD (Universal Module Definition)](https://github.com/umdjs/umd)" examples if one matches my needs or possibly I'll just refine what I currently have.
+
+But for now, I want to get back to actually writing the meat of the package instead of worrying about how to deliver it!
