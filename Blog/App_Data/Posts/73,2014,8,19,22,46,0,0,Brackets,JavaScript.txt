@@ -1,0 +1,267 @@
+## The C# CSS Parser in JavaScript
+
+I was talking last month (in [JavaScript dependencies that work with Brackets, Node and in-browser](Post72)) about [Adobe Brackets](http://brackets.io) and how much I'd been enjoying giving it a try - and how its extensions are written in JavaScript.
+
+Well this had made me ambitious and wondering whether I could write an extension that would lint LESS stylesheets according to the rules I proposed last year in "[Non-cascading CSS: A revolution!](Post42)" - rules which have now been put into use on some major UK tourism destination websites through my subtle influence at work (and, granted, the Web Team Leader's enthusiasm.. but it's my blog so I'm going to try to take all the credit I can :) We have a LESS processor that applies these rules, the only problem is that it's written in C# and so can't easily be used by the Brackets editor.
+
+But in the past I've [rewritten my own full text-indexer into JavaScript](Post58) so translating my [C# CSSParser](https://bitbucket.org/DanRoberts/cssparser) shouldn't be too big of a thing. The main processing is described by a state machine - I published a slightly rambling explanation in my post [Parsing CSS](Post57) which I followed up with [C# State Machines](Post61), that talks about the same topic but in a more focused manner. This made things really straight forward for translation.
+
+When parsing content and categorising a sequence of characters as a Comment or a StylePropertyValue or whatever else, there is a class that represents the current state and knows what character(s) may result in a state change. For example, a single-line-comment processor only has to look out for a line return and then it may return to whatever character type it was before the comment started. A multi-line comment will be looking out for the characters "\*/". A StylePropertyValue will be looking out for a semi-colon or a closing brace, but it also needs to look for quote characters that indicate the start of a quoted section - within this quoted content, semi-colons and closing braces do *not* indicate the end of the content, only a matching end quote does. When this closing quote is encountered, the logic reverts back to looking for a semi-colon or closing brace.
+
+Each processor is self-contained and most of them contain very little logic, so it was possible to translate them by just taking the C# code, pasting it into a JavaScript file, altering the structure to be JavaScript-esque and removing the types. As an example, this C# class
+
+    public class SingleLineCommentSegment : IProcessCharacters
+    {
+      private readonly IGenerateCharacterProcessors _processorFactory;
+      private readonly IProcessCharacters _characterProcessorToReturnTo;
+      public SingleLineCommentSegment(
+        IProcessCharacters characterProcessorToReturnTo,
+        IGenerateCharacterProcessors processorFactory)
+      {
+        if (processorFactory == null)
+          throw new ArgumentNullException("processorFactory");
+        if (characterProcessorToReturnTo == null)
+          throw new ArgumentNullException("characterProcessorToReturnTo");
+
+        _processorFactory = processorFactory;
+        _characterProcessorToReturnTo = characterProcessorToReturnTo;
+      }
+
+      public CharacterProcessorResult Process(IWalkThroughStrings stringNavigator)
+      {
+        if (stringNavigator == null)
+          throw new ArgumentNullException("stringNavigator");
+
+        // For single line comments, the line return should be considered part of the comment content
+		// (in the same way that the "/*" and "*/" sequences are considered part of the content for
+		// multi-line comments)
+        var currentCharacter = stringNavigator.CurrentCharacter;
+        var nextCharacter = stringNavigator.CurrentCharacter;
+        if ((currentCharacter == '\r') && (nextCharacter == '\n'))
+        {
+          return new CharacterProcessorResult(
+            CharacterCategorisationOptions.Comment,
+            _processorFactory.Get<SkipCharactersSegment>(
+              CharacterCategorisationOptions.Comment,
+              1,
+              _characterProcessorToReturnTo
+            )
+          );
+        }
+        else if ((currentCharacter == '\r') || (currentCharacter == '\n')) {
+          return new CharacterProcessorResult(
+		    CharacterCategorisationOptions.Comment,
+			_characterProcessorToReturnTo
+		  );
+		}
+
+        return new CharacterProcessorResult(CharacterCategorisationOptions.Comment, this);
+      }
+    }
+
+becomes
+
+    var getSingleLineCommentSegment = function (characterProcessorToReturnTo) {
+      var processor = {
+        Process: function (stringNavigator) {
+          // For single line comments, the line return should be considered part of the comment content
+		  // (in the same way that the "/*" and "*/" sequences are considered part of the content for
+		  // multi-line comments)
+          if (stringNavigator.DoesCurrentContentMatch("\r\n")) {
+            return getCharacterProcessorResult(
+              CharacterCategorisationOptions.Comment,
+              getSkipNextCharacterSegment(
+                CharacterCategorisationOptions.Comment,
+                characterProcessorToReturnTo
+              )
+            );
+          } else if ((stringNavigator.CurrentCharacter === "\r")
+		      || (stringNavigator.CurrentCharacter === "\n")) {
+            return getCharacterProcessorResult(
+              CharacterCategorisationOptions.Comment,
+              characterProcessorToReturnTo
+            );
+          }
+          return getCharacterProcessorResult(
+            CharacterCategorisationOptions.Comment,
+            processor
+          );
+        }
+      };
+      return processor;
+    };
+    
+There are some concessions I made in the translation. Firstly, I tend to be very strict with input validation in C# (I long for a world where I can replace it all with code contracts but the last time I looked into the .net work done on that front it didn't feel quite ready) and try to rely on rich types to make the compiler work for me as much as possible (in both documenting intent and catching silly mistakes I may make). But in JavaScript we have no types to rely on and it seems like the level of input validation that I would perform in C# would be very difficult to replicate as reliably without them. Maybe I'm rationalising, but while searching for a precedent for this sort of thing, I came across the article [Error Handling in Node.js](https://www.joyent.com/developers/node/design/errors) which distinguishes between "operational" and "programmer" errors and states that
+
+> Programmer errors are bugs in the program. These are things that can always be avoided by changing the code. They can never be handled properly (since by definition the code in question is broken).
+
+One example in the article is
+
+> passed a "string" where an object was expected
+
+Since the "getSingleLineCommentSegment" function shown above is private to the CSS Parser class that I wrote, it holds true that any invalid arguments passed to it would be programmer error. So in the JavaScript version, I've been relaxed around this kind of validation. Not, mind you, that this means that I intend to start doing the same thing in my C# code - I still think that where static analysis is possible that every effort should be used to document in the code what is right and what is wrong. And while (without relying on some of the clever stuff I believe that is in the code contracts work that Microsoft has done) argument validation exceptions can't contribute to *static* analysis, I do still see it as documentation for pre-compile-time.
+
+Another concession I made was that in the C# version I went to effort to ensure that processors could be re-used if their configuration was identical - so there wouldn't have to be a new instances of a SingleLineCommentSegment processor for *every* single-line comment encountered. A "processorFactory" would new up an instance if an existing instance didn't already exist that could be used. This was really an optimisation that was intended for parsing huge amounts of content, as were some of the other decisions made in the C# version - such as the strict use of **IEnumerable** with only very limited read-ahead (so if the input was being read from a stream, for example, only a very small part of the stream's data need be in memory at any one time). For the JavaScript version, I am only imagining it being used to validate a single file and if that entire file can't be held as an array of characters by the editor then I think there are bigger problems afoot!
+
+So the complications around the "processorFactory" were skipped and the content was internally represented by a string that was the entire content. (Since the processor format expects a "string navigator" that reads a single character at a time, the JavaScript version has an equivalent object but internally this has a reference to the whole string, whereas the C# version did lots of work to deal with streams or any other enumerable source*).
+
+\* *(If you have time to kill, I wrote a post last year.. well, more of an essay.. about how the C# code could access a **TextReader** through an immutable interface wrapper - internally an event was required on the implementation and if you've ever wanted to know the deep ins and outs of C#'s event system, how it can appear to cause memory leaks and what crazy hoops can be jumped through or avoided then you might enjoy it! See [Auto-releasing Event Listeners](Post59)).*
+
+### Fast-forward a bit..
+
+The actual details of the translating of the code aren't that interesting, it really was largely by rote with the biggest problem being concentrating hard enough that I didn't make silly mistakes. The optional second stage of processing - that takes categorised strings (Comment, StylePropertyName, etc..) and translates them into the heriarchical data that a LESS stylesheet describes - used bigger functions with messier logic, rather than the state machine of the first parsing phase, but it still wasn't particularly complicated and so the same approach to translation was used.
+
+One thing I did quite get in to was making sure that I followed all of JSLint's recommendations, since Brackets highlights every rule that you break by default. I touched on JSLint last time (in [JavaScript dependencies that work with Brackets, Node and in-browser](Post72)) - I really like what Google did with Go in having a [formatter](http://golang.org/pkg/fmt) that dictates how the code should be laid out and so having JSLint shout at me for having brackets on the wrong line meant that I stuck to a standard and didn't have to worry about it. I didn't inherently like having an "else" start on the same line as the closing brace of the previous condition, but if that's the way that everyone using JSLint (such as everyone following the [Brackets Coding Conventions](https://github.com/adobe/brackets/wiki/Brackets-Coding-Conventions) when writing extensions) then fair enough, I'll just get on with it!
+
+Some of the rules I found quite odd, such as its hatred of "++", but then I've always found that one strange. According to the official site,
+
+> The ++ (increment) and -- (decrement) operators have been known to contribute to bad code by encouraging excessive trickiness
+
+I presume that this refers to confusion between "i++" and "++i" but the extended version of "i++" may be used: "i = i + 1" or "i += 1". Alternatively, mutation of a loop counter can be avoided entirely with the use of "forEach" -
+
+    [1, 2, 3].forEach(function(element, index) {
+    
+This relies upon a level of compatibility when considering JavaScript in the browser (though ancient browsers can have this worked around with polyfills) but since I had a Brackets extension as the intended target, "forEach" seemed like the best way forward. It also meant that I could avoid the warning
+
+> Avoid use of the continue statement. It tends to obscure the control flow of the function.
+
+by returning early from the enumeration function rather than continuing the loop (for cases where I wanted to use "continue" within a loop).
+
+I think it's somewhat difficult to justify returning early within an inline function being more or less guilty of obscuring the control flow than a "continue" in a loop, but using "forEach" consistently avoided two warnings and reduced mutation of local variables which I think is a good thing since it reduces (even if only slightly) mental overhead when reading code.
+
+At this point, I had code that would take style content such as
+
+    div.w1, div.w2 {
+      p {
+        strong, em { font-weight: bold; }
+      }
+    }
+    
+and parse it with
+
+    var result = CssParserJs.ExtendedLessParser.ParseIntoStructuredData(content);
+    
+into a structure
+
+    [{
+      "FragmentCategorisation": 3,
+      "Selectors": [ "div.w1", "div.w2" ],
+      "ParentSelectors": [],
+      "SourceLineIndex": 0,
+      "ChildFragments": [{
+          "FragmentCategorisation": 3,
+          "Selectors": [ "p" ],
+          "ParentSelectors": [ [ "div.w1", "div.w2" ] ],
+          "SourceLineIndex": 1,
+          "ChildFragments": [{
+              "FragmentCategorisation": 3,
+              "Selectors": [ "strong", "em" ],
+              "ParentSelectors": [ [ "div.w1", "div.w2" ], [ "p" ] ],
+              "ChildFragments": [{
+                  "FragmentCategorisation": 4,
+                  "Value": "font-weight",
+                  "SourceLineIndex": 2
+              }, {
+                  "FragmentCategorisation": 5,
+                  "Property": {
+                      "FragmentCategorisation": 4,
+                      "Value": "font-weight",
+                      "SourceLineIndex": 2
+                  },
+                  "Values": [ "bold" ],
+                  "SourceLineIndex": 2
+              }],
+              "SourceLineIndex": 2
+          }]
+      }]
+    }];
+
+where the "FragmentCategorisation" values come from an enum-emulating reference CssParser.ExtendedLessParser.FragmentCategorisationOptions which has the properties
+
+    Comment: 0
+    Import: 1,
+    MediaQuery: 2,
+    Selector: 3,
+    StylePropertyName: 4,
+    StylePropertyValue: 5
+    
+### So it works?
+
+At this point, it was looking rosey - the translation had been painless, I'd made the odd silly mistake which I'd picked up quickly and it was giving the results I expected for some strings of content I was passing in. However, it's hard to be sure that it's *all* working perfectly without trying to exercise more of the code. Or without constructing some unit tests!
+
+The C# project has unit tests, using [xUnit](https://github.com/xunit/xunit). When I was looking at dependency management for my last post, one of the packages I was looking at was [Underscore](https://github.com/jashkenas/underscore) which I was looking up to as an implementation of what people who knew what they were doing were actually doing. That repository includes a "test" folder which makes use of [QUnit](http://qunitjs.com/). A basic QUnit configuration consists of an html page that loads in the QUnit library - this makes available methods such as "ok", "equal", "notEqual", "deepEqual" (for comparing objects where the references need not be the same but all of their properties and the properties of nested types must match), "raises" (for testing for errors being raised), etc.. The html page also loads in one or more JavaScript files that describe the tests. The tests may be of the form
+
+    test('AttributeSelectorsShouldNotBeIdentifiedAsPropertyValues', function () {
+      var content = "a[href] { }",
+          expected = [
+            { Value: "a[href]", IndexInSource: 0, CharacterCategorisation: 4 },
+            { Value: " ", IndexInSource: 7, CharacterCategorisation: 7 },
+            { Value: "{", IndexInSource: 8, CharacterCategorisation: 2 },
+            { Value: " ", IndexInSource: 9, CharacterCategorisation: 7 },
+            { Value: "}", IndexInSource: 10, CharacterCategorisation: 1 }
+          ];
+      deepEqual(CssParserJs.ParseLess(content), expected);
+    });
+    
+so they're nice and easy to read and easy to write.
+
+*(Note: In the actual test code, I've used the enum-esque values instead of their numeric equivalents, so instead of*
+
+    CharacterCategorisation: 4
+
+*I've used*
+
+    CharacterCategorisation: CssParserJs.CharacterCategorisationOptions.SelectorOrStyleProperty
+	
+*which makes it even easier to read and write - but it made arranging the code in this post awkward without requiring scroll bars in the code display, which I don't like!).*
+
+The QUnit html page will execute all of the tests and display details about which passed and which failed.
+
+I translated the tests from the C# code into this format and they all passed! I will admit that it's not the most thorough test suite, but it does pick up a lot of parse cases and I did get into the habit of adding tests as I was adding functionality and fixing bugs when I was first writing the C# version, so having them all pass felt good.
+
+The final thing to add to the QUnit tests was a way to run them without loading a full browser. Again, this is a solved problem and, again, I looked to Underscore as a good example of what to do. That library uses [PhantomJS](http://phantomjs.org) which is a "headless WebKit scriptable with a JavaScript API", according to the site. (I'm not sure if that should say "WebKit scriptable *browser*" or not, but you get the idea). This allows for the test scripts to be run at the command line and the output summary to be displayed. The tests are in a subfolder "test", within which is another folder "vendor", which includes the JavaScript and CSS for the core QUnit code. This allows for tests to be run (assuming you have PhantomJS installed) with
+
+    phantomjs test/vendor/runner.js test/index.html
+    
+### Share and share alike
+
+As with all my public code, I've released this on bitbucket (at [https://bitbucket.org/DanRoberts/cssparserjs](https://bitbucket.org/DanRoberts/cssparserjs)) but, since I've been looking into dependency management and npm, I've also released it as an npm package!
+
+This turned out to be really easy after looking on the [npm site](https://www.npmjs.org/). It's basically a case of constructing a "package.json" file with some details about the package - eg.
+
+    {
+      "name": "cssparserjs",
+      "description": "A simple CSS Parser for JavaScript",
+      "homepage": "https://bitbucket.org/DanRoberts/cssparserjs",
+      "author": "Dan Roberts <dangger36@gmail.com>",
+      "main": "CssParserJs.js",
+      "version": "1.2.1",
+      "devDependencies": {
+        "phantomjs": "1.9.7-1"
+      },
+      "scripts": {
+        "test": "phantomjs test/vendor/runner.js test/index.html"
+      },
+      "licenses": [
+        {
+          "type": "MIT",
+          "url": "https://bitbucket.org/DanRoberts/cssparserjs/src/4a9bb17f5a8a4fc0c2c164625b9dc3b8f7a03058/LICENSE.txt"
+        }
+      ]
+    }
+
+and then using "npm publish" at the command line. The name is in the json file, so it know *what* it's publishing. If you don't have an npm user then you use "npm adduser" first, and follow the prompts it gives you.
+
+This was pleasantly simple. For some reason I had expected there to be more hoops to jump through.. find it now at [www.npmjs.org/package/cssparserjs](https://www.npmjs.org/package/cssparserjs)! :)
+
+It's worth noting when publishing that, by default, it will publish nearly all of the files in the folder (and subfolders). If you want to ignore any, then add them to an ".npmignore" file. If there's no ".npmignore" file but there *is* a ".gitignore" file then it will use the rules in there. And there are a set of default rules, so I didn't have to worry about it sending any files from the ".hg" folder relating to the Mercurial repo, since ".hg" is one of its default ignores. The documentation on the main site is really good for this: [npmjs Developers Guide](https://www.npmjs.org/doc/misc/npm-developers.html).
+
+### What else have I learned?
+
+This last few weeks have been a voyage of exploration in modern JavaScript for me - there are new techniques and delivery mechanisms and frameworks that I was aware of but not intimately familiar with and I feel like I've plugged some of the holes in my knowledge and experience with what I've written about recently. One thing I've also finally put to bed was the use of the variety of [Hungarian Notation](http://en.wikipedia.org/wiki/Hungarian_notation) I had still been using with JavaScript. I know, I know - don't judge me! :)
+
+Since JavaScript has no type annotations, I have historically named variables with a type prefix, such as "strName" or "intIndex" but I've never been 100% happy with it. While it *can* be helpful for arguments or variables with primitive types, once you start using "objPropertyDetails" or "arrPageDetails", you have very little information to work with - is the "objPropertyDetails" a JavaScript class? Or an object expected in a particular format (such as JSON with particular properties)? And what are the types in "arrPageDetails"?? Other than it being an array, this gives you almost no useful information. And so, having looked around at some of the big libraries and frameworks, I've finally decided to stop doing it. It's silly. There, I've said it! Maybe I should be looking into [JSDoc](http://usejsdoc.org/about-getting-started.html) for public interfaces (which is where I think type annotations are even more important than internally within functions; when you want to share information with someone else who might be calling your code). Or maybe I should just be using TypeScript more! But these discussions are for another day..
+
+I haven't actually talked about the Brackets plugin that I was writing this code for, and how well that did or didn't go (what a cliffhanger!) but I think this post has gone on long enough and I'm going make a clean break at this point and pick that up another day.
+
+(The short version is that the plugin environment is easy to work with and has lots of capabilities and was fun to work with - check back soon for more details!).
