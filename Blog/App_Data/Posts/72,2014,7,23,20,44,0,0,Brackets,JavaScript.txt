@@ -4,11 +4,11 @@
 
     /*jslint vars: true, devel: true, nomen: true, indent: 4, maxerr: 50 */
     /*global define, require, module */
-    (this.define || function (f) { "use strict"; var n = "dependencyName", r = f((typeof (require) === "undefined") ? function () { } : require); if ((typeof (module) !== "undefined") && module.exports) { module.exports = r; } else { this[n] = r; } }).call(this, function (require) {
+    (this.define || function (f) { "use strict"; var n = "dependencyName", s = this, r = f((typeof (require) === "undefined") ? function (d) { return s[d]; } : require); if ((typeof (module) !== "undefined") && module.exports) { module.exports = r; } else { this[n] = r; } }).call(this, function (require) {
       "use strict";
 
       return {
-        // Dependency interface goes here..
+          // Dependency interface goes here..
       };
     });
 
@@ -30,12 +30,12 @@ I started off writing a module in my normal manner, which tends to involve wrapp
 
     (function () {
 
-      var myModule = this.myModule || {};
-      myModule.AwesomeProcessor = {
-        Process: function (value) {
-          // Whatever..
-        };
-      }
+        var myModule = this.myModule || {};
+        myModule.AwesomeProcessor = {
+            Process: function (value) {
+                // Whatever..
+            };
+        }
 
     }());
 
@@ -62,10 +62,10 @@ Unlike the "exports.answer" example above, the Underscore file is contained with
 
     (function() {
 
-      // Establish the root object, `window` in the browser, or `exports` on the server.
-      var root = this;
+        // Establish the root object, `window` in the browser, or `exports` on the server.
+        var root = this;
 
-      // The rest of the file..
+        // The rest of the file..
 
     }.call(this));
 
@@ -97,11 +97,11 @@ To mirror the example earlier, this could be
 
     define(function (require, exports, module) {
     
-      return {
-        Process: function (value) {
-          // Whatever..
-        };
-      }
+        return {
+            Process: function (value) {
+                // Whatever..
+            };
+        }
 
     });
 
@@ -114,9 +114,9 @@ and scoping is cleverly handled so that no global state may be affected.
 The define method may also be called with a reference to return directly as the dependency - eg.
 
     define({
-      Process: function (value) {
-        // Whatever..
-      }
+        Process: function (value) {
+            // Whatever..
+        }
     });
 
 in which case the dependency is not lazily instantiated, but otherwise the pattern is very similar.
@@ -131,12 +131,12 @@ After some more stumbling around, I encounted [A Simplified Universal Module Def
 
     (this.define || function(){})(
     this.what = function(){
-      var Hello = "Hello";
-      return {
-        ever: function () {
-          console.log(Hello);
-        }
-      };
+        var Hello = "Hello";
+        return {
+            ever: function () {
+                console.log(Hello);
+            }
+        };
     }());
 
 I liked the look of this, it's compact and clever!
@@ -181,12 +181,12 @@ So I've already found that "this" in a Node package is an alias onto "exports", 
 It further turns out that "exports" is an alias onto an "exports" property on "module". However, the property on "module" can be overwritten completely, so (in a Node package)
 
     module.exports = function(){
-      var Hello = "Hello";
-      return {
-        ever: function () {
-          console.log(Hello);
-        }
-      };
+        var Hello = "Hello";
+        return {
+            ever: function () {
+                console.log(Hello);
+            }
+        };
     };
 
 could be used such that
@@ -200,21 +200,21 @@ So I chopped and changed things around such that the there-is-no-define-method-a
 
     (this.define || function (factory) {
 
-      var result = factory();
-      if ((typeof (module) !== "undefined") && module.exports) {
-        module.exports = result;
-      else {
-        this.what = result;
-      }
+        var result = factory();
+        if ((typeof (module) !== "undefined") && module.exports) {
+            module.exports = result;
+        else {
+            this.what = result;
+        }
 
     }).call(this, function () {
 
-      var Hello = "Hello";
-      return {
-        ever: function () {
-          console.log(Hello);
-        }
-      };
+        var Hello = "Hello";
+        return {
+            ever: function () {
+                console.log(Hello);
+            }
+        };
 
     });
 
@@ -236,31 +236,38 @@ So these requirements lead to
     /*global define, require, module */
     (this.define || function (factory) {
 
-      "use strict";
+        "use strict";
 
-      var dependencyName = "what",
-          result = factory((typeof (require) === "undefined") ? function () { } : require);
+        var dependencyName = "what",
+            self = this,
+            result = factory((typeof (require) === "undefined")
+                ? function (dependency) { return self[dependency]; }
+                : require);
 
-      if ((typeof (module) !== "undefined") && module.exports) {
-          module.exports = result;
-      } else {
-          this[dependencyName] = result;
-      }
+        if ((typeof (module) !== "undefined") && module.exports) {
+            module.exports = result;
+        } else {
+            this[dependencyName] = result;
+        }
 
     }).call(this, function (require) {
 
-      "use strict";
+        "use strict";
 
-      var Hello = "Hello";
-      return {
-        ever: function () {
-          console.log(Hello);
-        }
-      };
+        var Hello = "Hello";
+        return {
+            ever: function () {
+                console.log(Hello);
+            }
+        };
 
     });
 
-A "require" argument is passed to the factory method now. For the Brackets case, this is fine since a "requires" argument is passed when "define" calls the factory method anyway. When "define" does not exist but the environment has a "require" method available, then this will be passed to the factory method (for Node). If there *isn't* a "require" method available then the "require" passed will be an empty function; this is for the browser case.
+A "require" argument is passed to the factory method now. For the Brackets case, this is fine since a "requires" argument is passed when "define" calls the factory method anyway. When "define" does not exist but the environment has a "require" method available, then this will be passed to the factory method (for Node). If there *isn't* a "require" method available then the dependency is retrieved from the original "this" reference - this is for the browser case (where "this" would have been the global window reference when the dependency code was evaulated).
+
+the "require" passed will be an empty function; this is for the browser case.
+
+***Correction (19th August 2014):** I originally used an empty function if there was no "require" method available, for the browser case. But this was obviously wrong, since it would mean that nested depedencies would not have been  supported, when it was my intention that they should be.*
 
 The only other important change is a string to specify the dependency name, right at the start of the content - so it's easy to see straight away what needs changing if this template is copy-pasted for other modules.
 
@@ -268,16 +275,16 @@ Minified, this becomes
 
     /*jslint vars: true, devel: true, nomen: true, indent: 4, maxerr: 50 */
     /*global define, require, module */
-    (this.define || function (f) { "use strict"; var n = "what", r = f((typeof (require) === "undefined") ? function () { } : require); if ((typeof (module) !== "undefined") && module.exports) { module.exports = r; } else { this[n] = r; } }).call(this, function (require) {
+    (this.define || function (f) { "use strict"; var n = "what", s = this, r = f((typeof (require) === "undefined") ? function (d) { return n[d]; } : require); if ((typeof (module) !== "undefined") && module.exports) { module.exports = r; } else { this[n] = r; } }).call(this, function (require) {
 
-      "use strict";
+        "use strict";
 
-      var Hello = "Hello";
-      return {
-        ever: function () {
-          console.log(Hello);
-        }
-      };
+        var Hello = "Hello";
+        return {
+            ever: function () {
+                console.log(Hello);
+            }
+        };
 
     });
 
