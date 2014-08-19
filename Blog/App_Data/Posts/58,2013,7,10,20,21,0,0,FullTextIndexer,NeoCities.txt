@@ -38,6 +38,8 @@ Hopefully this black listing approach will allow me to have an RSS feed here as 
 
 **Update (25th July 2013):** The NeoCities interface has been updated so that multiple files can be uploaded by dragging-and-dropping! I still can't upload my favicon yet though..
 
+**Update (12th August 2014):** I'm not sure when, exactly, but favicons *are* now support (any .ico file is, in fact). It's a little thing but I do think it adds something to the identity of a site so I'm glad they changed this policy.
+
 ### Site Search!
 
 This was all well and good, but at this point the site search was missing from the site. This functionality is enabled by server-side code that takes a search string, tries to find matching Posts and then shows the results with Post titles and content excerpts with the matching term(s) highlighted. The matching is done against an index of tokens (possible words) so that the results retrieval can be very fast. The index records *where* in the source content it matches the token, which enables the except-highlighting. It has support for plurality matching (so it knows that "cat" and "cats" can be considered to be the same word) and has some other flexibility with ignoring letter case, ignoring accents on characters, ignoring certain characters (so "book's" is considered the same as "books") and search term splitting (so "cat posts" matches Posts with "cat" *and* "posts" in, rather than requiring that a Post contain the exact phrase "cat posts").
