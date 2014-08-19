@@ -182,7 +182,7 @@ The @c value inside the body scope applies within that scope and overrides the @
 
 It's up for debate whether this definitely turns out to be a good idea. Interesting, so far I've not come across it anywhere else, but it really seems like it would increase the potential for sharing files (that are tightly scoped to particular controls, or other unit of layout / presentation) between projects.
 
-**Update (4th June)**: I've since updated this rule to specify the use of the html tag rather than body as I've written a processor that will strip out the additional tags injected (see [Extending the CSS Minifier](Post47)) and stripping out body tags would mean that selectors could not be written that target elements in a page where a particular class is specified on the body tag.
+**Update (4th June 2013)**: I've since updated this rule to specify the use of the html tag rather than body as I've written a processor that will strip out the additional tags injected (see [Extending the CSS Minifier](Post47)) and stripping out body tags would mean that selectors could not be written that target elements in a page where a particular class is specified on the body tag.
 
 #### No selector may be repeated in the rules
 
@@ -251,7 +251,7 @@ One pattern that I've seen used is to combine "float: left;" and "width: 100%;" 
 
 So there's a chance that some allowances will have to be made for 100% widths, but I'm going to start off optimistic and hope that it's not the case until I'm proven wrong (either by myself or someone else trying these rules!).
 
-**Update (22nd January)**: Although I'm currently still aiming for all-pixel measurements for elements, after reading this article [The EMs have it: Proportional Media Queries FTW!](http://blog.cloudfour.com/the-ems-have-it-proportional-media-queries-ftw/) I think I might get sold on the idea of using em's in media queries.. it seems like it would be an ideal to work with browsers that have been zoomed in sufficiently that they'd look better moving the next layout break point. I need to do some testing with mobile or tablet devices, but it sounds intriguing!
+**Update (22nd January 2013)**: Although I'm currently still aiming for all-pixel measurements for elements, after reading this article [The EMs have it: Proportional Media Queries FTW!](http://blog.cloudfour.com/the-ems-have-it-proportional-media-queries-ftw/) I think I might get sold on the idea of using em's in media queries.. it seems like it would be an ideal to work with browsers that have been zoomed in sufficiently that they'd look better moving the next layout break point. I need to do some testing with mobile or tablet devices, but it sounds intriguing!
 
 #### Margins, where specified, must always be fully-defined
 
@@ -335,4 +335,4 @@ I'm not sure yet how easy it will or won't be to check for all of these rules, b
 
 Hopefully I'll post back with a follow-up at some point, possibly with any interesting pre-processing code to go along with it. I think the only way to determine the validity of these rules is with the eating of a whole lot of my own dog food :)
 
-**Update (4th June):** I've written a couple of related posts - see the [Non-cascading CSS: The follow-up](Post46) and [Extending the CSS Minifier](Post47). The first has a couple of amendments I've made to these rules after putting them into practice and the second has information about how my [CSS Minifier](https://bitbucket.org/DanRoberts/cssminifier) project now has support for injecting into the compiled output the "source ids" mentioned in this post, along with a way to implement rule 5 (html-tag-scoping). I also intend to write a few posts about the mechanisms used to implement these processing steps starting with [Parsing CSS](Post57).
+**Update (4th June 2013):** I've written a couple of related posts - see the [Non-cascading CSS: The follow-up](Post46) and [Extending the CSS Minifier](Post47). The first has a couple of amendments I've made to these rules after putting them into practice and the second has information about how my [CSS Minifier](https://bitbucket.org/DanRoberts/cssminifier) project now has support for injecting into the compiled output the "source ids" mentioned in this post, along with a way to implement rule 5 (html-tag-scoping). I also intend to write a few posts about the mechanisms used to implement these processing steps starting with [Parsing CSS](Post57).
