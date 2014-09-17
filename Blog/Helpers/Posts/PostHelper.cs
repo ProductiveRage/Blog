@@ -127,20 +127,24 @@ namespace Blog.Helpers.Posts
 			}
 			if (includePostedDate)
 				content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
-			if (includeTags && post.Tags.Any())
+			if (includeTags)
 			{
-				content.Append("<div class=\"Tags\">");
-				content.Append("<label>Tags:</label>");
-				content.Append("<ul>");
-				foreach (var tag in post.Tags)
+				var tagsToDisplay = post.Tags.Where(t => t.NumberOfPosts > 1); // There's no point rendering a tag unless other Posts have the same tag
+				if (tagsToDisplay.Any())
 				{
-					content.AppendFormat(
-						"<li>{0}</li>",
-						helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag }, null)
-					);
+					content.Append("<div class=\"Tags\">");
+					content.Append("<label>Tags:</label>");
+					content.Append("<ul>");
+					foreach (var tag in tagsToDisplay.Select(t => t.Tag))
+					{
+						content.AppendFormat(
+							"<li>{0}</li>",
+							helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag }, null)
+						);
+					}
+					content.Append("</ul>");
+					content.Append("</div>");
 				}
-				content.Append("</ul>");
-				content.Append("</div>");
 			}
 
 			return content.ToString();

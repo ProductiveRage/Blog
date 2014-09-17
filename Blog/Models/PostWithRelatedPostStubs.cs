@@ -17,7 +17,7 @@ namespace Blog.Models
 			bool isHighlight,
 			string markdownContent,
 			NonNullImmutableList<PostStub> relatedPosts,
-			NonNullOrEmptyStringList tags)
+			NonNullImmutableList<TagSummary> tags)
 			: base(
 				id,
 				posted,

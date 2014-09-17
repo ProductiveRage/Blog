@@ -17,7 +17,7 @@ namespace BlogBackEnd.Models
 			bool isHighlight,
 			string markdownContent,
 			ImmutableList<int> relatedPosts,
-			NonNullOrEmptyStringList tags)
+			NonNullImmutableList<TagSummary> tags)
 			: base(id, posted, lastModified, slug, title, isHighlight)
 		{
 			if (redirectFromSlugs == null)
@@ -28,8 +28,6 @@ namespace BlogBackEnd.Models
 				throw new ArgumentNullException("relatedPostIds");
 			if (tags == null)
 				throw new ArgumentNullException("tags");
-			if (tags.Any(t => t.Trim() == ""))
-				throw new ArgumentException("Blank tag specified");
 
 			RedirectFromSlugs = redirectFromSlugs;
 			MarkdownContent = markdownContent;
@@ -55,6 +53,6 @@ namespace BlogBackEnd.Models
 		/// <summary>
 		/// This will never return null nor any (case-sensitive) duplicates
 		/// </summary>
-		public NonNullOrEmptyStringList Tags { get; private set; }
+		public NonNullImmutableList<TagSummary> Tags { get; private set; }
 	}
 }

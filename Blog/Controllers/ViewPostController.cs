@@ -94,13 +94,15 @@ namespace Blog.Controllers
 			if (string.IsNullOrWhiteSpace(tag))
 				return new HttpNotFoundResult();
 
+			var postsToDisplay = _postRepository.GetByTag(tag);
+			if (!postsToDisplay.Any())
+				return new HttpNotFoundResult();
+
 			return View(
 				"Index",
 				new PostListModel(
 					tag.Trim(),
-					GetPostsWithRelatedPostStubs(
-						_postRepository.GetByTag(tag)
-					),
+					GetPostsWithRelatedPostStubs(postsToDisplay),
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
