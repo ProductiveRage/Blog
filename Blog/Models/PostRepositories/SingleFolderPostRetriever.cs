@@ -66,6 +66,9 @@ namespace Blog.Models
 						var redirectsForPost = new NonNullOrEmptyStringList(
 							redirects.Where(r => r.Item2 == slug).Select(r => r.Item1)
 						);
+
+						// One this pass, set every tag's NumberOfPosts value to one since we don't have enough data to know better. After all of the
+						// posts have been loaded, this can be fixed before the method terminates.
 						posts.Add(new Post(
 						  fileSummary.Id,
 						  fileSummary.PostDate,
@@ -76,12 +79,31 @@ namespace Blog.Models
 						  fileSummary.IsHighlight,
 						  fileContents,
 						  fileSummary.RelatedPostIds,
-						  fileSummary.Tags
+						  fileSummary.Tags.Select(tag => new TagSummary(tag, 1)).ToNonNullImmutableList()
 						));
 					}
 				}
 			}
-			return new NonNullImmutableList<Post>(posts);
+
+			var tagCounts = posts
+					.SelectMany(post => post.Tags)
+					.Select(tag => tag.Tag)
+					.GroupBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+					.ToDictionary(groupedTag => groupedTag.Key, groupedTag => groupedTag.Count(), StringComparer.OrdinalIgnoreCase);
+			return new NonNullImmutableList<Post>(posts.Select(post =>
+				new Post(
+					post.Id,
+					post.Posted,
+					post.LastModified,
+					post.Slug,
+					post.RedirectFromSlugs,
+					post.Title,
+					post.IsHighlight,
+					post.MarkdownContent,
+					post.RelatedPosts,
+					post.Tags.Select(tag => new TagSummary(tag.Tag, tagCounts[tag.Tag])).ToNonNullImmutableList()
+				)
+			));
 		}
 
 		private string readFileContents(FileInfo file)

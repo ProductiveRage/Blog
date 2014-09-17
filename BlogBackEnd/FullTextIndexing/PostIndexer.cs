@@ -62,7 +62,7 @@ namespace BlogBackEnd.FullTextIndexing
 				indexDataForAutoCompleteExtended.GetAllTokens()
 				.Select(token => token.Trim())
 				.Where(token =>(token.Length >= 3) && !char.IsPunctuation(token[0]) && !token.Any(c => char.IsNumber(c)))
-				.Distinct(StringComparer.InvariantCultureIgnoreCase)
+				.Distinct(StringComparer.OrdinalIgnoreCase)
 				.Where(token => defaultIndexDataForSearching.GetMatches(token).Any())
 				.OrderBy(token => token.ToLower())
 			);
@@ -91,7 +91,7 @@ namespace BlogBackEnd.FullTextIndexing
 				GetTokenWeightDeterminer(5f, sourceStringComparer)
 			));
 			contentRetrievers.Add(new ContentRetriever<Post, int>(
-				p => new PreBrokenContent<int>(p.Id, p.Tags),
+				p => new PreBrokenContent<int>(p.Id, new NonNullOrEmptyStringList(p.Tags.Select(tag => tag.Tag))),
 				GetTokenWeightDeterminer(3f, sourceStringComparer)
 			));
 

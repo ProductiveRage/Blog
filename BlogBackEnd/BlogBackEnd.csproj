@@ -61,6 +61,7 @@
     <Compile Include="FullTextIndexing\LanguageLookups\TextFileBasedTSTWordLookup.cs" />
     <Compile Include="FullTextIndexing\PostIndexer.cs" />
     <Compile Include="FullTextIndexing\SearchTermHighlighter.cs" />
+    <Compile Include="Models\TagSummary.cs" />
     <Compile Include="Models\IRetrievePostSlugs.cs" />
     <Compile Include="Models\Post_Extensions.cs" />
     <Compile Include="Models\Post.cs" />

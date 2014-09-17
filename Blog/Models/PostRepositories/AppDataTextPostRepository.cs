@@ -31,7 +31,7 @@ namespace Blog.Models
 				throw new ArgumentException("Null/empty tag specified");
 
 			return new NonNullImmutableList<Post>(
-				_postRetriever.Get().Where(p => p.Tags.Contains(tag, StringComparer.InvariantCultureIgnoreCase)).OrderByDescending(p => p.Posted)
+				_postRetriever.Get().Where(p => p.Tags.Any(t => t.Tag.Equals(tag, StringComparison.OrdinalIgnoreCase))).OrderByDescending(p => p.Posted)
 			);
 		}
 
