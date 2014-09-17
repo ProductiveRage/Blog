@@ -2,6 +2,7 @@ body
 {
 	div.Content
 	{
+		position: relative; // This is just for the a.ArchiveByTagReadMore elements
 		margin: 0 0 16px 0;
 		padding: 16px 48px 16px 16px;
 		@media screen and (max-width: 70em) { padding: 16px; }
@@ -12,6 +13,29 @@ body
 
 		.RounderBorders(8px);
 		border: 3px solid #c0c0c0;
+
+		&.ArchiveByTag {
+			height: 255px;
+			overflow: hidden;
+
+			a.ArchiveByTagReadMore {
+				display: block;
+				position: absolute;
+				bottom: 0;
+				right: 0;
+				padding: 8px 42px 8px 8px;
+				background: white; // Fallback for legacy browsers that don't support rgba
+				background: rgba(255, 255, 255, 0.8);
+				border-top: 1px solid #fbfbfb;
+				border-left: 1px solid #fbfbfb;
+				text-decoration: none;
+
+				&:hover {
+					background: #f8f8f8;
+					border-color: #f1f1f1;
+				}
+			}
+		}
 
 		> p
 		{
