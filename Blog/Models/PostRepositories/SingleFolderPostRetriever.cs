@@ -58,7 +58,11 @@ namespace Blog.Models
 					var title = tryToGetTitle(fileContents);
 					if (title != null)
 					{
-						var slug = stringNormaliser.GetNormalisedString(title).Replace(' ', '-');
+						// 2014-09-17 DWR: Titles such as "C# State Machines" were being converted into "c-state-machines" which isn't as descriptive as
+						// I'd like, "c-sharp-state-machines" is better. The replacement is done for "C#" and "F#" (a space is required after the
+						// replacement content otherwise the "sharp" gets rolled into the next word)
+						var slugBase = title.Replace("C#", "c sharp ").Replace("F#", "f sharp ");
+						var slug =stringNormaliser.GetNormalisedString(slugBase).Replace(' ', '-');
 						var redirectsForPost = new NonNullOrEmptyStringList(
 							redirects.Where(r => r.Item2 == slug).Select(r => r.Item1)
 						);

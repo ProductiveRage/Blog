@@ -1,3 +1,11 @@
 # These are redirect slug entries, entered as From / To pairs separated by whitespace
 # Blank lines and those starting with a hash are ignored
+
+# This was from a title rename
 pseudo-source-mapping-with-less cross-browser-pseudo-source-mapping-with-less
+
+# These were from a change to the url slug generation
+c-state-machines c-sharp-state-machines
+reflection-and-c-optional-constructor-arguments reflection-and-c-sharp-optional-constructor-arguments
+the-c-css-parser-in-javascript the-c-sharp-css-parser-in-javascript
+implementing-finspired-with-updates-for-immutable-classes-in-c implementing-f-sharp-inspired-with-updates-for-immutable-classes-in-c-sharp
