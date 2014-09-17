@@ -13,7 +13,7 @@ namespace Blog.Models
 			NonNullImmutableList<PostStub> recent,
 			NonNullImmutableList<PostStub> highlights,
 			NonNullImmutableList<ArchiveMonthLink> archiveLinks,
-			bool isSinglePostView,
+			PostListDisplayOptions postListDisplay,
 			string optionalCanonicalLinkBase,
 			string optionalGoogleAnalyticsId,
 			string optionalDisqusShortName,
@@ -30,6 +30,8 @@ namespace Blog.Models
 				throw new ArgumentNullException("highlights");
 			if (archiveLinks == null)
 				throw new ArgumentNullException("archiveLinks");
+			if (!Enum.IsDefined(typeof(PostListDisplayOptions), postListDisplay))
+				throw new ArgumentOutOfRangeException("postListDisplay");
 			if (postSlugRetriever == null)
 				throw new ArgumentNullException("postSlugRetriever");
 			if (postContentCache == null)
@@ -40,7 +42,7 @@ namespace Blog.Models
 			MostRecent = recent.Sort((x, y) => -x.Posted.CompareTo(y.Posted));
 			Highlights = highlights;
 			ArchiveLinks = archiveLinks.Sort((x, y) => -(new DateTime(x.Year, x.Month, 1)).CompareTo(new DateTime(y.Year, y.Month, 1)));
-			IsSinglePostView = isSinglePostView;
+			PostListDisplay = postListDisplay;
 			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			OptionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
@@ -62,7 +64,7 @@ namespace Blog.Models
 		/// This may be used to determine - for example - whether comments should be enabled in the view (if they are only to be enabled when viewing
 		/// a particular post)
 		/// </summary>
-		public bool IsSinglePostView { get; private set; }
+		public PostListDisplayOptions PostListDisplay { get; private set; }
 
 		/// <summary>
 		/// This will never return null (the results will be ordered in descending date order)
@@ -116,7 +118,7 @@ namespace Blog.Models
 				// If this is a Single Post View (meaning it is intended to show one particular Post, not just that a search was performed which
 				// happened to match on a single Post) then we want search engine to index that as the primary location of that content and to
 				// ignore it if it appears on the home page. So return true (indicating "follow, noindex") UNLESS it's a Single Post View.
-				return !IsSinglePostView;
+				return PostListDisplay != PostListDisplayOptions.SinglePost;
 			}
 		}
 	}

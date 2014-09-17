@@ -28,9 +28,9 @@
 
 @foreach (var post in Model.Posts)
 {
-				<div class="Content">
+				<div class="Content @Model.PostListDisplay">
 					@Html.RenderPost(post, Model.PostSlugRetriever, Model.PostContentCache)
-					@if (Model.IsSinglePostView)
+					@if (Model.PostListDisplay == Blog.Models.PostListDisplayOptions.SinglePost)
 					{
 						<div id="disqus_thread"></div>
 						<script type="text/javascript">
@@ -60,7 +60,7 @@
 				</div>
 }
 
-@if (!Model.IsSinglePostView)
+@if (Model.PostListDisplay != Blog.Models.PostListDisplayOptions.SinglePost)
 {
 				<script type="text/javascript">
 					(function () {
