@@ -1,0 +1,283 @@
+## Writing React components in TypeScript
+
+**Whoops..** *I started writing this post a while ago and have only just got round to finishing it off. Now I realise that it applies to React 0.10 but the code here doesn't work in the now-current 0.11. On top of this,* hopefully *this will become unnecessary when 0.12 is released. I talk about this in the last part of the post. But until 0.12 is out (and confirmed to address the problem), I'm going to stick to 0.10 and use the solution that I talk about here.*
+
+I've been playing around with React recently, putting together some prototypes to try to identify any pitfalls in what I think is an excellent idea and framework, with a view to convincing everyone else at work that we should consider it for new products. I'm no JavaScript hater but I do strongly believe in strongly typed code being easier to maintain in the long run for projects of significant size. Let's not get into an argument about whether strong or "weak" typing is best - before we know it we could end up worrying about what [strongly typed even means](http://ericlippert.com/2012/10/15/is-c-a-strongly-typed-or-a-weakly-typed-language)! If you don't agree with me then you probably don't see any merit to TypeScript and you probably already guessed that this post will not be of interest to you! :)
+
+So I wanted to try bringing together the benefits of React with the benefits of TypeScript.. I'm clearly not the only one since there is already a type definition available in NuGet: [React.TypeScript.DefinitelyTyped](https://www.nuget.org/packages/React.TypeScript.DefinitelyTyped). This seems to be the recommended definition and appears to be in active development. I'd love it even more if there was an official definition from Facebook themselves (they have one for their [immutable-js](https://github.com/facebook/immutable-js) library) but having one here is a great start. This allows us to call methods in the React library and know what types the arguments should be and what they will return (and the compiler will tell us if we break these contracts by passing the wrong types or trying to mistreat the return values).
+
+However, there are a few problems. Allow me to venture briefly back to square one..
+
+### Back to basics: A React component
+
+This is a very simple component in React -
+
+    var MyButton = React.createClass({
+      _clickHandler: function() {
+        alert('Clicked MyButton with message "' + this.props.message + '"');
+      },
+      render: function() {
+        return <button onClick={this._clickHandler}>{this.props.message}</button>;
+      }
+    });
+    
+It's pretty boring but it illustrates a few principles. Firstly, it's written in "jsx" - a format like JavaScript but that needs some processing to actually become JavaScript. The &lt;button&gt; declaration looks like html, for example, and needs altering to become real JavaScript. If we're going to write components in TypeScript then we can't use this format since Visual Studio doesn't understand it (granted I'm making a bit of a leap assuming that you're using Visual Studio for this - it's not necessary, but I suspect most people writing TypeScript *will* use it since the TypeScript support is so good).
+
+The good news is that the translation from "jsx" to JavaScript is not a complex one*. It results in slightly longer code but it's still easily readable (and writable). So the above would be, written in native JavaScript -
+
+    var MyButton = React.createClass({
+      _clickHandler: function() {
+        alert('Clicked MyButton with message "' + this.props.message + '"');
+      },
+      render: function() {
+        return React.DOM.button({ onClick: this._clickHandler }, this.props.message);
+      }
+    });
+    
+\* *(It* can *do other clever stuff like translate "fat arrow" functions into JavaScript that is compatible with older browsers, but let's not get bogged down with that here - since I want to use TypeScript rather than jsx, it's not that relevant right now).*
+    
+This simple example is illustrating something useful that can be taken for granted since React 0.4; *autobinding*. When "_clickHandler" is called, the "this" reference is bound to the component instance, so "this.props.message" is accessible. Before 0.4, you had to use the "React.autoBind" method - eg.
+
+    var MyButton = React.createClass({
+      _clickHandler: React.autoBind(function() {
+        alert('Clicked MyButton with message "' + this.props.message + '"');
+      }),
+      render: function() {
+        return React.DOM.button({ onClick: this._clickHandler }, this.props.message);
+      }
+    });
+
+but these days it just works as you would expect (or as you would hope, perhaps). This happened back in July 2013 - see [New in React v0.4: Autobind by Default](http://facebook.github.io/react/blog/2013/07/02/react-v0-4-autobind-by-default.html).
+
+### A TypeScript React component: Take 1
+
+If we naively try to write TypeScript code that starts off with the JavaScript above then we find we have no intellisense. The editor has no idea about "this.props" - no idea that it is defined, certainly no idea that it has a property "message" that should be a string. This shouldn't really be a surprise since the "this" in this case is just an anonymous object that we're passing to "React.createClass"; no information about the type has been specified, so it is considered to be of type "any".
+
+<img alt="TypeScript React Component 'this' issue" src="/Content/Images/Posts/TypeScriptComponentThisIsAny.png" class="AlwaysFullWidth" />
+
+If we continue like this then we're going to miss out on the prime driver for using TypeScript in the first place - we might as well just write the components in JavaScript or "jsx"! (In fairness, this is something that I considered.. with React, and particularly the recommended Flux architecture, the "view components" are a relatively thin layer over components that could easily be written in TypeScript and so benefit from being strongly typed.. the view components could remain "more dynamic" and be covered by the class of unit tests that are often used to cover cases that are impossible with the guarantees of strong typing).
+
+The obvious thing to try was to have a TypeScript class along the lines of
+
+    class MyButton {
+      props: { message: string };
+      private _clickHandler() {
+        alert('Clicked MyButton with message "' + this.props.message + '"');
+      }
+      public render() {
+        return React.DOM.button({ onClick: this._clickHandler }, this.props.message);
+      }
+    }
+
+    var MyButtonReactComponent = React.createClass(new MyButton());
+    
+This would solve the internal type specification issue (where "this" is "any"). However, when the "React.createClass" function is called at runtime, an error is thrown..
+
+> Error: Invariant Violation: createClass(...): Class specification must implement a `render` method.
+
+I'm not completely sure, but I suspect that the React framework code is expecting an object with a property that is a function named "render" while the class instance passed to it has a function "render" on its prototype rather than a property on the reference itself.
+
+### Looking for help elsewhere
+
+When I got to this point, I figured that someone else must have had encountered the same problem - particularly since there exists this TypeScript definition for React in the first place! I came across a GitHub project [React TypeScript](https://github.com/fdecampredon/react-typescript) which describes itself as a
+
+> React wrapper to make it play nicely with typescript.
+
+An example in the README shows
+
+    import React = require('react');
+    import ReactTypescript = require('react-typescript');
+
+    class HelloMessage extends ReactTypescript.ReactComponentBase<{ name: string; }, {}> {
+      render() {
+        return React.DOM.div(null, 'Hello ' + this.props.name);
+      }
+    }
+
+    React.renderComponent(new HelloMessage({ name: 'Jhon' }), mountNode);
+
+which looks like exactly what I want!
+
+The problems are that it clearly states..
+
+> warning: ReactTypescript can actually only be used with commonjs modules and browserify, if someone does want AMD I'll gladly accept any PR that would packages it for another format.
+
+.. and I'm very interesting in using AMD and require.js to load modules "on demand" (so that if I develop a large app then I have a way to prevent the "megabyte-plus initial JavaScript download").
+
+Also, I'm concerned that the maintained TypeScript definition that I referenced earlier claims to be
+
+> Based on TodoMVC sample by @fdecampredon, improved by @wizzard0, MIT licensed.
+
+fdecampredon is the author of this "React TypeScript" repo.. which hasn't been updated in seven months. So I'm concerned that the definitions might not be getting updated here - there are already a lot of differences between the [react.d.ts](https://github.com/fdecampredon/react-typescript/blob/master/declarations/react.d.ts) in this project and that in the maintained NuGet package's [react.d.ts](https://github.com/wizzard0/react-typescript-definitions/blob/master/react.d.ts).
+
+In addition to this, the README states that
+
+> In react, methods are automatically bound to a component, this is not the case when using ReactTypeScript, to activate this behavious you can use the autoBindMethods function of ReactTypeScript
+
+This refers to what I talked about earlier; the "auto-binding" convenience to make writing components more natural. There are two examples of ways around this. You can use the ReactTypeScript library's "autoBindMethods" function -
+
+    class MyButton extends ReactTypeScript.ReactComponentBase<{ message: string}, any> {
+      clickHandler(event: React.MouseEvent) {
+        alert(this.props.message);
+      }
+      render() {
+        return React.DOM.button({ onClick: this.clickHandler }, 'Click Me');
+      }
+    }
+
+    // If this isn't called then "this.props.message" will error in clickHandler as "this" is not
+    // bound to the instance of the class
+    ReactTypeScript.autoBindMethods(MyButton);
+    
+or you can use the TypeScript "fat arrow" to bind the function to the "this" reference that you would expect:
+
+    class MyButton extends  ReactTypeScript.ReactComponentBase<{ message: string}, any> {
+      // If the fat arrow isn't used for the clickHandler definition then "this.props.message" will
+      // error in clickHandler as "this" is not bound to the instance of the class
+      clickHandler = (event: React.MouseEvent) => {
+        alert(this.props.message);
+      }
+      render() {
+        return React.DOM.button({ onClick: this.clickHandler }, 'Click Me');
+      }
+    }
+    
+The first approach feels a bit clumsy, that you must always remember to call this method for all component classes. The second approach doesn't feel too bad, it's just a case of being vigilant and always using fat arrows - but if you forget, you won't find out until runtime. Considering that I want to use to TypeScript to catch more errors at compile time, this still doesn't feel ideal.
+
+The final concern I have is that the library includes a large-ish [react-internal.js](https://github.com/fdecampredon/react-typescript/blob/master/third_party/react-internal.js) file. What I'm going to suggest further down does unfortunately dip its toe into React's (undocumented) internals but I've tried to keep it to the bare minimum. This "react-internal.js" worries me as it might be relying on a range of implementation details, any of which (as far as I know) could potentially change and break my code.
+
+In case I'm sounding down on this library, I don't mean to be - I've tried it out and it does actually work, and there are not a lot of successful alternatives out there. So I've got plenty of respect for this guy, getting his hands dirty and inspiring me to follow in his footsteps!
+
+### <s>Stealing</s> Taking inspiration - A TypeScript React component: Take 2
+
+So I want a way to
+
+1. Write a TypeScript class that can be used as a React component
+1. Use the seemingly-maintained [NuGet-delivered type definition](https://www.nuget.org/packages/React.TypeScript.DefinitelyTyped) and limit access to the "internals" as much as possible
+1. Have the component's methods always be auto-bound
+
+I'd better say this up-front, though: I'm willing to sacrifice the support for mixins here.
+
+fdecampredon's "React TypeScript" library *does* support mixins so it's technically possible but I'm not convinced at this time that they're worth the complexity required by the implementation since I don't think they fit well with the model of a TypeScript component.
+
+The basic premise is that you can name mixin objects which are "merged into" the component code, adding properties such as functions that may be called by the component's code. Since TypeScript wouldn't be aware of the properties added by mixins, it would think that there were missing methods / properties and flag them as errors if they were used within the component.
+
+On top of this, I've not been convinced by the use cases for mixins that I've seen so far. In the official [React docs section about mixins](http://facebook.github.io/react/docs/reusable-components.html#mixins), it uses the example of a timer that is automatically cleared when the component is unmounted. There's a question on Stack Overflow "[Using mixins vs components for code reuse in Facebook React](http://stackoverflow.com/questions/21854938)" where the [top answer](http://stackoverflow.com/a/21857309) talks about using mixins to perform common form validation work to display errors or enable or disable inputs by directly altering internal state on the component. As I understand the Flux architecture, the one-way message passing should result in validation being done in the store rather than the view / component. This allows the validation to exist in a central (and easily-testable) location and to *not* exist in the components. This also goes for the timer example, the logic-handling around whatever events are being raised on a timer should not exist within the components.
+
+What I have ended up with is this:
+
+    import React = require('react');
+
+    // The props and state references may be passed in through the constructor
+    export class ReactComponentBase<P, S> {
+      constructor(props?: P, state?: S) {
+
+        // Auto-bind methods on the derived type so that the "this" reference is as expected
+        // - Only do this the first time an instance of the derived class is created
+        var autoBoundTypeScriptMethodsFlagName = '__autoBoundTypeScriptMethods';
+        var autoBindMapPropertyName = '__reactAutoBindMap'; // This is an internal React value
+        var cp = this['constructor'].prototype;
+        var alreadyBoundTypeScriptMethods = (cp[autoBoundTypeScriptMethodsFlagName] === true)
+          && cp.hasOwnProperty(autoBoundTypeScriptMethodsFlagName);
+        if (!alreadyBoundTypeScriptMethods) {
+          var autoBindMap = {};
+          var parentAutoBindMap = cp[autoBindMapPropertyName];
+          var functionName;
+          if (parentAutoBindMap) {
+            // Maintain any binding from an inherited class (if the current class being dealt
+            // with doesn't directly inherit from ReactComponentBase)
+            for (functionName in parentAutoBindMap) {
+              autoBindMap[functionName] = parentAutoBindMap[functionName];
+            }
+          }
+          for (functionName in cp) {
+            if (!cp.hasOwnProperty(functionName) || (functionName === "constructor")) {
+              continue;
+            }
+            var fnc = cp[functionName];
+            if (typeof (fnc) !== 'function') {
+              continue;
+            }
+            autoBindMap[functionName] = fnc;
+          }
+          cp[autoBindMapPropertyName] = autoBindMap;
+          cp[autoBoundTypeScriptMethodsFlagName] = true;
+        }
+
+        this['construct'].apply(this, arguments); // This is an internal React method
+      }
+
+      props: P;
+      state: S;
+    }
+    ReactComponentBase.prototype = React.createClass({
+      // The component must share the "componentConstructor" that is present on the prototype of
+      // the return values from React.createClass
+      render: function () {
+        return null;
+      }
+    })['componentConstructor'].prototype; // Also an internal React method
+
+    // This must be used to mount component instances to avoid errors due to the type definition
+    // expecting a React.ReactComponent rather than a ReactComponentBase (though the latter is
+    // able to masquerade as the former and when the TypeScript compiles down to JavaScript,
+    // no-one will be any the wiser)
+    export function renderComponent<P, S>(
+        component: ReactComponentBase<P, S>,
+        container: Element,
+        callback?: () => void) {
+      var mountableComponent = <React.ReactComponent<any, any>><any>component;
+      React.renderComponent(
+        mountableComponent,
+        container,
+        callback
+        );
+    }
+
+This allows the following component to be written:
+
+    import React = require('react');
+    import ReactComponentBridge = require('components/ReactComponentBridge');
+
+    class MyButton extends ReactComponentBridge.ReactComponentBase<{ message: string }, any> {
+      myButtonClickHandler(event: React.MouseEvent) {
+        alert('Clicked MyButton with message "' + this.props.message + '"');
+      }
+      render() {
+        return React.DOM.button({ onClick: this.myButtonClickHandler }, 'Click Me');
+      }
+    }
+    
+    export = MyButton;
+    
+which may be rendered with:
+
+    import ReactComponentBridge = require('components/ReactComponentBridge');
+    import MyButton = require('components/MyButton');
+    
+    ReactComponentBridge.renderComponent(
+      new MyButton({ message: 'Click Me' }),
+      document.getElementById('container')
+    );
+
+Hurrah! Success! All is well with the world! I've got the benefits of TypeScript *and* the benefits of React and the Flux architecture (ok, the last one doesn't need any of this or even require React - it could really be used with whatever framework you chose). There's just one thing..
+
+### I'm out of date
+
+Like I said at the start of this post, as I got to rounding it out to publish, I realised that I wasn't on the latest version of React (current 0.11.2, while I was still using 0.10) and that this code didn't actually work on that version. Sigh.
+
+However, the good news is that it sounds like 0.12 (still in alpha at the moment) is going to make things a lot easier. The changes in 0.11 appear to be paving the way for 0.12 to shakes things up a bit. Changes are documented at [New React Descriptor Factories and JSX](https://gist.github.com/sebmarkbage/d7bce729f38730399d28) which talks about how the problem they're trying to solve with the new code is a
+
+> Simpler API for ES6 classes
+
+.. and there is a note in the [react-future](https://github.com/reactjs/react-future/blob/master/01%20-%20Core/05%20-%20Elements.js) GitHub repo ("Specs & docs for potential future and experimental React APIs and JavaScript syntax") that
+
+> A React component module will no longer export a helper function to create virtual elements. Instead it's the responsibility of the consumer to efficiently create the virtual element.
+>
+> Languages that compile to JS can choose to implement the element signature in whatever way is idiomatic for that language:
+
+TypeScript implements some ES6 features (such as classes, which are how I want to represent React components) so (hopefully) this means that soon-to-hit versions of React are going to make ES6-classes-for-components much easier (and negate the need for a workaround such as is documented here).
+
+The articles that I've linked to (I'm not quite sure how official that all is, btw!) *are* talking about a future version since they refer to the method "React.createFactory", which isn't available in 0.11.2. I have cloned the in-progress master repo from [github.com/facebook/react](https://github.com/facebook/react) and built the 0.12-alpha code\* and that *does* have that method. However, I haven't yet managed to get it working as I was hoping. I only built it a couple of hours ago, though, and I want to get this post rounded out rather than let it drag on any longer! And, I'm sure, when this mechanism for creating React components is made available, I'm sure a lot of information will be released about it!
+
+\* *(npm* is *a great tool but it still can't make* everything *easy.. first I didn't realise that the version of node.js I was using was out of date and it prevented some dependencies from being installed. Then I had to install Python - but 2.7 was required, I found out, after I'd installed 3.4.* Then *I didn't have Git installed on the computer I was trying to build React from. Then I had to mess about with setting environment variables for the Python and Git locations. But it* did *work, and when I think about how difficult it would have been without a decent package manager I stop feeling the need to complain about it too much :)*
