@@ -31,7 +31,7 @@
 						</div>
 					}
 				</div>
-				@Html.RenderPostStubList("Recent Posts", "Recent", Model.MostRecent, true, false)
-				@Html.RenderPostStubList("Highlights", "Featured", Model.Highlights, false, false)
-				@Html.RenderArchiveLinkList("Archives", "History", Model.ArchiveLinks, false)
+				@Html.RenderPostStubList("Recent Posts", "Recent", Model.MostRecent, renderRSSLinkIfThereAreAnyPosts: true, renderEmptyContainer: false)
+				@Html.RenderPostStubList("Highlights", "Featured", Model.Highlights, renderRSSLinkIfThereAreAnyPosts: false, renderEmptyContainer: false)
+				@Html.RenderArchiveLinkList("Archives", "History", Model.ArchiveLinks, renderEmptyContainer: false)
 			</div>
