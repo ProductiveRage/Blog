@@ -1,0 +1,234 @@
+## A follow-up to "Implementing F#-inspired 'with' updates in C#"
+
+A couple of weeks ago, I was talking about a way to structure an "UpdateWith" method that immutable classes in C# could have so that callers can change one or more properties in a single call, resulting in a new instance of the class. Presuming, of course, that the new property values varied from the old values - otherwise the original instance should be returned (there's no point creating a new instance to represent the exact same data when the containing type is an immutable "value"). Feel free to go read [Implementing F#-inspired "with" updates for immutable classes in C#](Post74) if you didn't already!
+
+The really simple way to do something like this is to actually not have an "UpdateWith" method at all and for the calling code to call the constructor directly, but means that there will potentially be a lot places that need fixing if the constructor arguments are changed or re-ordered at any time. Another simple approach is for there to be multiple "Update" methods, one for each property (so you might have an "UpdateName" method, an "UpdateStartDate"; a distinct "Update{whatever}" for each individual property).
+
+I was feeling oh so proud of myself for thinking to combine a multiple-parameter "Update" method with an "**Optional**" struct so that the best of every world could be had - a single call could update one or more properties without having to specify values for properties that are *not* to be updated. Unlike with the "Update{whatever}" methods, if two properties need to be updated, only a single new instance will be required - there will not be new instances for *each separate* property update - so there would be no added GC pressure from unnecessary "intemediate" instances.
+
+To illustrate -
+
+    public class RoleDetails
+    {
+      public RoleDetails(string title, DateTime startDate, DateTime? endDateIfAny)
+      {
+        Title = title;
+        StartDate = startDate;
+        EndDateIfAny = endDateIfAny;
+      }
+    
+      public string Title { get; private set; }
+      public DateTime StartDate { get; private set; }
+      public DateTime? EndDateIfAny { get; private set; }
+    
+      public RoleDetails UpdateWith(
+        Optional<string> title = new Optional<string>(),
+        Optional<DateTime> startDate = new Optional<DateTime>(),
+        Optional<DateTime?> endDateIfAny = new Optional<DateTime?>())
+      {
+        if (!title.IndicatesChangeFromValue(Title)
+        && !startDate.IndicatesChangeFromValue(StartDate)
+        && !endDateIfAny.IndicatesChangeFromValue(EndDateIfAny))
+          return this;
+      
+        return new RoleDetails(
+          title.GetValue(Title),
+          startDate.GetValue(StartDate),
+          endDateIfAny.GetValue(EndDateIfAny)
+        );
+      }
+    }
+    
+The **Optional** struct looked like this:
+    
+    public struct Optional<T>
+    {
+      private T _valueIfSet;
+      private bool _valueHasBeenSet;
+    
+      public T GetValue(T valueIfNoneSet)
+      {
+        return _valueHasBeenSet ? _valueIfSet : valueIfNoneSet;
+      }
+    
+      public bool IndicatesChangeFromValue(T value)
+      {
+        if (!_valueHasBeenSet)
+          return false;
+    
+        if ((value == null) && (_valueIfSet == null))
+          return false;
+        else if ((value == null) || (_valueIfSet == null))
+          return true;
+    
+        return !value.Equals(_valueIfSet);
+      }
+    
+      public static implicit operator Optional<T>(T value)
+      {
+        return new Optional<T>
+        {
+          _valueIfSet = value,
+          _valueHasBeenSet = true
+        };
+      }
+    }
+    
+I then went on a bit of a wild tangent and thought "if pretty much all of these UpdateWith methods are going to look the same and be boring to write, could I have some magic code generate it for me on the fly?" - this led me to write a small library that allows the following:
+
+    public RoleDetails UpdateWith(
+      Optional<string> title = new Optional<string>(),
+      Optional<DateTime> startDate = new Optional<DateTime>(),
+      Optional<DateTime?> endDateIfAny = new Optional<DateTime?>())
+    {
+      return DefaultUpdateWithHelper.GetGenerator<RoleDetails>()(this, title, startDate);
+    }
+    
+I got a variety of feedback on the post. One of the really interesting things to find was that the main idea itself was already in real-world use, in Microsoft's Roslyn .net compiler, for example. The file [ProjectInfo.cs](https://roslyn.codeplex.com/SourceControl/latest#Src/Workspaces/Core/Workspace/Solution/ProjectInfo.cs) has a "With" method that follows a very similar structure with a corresponding [Optional.cs](https://roslyn.codeplex.com/SourceControl/latest#Src/Compilers/Core/Portable/Optional.cs) struct that is also very similar to what I'd written. I found this very encouraging.. even if it did steal the thunder from "my" idea!
+
+More of the feedback related to performance concerns regarding the "DefaultUpdateWithHelper.GetGenerator" method. It returns a delegate to create a new instance, based upon the provided arguments. This delegate is a compiled LINQ Expression, cached against the target type and the provided argument structure. The problem was that *some* reflection was required in order to determine whether there was a compiled expression in the cache that could be re-used, so each call to "GetGenerator" carried that reflection overhead. The question was just how much..
+
+But before I go into that, one of the constructive comments was that I wasn't generating a hash code on my cache key type correctly. The cache key contained the information about the target type, along with the number of arguments and their types. The function to produce a combined hash for this information was
+
+    public int GetHashCode(CacheKeyData obj)
+    {
+      if (obj == null)
+        throw new ArgumentNullException("obj");
+      var hash = obj.DeclaringType.GetHashCode() ^ obj.TargetType.GetHashCode();
+      for (var index = 0; index < obj.NumberOfUpdateParameters; index++)
+        hash = hash ^ obj.GetUpdateParameter(index).GetHashCode();
+      return hash;
+    }
+
+This goes through each aspect of the cache key data and performs XOR operations to get a combined result. It was pointed out by [Strilanc](http://www.reddit.com/r/programming/comments/2gqx9u/implementing_finspired_with_updates_for_immutable/cklrh1d) on Reddit that it's better practice to multiple by a prime number after every XOR. This way, if there are two references that report the same hash code then they won't cancel each other out.
+
+The reason that I'd used XOR without thinking about it too much was that I knew that XOR on two ints could never cause an overflow and so seemed like a safe easy option. But, in C#, this isn't something we normally have to worry about - for example
+
+    // Trying to set "var i0 = int.MaxValue + 1;" will result in a compile error
+    //   "The operation overflows at compile time in checked mode"
+    // but performing in two steps will not
+    var i0 = int.MaxValue;
+    var i1 = i0 + 1;
+    
+does *not* result in an overflow exception. Instead, it wraps around (so i1 will be equal to int.MinValue). In order to "opt in" to overflow exceptions being raised for theses sorts of operations, the "[checked](http://msdn.microsoft.com/en-us/library/74b4xzyw.aspx)" keyword needs to be used (or there's a "checked" compiler option that does the same).
+
+So we can safely change the implementation to
+
+    public int GetHashCode(CacheKeyData obj)
+    {
+      if (obj == null)
+        throw new ArgumentNullException("obj");
+      var hash = obj.DeclaringType.GetHashCode() ^ obj.TargetType.GetHashCode();
+      for (var index = 0; index < obj.NumberOfUpdateParameters; index++)
+        hash = (3 * hash) ^ obj.GetUpdateParameter(index).GetHashCode();
+      return hash;
+    }
+    
+There was also a comment left on my blog
+
+> .. your usage of the object.Equals() method also creates garbage..
+
+which I had to think about to understand what was meant. When I realised, I kicked myself that I'd missed it! In the **Optional** struct there's the method
+
+    public bool IndicatesChangeFromValue(T value)
+    {
+      if (!_valueHasBeenSet)
+        return false;
+    
+      if ((value == null) && (_valueIfSet == null))
+        return false;
+      else if ((value == null) || (_valueIfSet == null))
+        return true;
+    
+      return !value.Equals(_valueIfSet);
+    }
+    
+That final call has to resort to
+
+    public virtual bool Equals(object obj);
+
+on the base **Object** type since the compiler has no other choice that could apply to any "T". But if "T" is not a reference type then it has to be boxed in order to access it as an **Object** (which is necessary to access this lowest-common-denominator "Equals" method).
+
+A better solution is to check whether "obj" implements **IEquatable&lt;T&gt;**. Microsoft recommends that structs implement this interface (see the article [Struct Design](http://msdn.microsoft.com/en-us/library/ms229031(v=vs.110).aspx) on MSDN) and the primitive types such **System.Int32** (aka **int**) all follow this suggestion.
+
+So the boxing can be avoided in most cases by changing the method to
+
+    public bool IndicatesChangeFromValue(T value)
+    {
+      if (!_valueHasBeenSet)
+        return false;
+    
+      if ((value != null) && (value is IEquatable<T>))
+        return !((IEquatable<T>)value).Equals(value);
+
+      if ((value == null) && (_valueIfSet == null))
+        return false;
+      else if ((value == null) || (_valueIfSet == null))
+        return true;
+    
+      return !value.Equals(_valueIfSet);
+    }
+    
+I'm chalking up these two recommendations as even more evidence that code reviewing can be helpful.. :)
+
+### So how *does* it perform?
+
+Having addressed the above improvements, the question about how the code actually performs still remains.
+
+There are three candidates to conside when weighing up the automagical **DefaultUpdateWithHelper**. The first two appear above. One is the hand-written version shown in the **RoleDetails** class right at the top of the post. The other is the one-liner "GetGenerator" call. There is a third option, however, that allows multiple calls to avoid the cache-check and so avoid reflection entirely on all but the first request; that is to call "GetGenerator" once and record it in a static reference -
+
+    private static UpdateWithSignature<RoleDetails> updater
+      = DefaultUpdateWithHelper.GetGenerator<RoleDetails>(typeof(RoleDetails).GetMethod("UpdateWith"));
+    public RoleDetails UpdateWith(
+      Optional<string> title = new Optional<string>(),
+      Optional<DateTime> startDate = new Optional<DateTime>(),
+      Optional<DateTime?> endDateIfAny = new Optional<DateTime?>())
+    {
+      return updater(this, title, startDate);
+    }
+    
+To get an idea of the raw performance of these methods, I wrote a console app that would repeatedly call a variation of an "UpdateWith" method. I've named the three varieties that I'm interested in: "ManualWith" (the hand-written version), "SimpleWith" (the one-liner) and "StaticWith" (shown above; the one-liner where the result is stored in a static reference to avoid multiple calls to "GetGenerator").
+
+Having a console app meant that the process would be started fresh and then torn down for each run, hopefully ensuring an even playing field. This is particularly in relation to GC, which can introduce variance into longer-running processes. In this case, I'm interested in the direct execution performance of the various methods and I'm not trying to compare GC overhead (which is something that *can* be investigated, but which can be very complicated to do correctly).
+
+The source code for this app can be found at [gist.github.com/anonymous/31b752d24212ad43836e](https://gist.github.com/anonymous/31b752d24212ad43836e). It's as simple as possible and must be run in Release configuration in order to provide the most realistic results. I ran it multiple times for each of the variations, running a complete set of each before repeating (just to try to give everything the best odds of averaging out as possible).
+
+For "ManualWith", the loop count had to be ten million to get any sensible measurements. The average time per execution was **1.0 ticks** (an average of 3538ms for 10,000,000 calls).
+
+For "SimpleWith", the loop count had to be 100,000. The average per execution was **81.7 ticks** (averaging 2997ms for 100,00 calls).
+
+"StaticWith" needed the loop count bumping back up to ten million again - averaging **2.1 ticks** per execution (7874ms average for 10,000,000 calls).
+
+Now, actually, I don't think that's too bad (the "StaticWith" result, I mean). If something's a real convenience and the only overhead it introduces is that object instantiation is twice as slow, I think that in most cases it could be considered a win - the reality is that instantiating objects is *not* likely to be a bottleneck where performance becomes a concern*. The reason for the performance difference between "ManualWith" and "StaticWith" is going to be from the boxing of the **Optional** values when they are passed to the delegate, combined with the fact that the arguments are passed to the "updater" as a params array; ie. an **object[]** - which must be instantiated. My [original post](Post74) talked about more tweaks that the library allowed to specify the number of arguments and so not require the object array, but it would still have to box the **Optional** values.
+
+\* *(Insert comment here about profiling before assigning blame for performance and another about how exchanging convenience for performance only works if any performance cost is offset by having said convenience).*
+
+So.. all things considered, do I genuinely expect to use one of the "magic" approaches in my code going forward? Well, no. I *will* be using the format of the "UpdateWith" method and utilising the **Optional** struct in the method signature, but I probably won't bother with the **DefaultUpdateWithHelper** and the library I wrote. It was fun to write and I learnt a lot doing it *and* through the feedback on it, but I still have a niggly feeling about the worry that changes to the constructor (in a refactor, or whatever) will not cause compile-time errors in the "UpdateWith" method if I forget to update that as well. I won't find out until runtime that there's a problem (or until the unit tests, that I suggested last time as one of the trade-offs for the convenience, are executed). And I'm a *big* fan of helping the compiler to help me.
+
+*Plus* there's the fact that the difference in code size between the "StaticWith" code and the "ManualWith" isn't really that large. Even as more properties are added, it's still very scannable and doesn't bloat up *too* much even though you have to write the code for each property's "IndicatesChangeFromValue" check and manually pass the "GetValue" result for each constructor argument. Looking at that Roslyn code doesn't make me think that the methods (written in the "ManualWith" manner) are too big, and some of them have a lot of constructor arguments.
+
+If only there was some way to get the best of both worlds; brevity in type definitions but all the benefits of static analysis..
+
+### The "ImmutableObjectGraph" T4 Templates
+
+This was *another* thing that came from the comments on my blog (thanks Ian Yates! :), a library of templates that take a simple definition such as
+
+    class Fruit
+    {
+      string color;
+      int skinThickness;
+    }
+    
+and transforms it into a fully-fledged immutable class *with* a "With" method (which is exactly like the "UpdateWith" method I've been talking about). It has its own **Optional** struct, the same as in Roslyn's source. The generated types even have a nested **Builder** type which has mutable properties and a "ToImmutable" method which returns an immutable type with the described data - for times when it's just easier to prepare a reference in a few steps before "freezing" it (or for "efficient multi-step mutation", according to the README). It's little indications of attention to detail such as this that I liked when I looked into the project: [github.com/AArnott/ImmutableObjectGraph](https://github.com/AArnott/ImmutableObjectGraph).
+
+The idea of constructing T4 templates like this is one that I've kicked around before but never gotten round to actually implementing, so finding this was a nice surprise!
+
+Now, there *are* a few flys in the ointment. The library relies on a pre-release version of Microsoft's [Immutable Collections](http://blogs.msdn.com/b/dotnet/archive/2013/09/25/immutable-collections-ready-for-prime-time.aspx), and references to the binary's location are hard-coded into the template files. Also, the template files currently need to be copied into every project that you want to use them with. There's no NuGet package to make it easy to pull into a project - and if you try to pull down the code from GitHub using "Download Zip" then it refuses to compile (though cloning it in GitHub for Windows works fine). It assumes that all generated types should support a "DefaultInstance" (which I disagree with since it's basically too close to another version of null - an instance that has not been given any information to represent real information.. for a list type, this may make sense - the empty list - but not for types such as the **RoleDetails** I've been using as an example so far).
+
+But hopefully this is where the wonders of open source will come to the fore! I've submitted a pull request to try to encourage the templates into a NuGet package (putting the impetus on the consumer to include a version of the Immutable Collections, if required). You can find it at [Generate a NuGet package (and prevent the templates being copied into each consuming project)](https://github.com/AArnott/ImmutableObjectGraph/pull/25). However, there is another pull request that has been open for some time (since April) which I think has merit and which I have tested myself, that has been acknowledged by the author but not merged: [Fixing compiler warnings with collections and inheritance](https://github.com/AArnott/ImmutableObjectGraph/pull/22). I don't know *why* it hasn't been merged. Considering that one of the decisions in my request may be contentious (pulling "CollectionHelper" methods into the generated types that require them, in order to prevent the imported binary requiring an Immutable Collection reference), I'm not sure how confident I am at the moment that it will be accepted.
+
+Further changes to address my other concerns could be made as well - such as an attribute that could be added to indicate that a default instance should not be defined. Depending upon how the pull request is received, I might submit more or I might go rogue and maintain my own fork. As I understand the "MS-PL" license, I'm fairly sure this is allowed (though I'd be much happier to end up with everything merged into one beautiful definitive version).
+
+The really big question that I want to answer, though, is whether the use of the templates will mesh well with code contracts. The generated types do specify "partial class" and so can be extended - they could implement an interface, for example, which has contracts specified on it. And the classes call an optional "Validate" method, which could be used to verify the constructor arguments. I'm not sure yet if this will all be capable of what I have in mind, I've only had a very preliminary look into it.. but I think it has promise!
+
+Just imagine: the brevity of the type declarations above, the guarantees of contracts (though this will necessarily affect the succinctness of the code - even if a separate "contract interface" is implemented, the contract for that interface must still be written somewhere), the static analysis benefits for the generated types.. all this goodness in one solution! So maybe I don't actually have all the pieces together just yet.. but I'm certainly going to be trying to get them over the next few weeks and carrying it all onward to programming nirvana!
