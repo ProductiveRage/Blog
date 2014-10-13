@@ -10,6 +10,8 @@ namespace Blog.Models
 		public PostListModel(
 			string title,
 			NonNullImmutableList<PostWithRelatedPostStubs> posts,
+			Post previousPostIfAny,
+			Post nextPostIfAny,
 			NonNullImmutableList<PostStub> recent,
 			NonNullImmutableList<PostStub> highlights,
 			NonNullImmutableList<ArchiveMonthLink> archiveLinks,
@@ -39,6 +41,8 @@ namespace Blog.Models
 
 			Title = title.Trim();
 			Posts = posts;
+			PreviousPostIfAny = previousPostIfAny;
+			NextPostIfAny = nextPostIfAny;
 			MostRecent = recent.Sort((x, y) => -x.Posted.CompareTo(y.Posted));
 			Highlights = highlights;
 			ArchiveLinks = archiveLinks.Sort((x, y) => -(new DateTime(x.Year, x.Month, 1)).CompareTo(new DateTime(y.Year, y.Month, 1)));
@@ -59,6 +63,16 @@ namespace Blog.Models
 		/// This will never return null
 		/// </summary>
 		public NonNullImmutableList<PostWithRelatedPostStubs> Posts { get; private set; }
+
+		/// <summary>
+		/// This will be null if there are no earlier Posts
+		/// </summary>
+		public Post PreviousPostIfAny { get; private set; }
+
+		/// <summary>
+		/// This will be null if there are no later Posts
+		/// </summary>
+		public Post NextPostIfAny { get; private set; }
 
 		/// <summary>
 		/// This may be used to determine - for example - whether comments should be enabled in the view (if they are only to be enabled when viewing

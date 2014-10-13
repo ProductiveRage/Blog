@@ -68,14 +68,32 @@ namespace Blog.Models
 				throw new ArgumentException("Null/empty slug specified");
 
 			var allPosts = _postRetriever.Get();
+			Post matchedPost;
+			PostMatchDetails.PostMatchTypeOptions matchType;
 			var preciseMatch = allPosts.FirstOrDefault(p => p.Slug == slug);
 			if (preciseMatch != null)
-				return new PostMatchDetails(preciseMatch, PostMatchDetails.PostMatchTypeOptions.PreciseMatch);
+			{
+				matchedPost = preciseMatch;
+				matchType = PostMatchDetails.PostMatchTypeOptions.PreciseMatch;
+			}
+			else
+			{
+				var alias = allPosts.FirstOrDefault(p => p.RedirectFromSlugs.Contains(slug));
+				if (alias != null)
+				{
+					matchedPost = alias;
+					matchType = PostMatchDetails.PostMatchTypeOptions.Alias;
+				}
+				else
+					return null;
+			}
 
-			var alias = allPosts.FirstOrDefault(p => p.RedirectFromSlugs.Contains(slug));
-			if (alias != null)
-				return new PostMatchDetails(alias, PostMatchDetails.PostMatchTypeOptions.Alias);
-			return null;
+			return new PostMatchDetails(
+				matchedPost,
+				allPosts.FirstOrDefault(p => p.Id == matchedPost.Id - 1),
+				allPosts.FirstOrDefault(p => p.Id == matchedPost.Id + 1),
+				matchType
+			);
 		}
 
 		/// <summary>

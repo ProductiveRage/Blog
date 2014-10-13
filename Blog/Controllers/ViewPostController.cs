@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Web;
 using System.Web.Mvc;
@@ -72,9 +73,9 @@ namespace Blog.Controllers
 				"Index",
 				new PostListModel(
 					postMatch.Post.Title,
-					GetPostsWithRelatedPostStubs(
-						new NonNullImmutableList<Post>(new[] { postMatch.Post })
-					),
+					GetPostsWithRelatedPostStubs(new[] { postMatch.Post }),
+					postMatch.PreviousPostIfAny,
+					postMatch.NextPostIfAny,
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
@@ -103,6 +104,8 @@ namespace Blog.Controllers
 				new PostListModel(
 					tag.Trim(),
 					GetPostsWithRelatedPostStubs(postsToDisplay),
+					null, // previousPostIfAny,
+					null, // nextPostIfAny
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
@@ -133,6 +136,8 @@ namespace Blog.Controllers
 				new PostListModel(
 					new DateTime(year.Value, month.Value, 1).ToString("MMMM yyyy"),
 					GetPostsWithRelatedPostStubs(posts),
+					null, // previousPostIfAny,
+					null, // nextPostIfAny
 					_postRepository.GetMostRecentStubs(5),
 					_postRepository.GetStubs(null, null, true),
 					_postRepository.GetArchiveLinks(),
@@ -155,25 +160,31 @@ namespace Blog.Controllers
 			return ArchiveByMonth(mostRecentPostDate.Value.Month, mostRecentPostDate.Value.Year);
 		}
 
-		private NonNullImmutableList<PostWithRelatedPostStubs> GetPostsWithRelatedPostStubs(NonNullImmutableList<Post> posts)
+		private PostWithRelatedPostStubs GetPostWithRelatedPostStubs(Post post)
+		{
+			if (post == null)
+				throw new ArgumentNullException("post");
+			
+			return new PostWithRelatedPostStubs(
+				post.Id,
+				post.Posted,
+				post.LastModified,
+				post.Slug,
+				post.RedirectFromSlugs,
+				post.Title,
+				post.IsHighlight,
+				post.MarkdownContent,
+				_postRepository.GetByIds(post.RelatedPosts).Cast<PostStub>().ToNonNullImmutableList(),
+				post.Tags
+			);
+		}
+
+		private NonNullImmutableList<PostWithRelatedPostStubs> GetPostsWithRelatedPostStubs(IEnumerable<Post> posts)
 		{
 			if (posts == null)
 				throw new ArgumentNullException("posts");
 
-			return posts
-				.Select(post => new PostWithRelatedPostStubs(
-					post.Id,
-					post.Posted,
-					post.LastModified,
-					post.Slug,
-					post.RedirectFromSlugs,
-					post.Title,
-					post.IsHighlight,
-					post.MarkdownContent,
-					_postRepository.GetByIds(post.RelatedPosts).Cast<PostStub>().ToNonNullImmutableList(),
-					post.Tags
-				))
-				.ToNonNullImmutableList();
+			return posts.Select(p => GetPostWithRelatedPostStubs(p)).ToNonNullImmutableList();
 		}
 
 		private class PostSlugRetriever : IRetrievePostSlugs
