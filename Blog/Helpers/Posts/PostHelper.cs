@@ -19,7 +19,13 @@ namespace Blog.Helpers.Posts
 {
 	public static class PostHelper
 	{
-		public static IHtmlString RenderPost(this HtmlHelper helper, PostWithRelatedPostStubs post, IRetrievePostSlugs postSlugRetriever, ICache cache)
+		public static IHtmlString RenderPost(
+			this HtmlHelper helper,
+			PostWithRelatedPostStubs post,
+			Post previousPostIfAny,
+			Post nextPostIfAny,
+			IRetrievePostSlugs postSlugRetriever,
+			ICache cache)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
@@ -30,7 +36,12 @@ namespace Blog.Helpers.Posts
 			if (cache == null)
 				throw new ArgumentNullException("cache");
 
-			var cacheKey = "PostHelper-RenderPost-" + post.Id;
+			var cacheKey = string.Format(
+				"PostHelper-RenderPost-{0}-{1}-{2}",
+				post.Id,
+				(previousPostIfAny == null) ? 0 : previousPostIfAny.Id,
+				(nextPostIfAny == null) ? 0 : nextPostIfAny.Id
+			);
 			var cachedData = cache[cacheKey];
 			if (cachedData != null)
 			{
@@ -40,7 +51,7 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			var content = GetRenderableContent(helper, post, true, true, true, postSlugRetriever);
+			var content = GetRenderableContent(helper, post, previousPostIfAny, nextPostIfAny, true, true, true, postSlugRetriever);
 			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
 			return (IHtmlString)MvcHtmlString.Create(content);
 		}
@@ -68,7 +79,7 @@ namespace Blog.Helpers.Posts
 				cache.Remove(cacheKey);
 			}
 
-			var content = GetRenderableContent(helper, post, false, false, false, postSlugRetriever);
+			var content = GetRenderableContent(helper, post, null, null, false, false, false, postSlugRetriever);
 			var doc = new HtmlDocument();
 			doc.LoadHtml(content);
 			MakeUrlsAbsolute(doc, "a", "href", requestHostUrl.Scheme, requestHostUrl.Host, requestHostUrl.Port);
@@ -86,6 +97,8 @@ namespace Blog.Helpers.Posts
 		private static string GetRenderableContent(
 			HtmlHelper helper,
 			PostWithRelatedPostStubs post,
+			Post previousPostIfAny,
+			Post nextPostIfAny,
 			bool includeTitle,
 			bool includePostedDate,
 			bool includeTags,
@@ -110,6 +123,29 @@ namespace Blog.Helpers.Posts
 			content.Append(
 				MarkdownHelper.TransformIntoHtml(markdownContent)
 			);
+			if ((previousPostIfAny != null) || (nextPostIfAny != null))
+			{
+				content.Append("<div class=\"PreviousAndNext\">");
+				if (previousPostIfAny != null)
+				{
+					content.Append("<div class=\"Previous\">");
+					content.Append("<span>Previous:</span>");
+					content.Append(
+						helper.ActionLink(previousPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = previousPostIfAny.Slug }, new { @class = "previous" })
+					);
+					content.Append("</div>");
+				}
+				if (nextPostIfAny != null)
+				{
+					content.Append("<div class=\"Next\">");
+					content.Append("<span>Next:</span>");
+					content.Append(
+						helper.ActionLink(nextPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = nextPostIfAny.Slug }, new { @class = "next" })
+					);
+					content.Append("</div>");
+				}
+				content.Append("</div>");
+			}
 			if (post.RelatedPosts.Any())
 			{
 				content.Append("<div class=\"Related\">");
