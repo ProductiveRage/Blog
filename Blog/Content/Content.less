@@ -115,7 +115,22 @@ body
 			> li {  list-style-type: disc; }
 		}
 
-		div.PreviousAndNext { display: none; } // Hide until the content is styled properly
+		div.PreviousAndNext
+		{
+			div.Previous, div.Next
+			{
+				// Emulate the appearane of a list item so that it looks consistent with the "You may also be interested in" links
+				margin: 0 0 1em 0;
+				> a
+				{
+					display: list-item;
+					list-style-type: disc;
+					list-style-position: outside;
+					margin: 0 0 0 2em;
+					line-height: 28px;
+				}
+			}
+		}
 
 		div.Tags
 		{
