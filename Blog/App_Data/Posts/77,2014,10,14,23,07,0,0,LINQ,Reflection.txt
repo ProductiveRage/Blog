@@ -1,0 +1,664 @@
+## Writing run-time compiled LINQ Expressions
+
+In September, I was talking about [Implementing F#-inspired "with" updates for immutable classes in C#](Post74) - in which I mentioned that
+
+> The **UpdateWithSignature<T>** delegate itself is a compiled LINQ expression so, once the cost of generating it has been paid the first time that it's required, the calls to this delegate are very fast
+
+In the past, I've made use of LINQ expressions for writing code that is generated at runtime that will be executed many times and would benefit from being as fast as code written at compile time. I'm by no means an expert, but I've put it to use a few times and feel like I'm slowly getting the hang of it. What struck me, the first few times that I tried to find out *how* to do things, was how sparse the information seems to be out there. There's reference material from Microsoft - which is helpful if you basically have a good grasp on what you're doing and need to look up some minutiae of the implementation. You can find quite advanced articles, but these also tend to assume deep knowledge and jump right into the deep end. Then there's beginner-oriented overview articles - these can be excellent at giving an introduction into what LINQ expressions can mean and what they can be used for, but they don't tend to go beyond fairly simple examples and don't (I found) help you get into the frame of mind that you need to build up complex expressions.
+
+I thought it might be helpful for an "intermediary level" article to exist that takes the basic concepts and walks through creating something useful with it.
+
+Now, I should maybe preface this with an admission that in a subsequent post to the one I quoted above (see "[A follow-up to "Implementing F#-inspired 'with' updates in C#"](Post76)), I said that I probably wouldn't end up using this dynamic run-time-compiled code in real world projects - but it still seems like a good sized example of something real-world-*ish*. So I'm going to walk through recreating it. If you haven't read that post, no worries, I'm going to act like you haven't and explain everything as I go (and after you're finished, if you *haven't* read that post, you can go do so :)
+
+### The (slightly-contrived) example
+
+Here's the setup, which corresponds roughly to what I was trying to do last month. I've got a class **RoleDetails** -
+
+    public class RoleDetails
+    {
+      public RoleDetails(string title, DateTime startDate, DateTime? endDateIfAny)
+      {
+        Title = title;
+        StartDate = startDate;
+        EndDateIfAny = endDateIfAny;
+      }
+    
+      public string Title { get; private set; }
+      public DateTime StartDate { get; private set; }
+      public DateTime? EndDateIfAny { get; private set; }
+    }
+    
+I wanted to generate a method at runtime which I could pass the arguments "title", "startDate" and "endDateIfAny" to and have it return a new instance of the class, using those values to define the new instance. The equivalent of 
+
+    public static RoleDetails UpdateWith(
+      RoleDetails source,
+      Optional<string> title,
+      Optional<DateTime> startDate,
+      Optional<DateTime?> endDateIfAny)
+    {
+      if (source == null)
+        return new ArgumentNullException("source");
+        
+      if (!title.IndicatesChangeFromValue(source.Title)
+      && !startDate.IndicatesChangeFromValue(source.StartDate)
+      && !endDateIfAny.IndicatesChangeFromValue(source.EndDateIfAny))
+        return this;
+      
+      return new RoleDetails(
+        title.GetValue(source.Title),
+        startDate.GetValue(source.StartDate),
+        endDateIfAny.GetValue(source.EndDateIfAny)
+      );
+    }
+    
+where the **Optional** type is a struct
+    
+    public struct Optional<T>
+    {
+      private T _valueIfSet;
+      private bool _valueHasBeenSet;
+    
+      public T GetValue(T valueIfNoneSet)
+      {
+        return _valueHasBeenSet ? _valueIfSet : valueIfNoneSet;
+      }
+    
+      public bool IndicatesChangeFromValue(T value)
+      {
+        if (!_valueHasBeenSet)
+          return false;
+    
+        if ((value == null) && (_valueIfSet == null))
+          return false;
+        else if ((value == null) || (_valueIfSet == null))
+          return true;
+    
+        return !value.Equals(_valueIfSet);
+      }
+    
+      public static implicit operator Optional<T>(T value)
+      {
+        return new Optional<T>
+        {
+          _valueIfSet = value,
+          _valueHasBeenSet = true
+        };
+      }
+      
+The structure we need to form is a "body expression" that performs the method's internals, and for this to be packaged up with method arguments into a compiled lambda expression.
+
+Before going too wild, a simple example to illustrate this is a good start:
+
+    private Func<RoleDetails, string> GetRoleTitleRetriever()
+    {
+      var sourceParameter = Expression.Parameter(typeof(RoleDetails), "source");
+      var titlePropertyRetriever = Expression.Property(
+        sourceParameter,
+        typeof(RoleDetails).GetProperty("Title")
+      );
+      return
+        Expression.Lambda<Func<RoleDetails, string>>(
+          titlePropertyRetriever,
+          sourceParameter
+        ).Compile();
+    }
+
+The "titlePropertyRetriever" is an expression that will return the value of the "Title" property from a **RoleDetails** instance that is represented by an expression passed into it. In this case, that expression is the "sourceParameter" which will be combined with the "titlePropertyRetriever" (which, here, represents the entirety of the "body" expression) to create a lambda expression. The "sourceParameter" is the single argument for this particlar lambda.
+
+A lamba expression can be used in conjuction with other expressions if you need to form a complicated construct. Here we have a very simple action and so we call the "Compile" method and return the result. The static method "Expression.Lambda" returns an **Expression&lt;Func&lt;RoleDetails, string&gt;&gt;**. Calling "Compile" on it returns a **Func&lt;RoleDetails, string&gt;**. This is a delegate that we can call directly in our code.
+
+This code could be used thusly -
+
+    var role1 = new RoleDetails("Head Honcho", DateTime.Now, null);
+    var role2 = new RoleDetails("Dogsbody", DateTime.Now, null);
+    
+    var titleRetriever = GetRoleTitleRetriever();
+    var title1 = titleRetriever(role1); // This equals "Head Honcho"
+    var title2 = titleRetriever(role2); // This equals "Dogsbody"
+
+While obviously very simplistic, this gives us some sense of the structure we want. Note that there is no explicit representation of "return" in there - the body expression is expected to return a value and the result of the last expression is taken as the return value.
+
+What I'm trying to get towards, though, is something that produces a new instance of the same type - not just a property retrieved from it. So instead of a **Func&lt;RoleDetails, string&gt;**, we want a **Func&lt;RoleDetails, RoleDetails&gt;** which does some sort of work.
+
+The next (small) step is to illustrate calling a constructor. The following will return a new instance of **RoleDetails** using all the same property values.
+
+    private Func<RoleDetails, RoleDetails> GetCloner()
+    {
+      var sourceParameter = Expression.Parameter(typeof(RoleDetails), "source");
+      var constructor = typeof(RoleDetails).GetConstructor(new[] {
+        typeof(string),
+        typeof(DateTime),
+        typeof(DateTime?)
+      });
+      return
+        Expression.Lambda<Func<RoleDetails, RoleDetails>>(
+          Expression.New(
+            constructor,
+            Expression.Property(
+              sourceParameter,
+              typeof(RoleDetails).GetProperty("Title")
+            ),
+            Expression.Property(
+              sourceParameter,
+              typeof(RoleDetails).GetProperty("StartDate")
+            ),
+            Expression.Property(
+              sourceParameter,
+              typeof(RoleDetails).GetProperty("EndDateIfAny")
+            )
+          ),
+          sourceParameter
+        ).Compile();
+    }
+
+Reflection is used to get a reference to the constructor that takes arguments with types **string**, **DateTime** and **DateTime?**. The body expression consists of the result of "Expression.New", which takes a constructor and expressions for the values and returns an expression for the new instance.
+
+I'm not going to go into too much detail about using reflection to look up constructors, properties, methods, etc.. since it's easy to good find resources that cover this topic at all levels. In my original post, I was talking about code that would analyse the target type and match the best constructor to available properties (for cases where there might be multiple constructors) - here, I'm going to leave all that out and "hard code" the mappings. It shouldn't be a big deal to take what I'm (hopefully!) going to explain here and then complicate it by bolting on some reflection-based type analysis.
+
+It's worth noting here, that the code above has hard-coded strings for property names and relies upon a particular constructor signature being available. As soon as you introduce reflection like this, you give up much of what the compiler can offer you and if the target types get refactored in a manner that changes the facts relied on then you won't find out until runtime that you've got a problem. But that's the cost of runtime craziness like this. I think it's a fair assumption going in that you're well aware of all this! Often this sort of code gymnastics is not appropriate, but other times runtime convenience *is* very useful - I tend to use [AutoMapper](https://github.com/AutoMapper/AutoMapper) as the canonical example since people seem to find it very easy to grasp the pros and cons of it but it's an prime example of something that you mightn't find issues with until runtime (as opposed to less "dynamic" code that issues can be identified with at compile time, through static analysis in the IDE).
+
+The next step in our example code is the introduction of additional arguments. To stick to baby steps, all we'll do is define a delegate the takes a source reference and returns a new instance by overriding a single property - specifically the "Title":
+
+    private Func<RoleDetails, string, RoleDetails> GetTitleUpdater()
+    {
+      var sourceParameter = Expression.Parameter(typeof(RoleDetails), "source");
+      var titleParameter = Expression.Parameter(typeof(string), "title");
+      var constructor = typeof(RoleDetails).GetConstructor(new[] {
+        typeof(string),
+        typeof(DateTime),
+        typeof(DateTime?)
+      });
+      return
+        Expression.Lambda<Func<RoleDetails, string, RoleDetails>>(
+          Expression.New(
+            constructor,
+            titleParameter,
+            Expression.Property(
+              sourceParameter,
+              typeof(RoleDetails).GetProperty("StartDate")
+            ),
+            Expression.Property(
+              sourceParameter,
+              typeof(RoleDetails).GetProperty("EndDateIfAny")
+            )
+          ),
+          sourceParameter,
+          titleParameter
+        ).Compile();
+    }
+
+Here, it's clear how to affect the **Func** signature - by changing the type param for "Expression.Lambda" and by specifying the corresponding number of parameters. Instead of the body expression and a single argument, we now specify *two* arguments. The types of the arguments in the *Func* are consistent with the types of the "sourceParameter" and "titleParameter". The third *Func* type param is also **RoleDetails** since that is what is returned by the **RoleDetails** constructor that "Expression.New" is using.
+
+It's also clear how expressions can be interchanged - before the "Expression.New" call was taking a constructor reference and then expressions for the constructor arguments that all consisted of type **MemberExpression** (since this the return type of "Expression.Property"). Now we've switched the first **MemberExpression** out for a **ParameterExpression**. "Expression.New" doesn't care if the constructor argument expressions are property retrievals, method arguments, constant values - they can be anything, so long as they can be described by a type of **Expression**.
+
+### Introducing Optional arguments
+
+Let's address two issue now. Firstly, there should be three arguments passed in - for each of the three constructor arguments - instead of one. And these arguments should be of type **Optional&lt;T&gt;**, so that they can effectively have "no value" and default to the value they have on the "source" reference.
+
+    private delegate RoleDetails RoleDetailsUpdater(
+      RoleDetails source,
+      Optional<string> title,
+      Optional<DateTime> startDate,
+      Optional<DateTime?> endDateIfAny
+    );
+    
+    private RoleDetailsUpdater GetSimpleUpdater()
+    {
+      var sourceParameter = Expression.Parameter(typeof(RoleDetails), "source");
+      var titleParameter = Expression.Parameter(typeof(Optional<string>), "title");
+      var startDateParameter = Expression.Parameter(typeof(Optional<DateTime>), "startDate");
+      var endDateIfAnyParameter = Expression.Parameter(typeof(Optional<DateTime?>), "endDateIfAny");
+        var constructor = typeof(RoleDetails).GetConstructor(new[] {
+          typeof(string),
+          typeof(DateTime),
+          typeof(DateTime?)
+        });
+        return
+          Expression.Lambda<RoleDetailsUpdater>(
+            Expression.New(
+              constructor,
+              Expression.Call(
+                titleParameter,
+                typeof(Optional<string>).GetMethod("GetValue"),
+                Expression.Property(sourceParameter, "Title")
+              ),
+              Expression.Call(
+                startDateParameter,
+                typeof(Optional<DateTime>).GetMethod("GetValue"),
+                Expression.Property(sourceParameter, "StartDate")
+              ),
+              Expression.Call(
+                endDateIfAnyParameter,
+                typeof(Optional<DateTime?>).GetMethod("GetValue"),
+                Expression.Property(sourceParameter, "EndDateIfAny")
+              )
+            ),
+            sourceParameter,
+            titleParameter,
+            startDateParameter,
+            endDateIfAnyParameter
+          ).Compile();
+    }
+
+Now we're using the return values of "GetValue" method calls for all of the constructor arguments. Each method call is taking a property value extracted from the "source" reference as an argument (since "GetValue" takes a single argument - as per the definition of **Optional** earlier). I've also snuck in another change. I found that it was getting unwieldy specifying a **Func** with five arguments (**RoleDetails**, **string**, **DateTime** and **DateTime?** as inputs and another **RoleDetails** as the output) and so defined a delegate to instead. This delegate can be used with "Expression.Lambda" just as well as any **Func** can.
+
+There are two concepts missing still, though, that are key to the original intention. We need to throw an exception if the "source" reference is null. And we need to return the source reference straight back out if none of the arguments represent a change; if the "title", "startDate" and "endDateIfAny" values all match those on the source reference then we may as well return that source reference straight back, rather than creating a new instance that we don't need - this only makes sense because **RoleDetails** is an immutable type (but since it is, it *does* make sense).
+
+To deal with branching, there is a method "Expression.IfThenElse" which takes an expression for the condition (this expression must represent a boolean-returning operation) and then expressions for if-true and if-false. There is something to be aware of here, though - in C# (and in LINQ expressions) an "If" (or "If..Else") statement is not an "expression" where "expression" means "something that returns a value". It branches execution but, unlike with the property accessor or methods calls we've seen so far, it doesn't return a value. To make it work as required here, at the end of each branch we need to return via a "label" that marks the end of the block and has a type corresponding to the block's return type.
+
+A label indicates an exit point in a block. If the block has a return type, then the label must have a compatible return value (if the block's return type is void then the label needn't specify a return value since the block will not be returning any value). The label's return value may be null, but if a type other than **System.Object** is being returned then that null constant must be described with the actual return type.
+
+Once this label is defined, "Expression.Return" can be used to terminate the branches on an if-then-else construct. This is all illustrated in the next example.
+
+The source-argument-null-check is easier; we'll combine "Expression.IfThen" (rather than "IfThenElse") with "Expression.Throw". There is no return label nonsense to worry about since, once an exception has been thrown, there's no return value involved! "Expression.Throw" takes a single argument, which is the exception that it should throw.
+
+    private RoleDetailsUpdater GetUpdater()
+    {
+      // These are the parameters for the RoleDetailsUpdater delegate that will be generated
+      var sourceParameter = Expression.Parameter(typeof(RoleDetails), "source");
+      var titleParameter = Expression.Parameter(typeof(Optional<string>), "title");
+      var startDateParameter = Expression.Parameter(typeof(Optional<DateTime>), "startDate");
+      var endDateIfAnyParameter = Expression.Parameter(
+        typeof(Optional<DateTime?>),
+        "endDateIfAny"
+      );
+      
+      // When evaluated, these expressions will extract the property values from the "source" reference
+      var sourceTitleRetriever = Expression.Property(
+        sourceParameter,
+        typeof(RoleDetails).GetProperty("Title")
+      );
+      var sourceStartDateRetriever = Expression.Property(
+        sourceParameter,
+        typeof(RoleDetails).GetProperty("StartDate")
+      );
+      var sourceEndDateIfAnyRetriever = Expression.Property(
+        sourceParameter,
+        typeof(RoleDetails).GetProperty("EndDateIfAny")
+      );
+      
+      // When evaluated, these will determine whether any of the argument values differ from the
+      // property values on the "source" reference
+      var isTitleValueNew = Expression.Call(
+        titleParameter,
+        typeof(Optional<string>).GetMethod("IndicatesChangeFromValue"),
+        sourceTitleRetriever
+      );
+      var isStartDateValueNew = Expression.Call(
+        startDateParameter,
+        typeof(Optional<DateTime>).GetMethod("IndicatesChangeFromValue"),
+        sourceStartDateRetriever
+      );
+      var isEndDateIfAnyValueNew = Expression.Call(
+        endDateIfAnyParameter,
+        typeof(Optional<DateTime?>).GetMethod("IndicatesChangeFromValue"),
+        sourceEndDateIfAnyRetriever
+      );
+      var areAnyValuesNew = Expression.OrElse(
+        isTitleValueNew,
+        Expression.OrElse(isStartDateValueNew, isEndDateIfAnyValueNew)
+      );
+      
+      // This is the where the real work takes place: If "source" is null then throw an exception.
+      // If any of the arguments require that a new instance being created, then construct that
+      // instance with the new data and return it. Otherwise just return the source reference.
+      var returnTarget = Expression.Label(typeof(RoleDetails));
+      return
+        Expression.Lambda<RoleDetailsUpdater>(
+          Expression.Block(
+            Expression.IfThen(
+              Expression.Equal(sourceParameter, Expression.Constant(null)),
+              Expression.Throw(Expression.Constant(new ArgumentNullException("source")))
+            ),
+            Expression.IfThenElse(
+              areAnyValuesNew,
+              Expression.Return(
+                returnTarget,
+                Expression.New(
+                  typeof(RoleDetails).GetConstructor(new[] {
+                    typeof(string),
+                    typeof(DateTime),
+                    typeof(DateTime?)
+                  },
+                  Expression.Call(
+                    titleParameter,
+                    typeof(Optional<string>).GetMethod("GetValue"),
+                    sourceTitleRetriever
+                  ),
+                  Expression.Call(
+                    startDateParameter,
+                    typeof(Optional<DateTime>).GetMethod("GetValue"),
+                    sourceStartDateRetriever
+                  ),
+                  Expression.Call(
+                    endDateIfAnyParameter,
+                    typeof(Optional<DateTime?>).GetMethod("GetValue"),
+                    sourceEndDateIfAnyRetriever
+                  )
+                )
+              ),
+              Expression.Return(
+                returnTarget,
+                sourceParameter
+              )
+            ),
+            Expression.Label(returnTarget, Expression.Constant(null, typeof(RoleDetails)))
+          ),
+          sourceParameter,
+          titleParameter,
+          startDateParameter,
+          endDateIfAnyParameter
+        ).Compile();
+    }
+    
+Note the use of "Expression.OrElse" above. We use this since we're dealing with boolean logic (eg. is the start-date-value new *or* is the end-date-value new). There is an "Expression.Or" method, but that is for numeric operations (eg. 1 & 4).
+
+### Winning!
+
+At this point, we've achieved what I laid out as the original intention.
+
+I'm not going to pretend that it's particularly beautiful or succinct - especially compared to the code that you would write by hand. But then, if you had a scenario where you *could* write this by hand then you probably *would*, rather than having to resort to writing code that generates more code! And when I think about how LINQ expressions compare to the "old school" alternative of directly generating IL then it's a *lot* more read-and-write-able. Perhaps "maintainable" is a better word for it :)
+
+IL generation, unfortunately, still has its place - it's been a while since I looked into this, but I *think* that if you wanted to generate an entire class, rather than a delegate, then you have to resort to emitting IL.
+
+### Debugging
+
+Debugging compiled expressions can be a mixed bag. If you make mistakes that compile but cause errors at runtime then you *may* get a helpful error or you may get something fairly cryptic.
+
+The safest approach, I've found, is to construct the code in the smallest functional units you can and to then test it with code that exercises every path in the generated expression. In the example above, this was done by starting with code that simply extracted a single property value from the source argument. Then multiple property values were extracted and passed into a constructor method. Then the delegate signature was changed to take multiple arguments and to use these with the constructor. Then these arguments were changed to the use **Optional** type and use its "GetValue" method to fall back to the source properties if required. Finally a guard clause was added for a null source reference and a condition added to return the source reference straight back if none of the arguments indicate that a new instance is required. If any of these steps introduced a new error, it should have been relatively easy to work out what went wrong.
+
+To illustrate, if you were adding the code that will "exit early" if no new instance is required, and you forgot to specify a type for the null constant - ie. instead of
+
+    Expression.Label(returnTarget, Expression.Constant(null, typeof(RoleDetails)))
+    
+you wrote
+
+    Expression.Label(returnTarget, Expression.Constant(null))
+    
+then you would get an error (if you called the code with arguments that executed the no-new-instance-required code path):
+
+> Expression of type 'System.Object' cannot be used for label of type 'Tester.RoleDetails'
+
+I would say that this could be considered half way between helpful and cryptic.. if you realise what it means then it's perfectly sensible, but if you can't see what it's referring to (and it's not like you will get the line number of the incorrect **Expression** call to help you - you'll just get an exception when "Expression.Block" is executed) then it can appear somewhat incomprehensible.
+
+As I said before, an expression block must have a consistent return type, and the block in the code above should return a **RoleDetails** instance - but "Expression.Constant(null)" defaults to type **System.Object** since it is not instructed otherwise. If the code is built and tested step-by-step, then it should be fairly simple to trace the error back to its source.
+
+Another approach for examining the behaviour of expressions is to look at the "Body" property of the lambda expression. This must be done on the return value of "Expression.Lambda", before "Compile" is called. It also requires that the expression be valid. So this will not apply to the above example, where the label is of an incorrect type, since that will result in an exception being thrown when "Expression.Block" is called (since that method does work to ensure that the content described obeys its rules for consistency).
+
+It may be useful, though, in a case where you have an expression that is valid but that does not behave as you expect. If you take the code above and tweaked it a bit by changing
+
+    return
+      Expression.Lambda<RoleDetailsUpdater>(
+        // .. the rest of the expression generation code still goes here
+      ).Compile();
+
+into
+
+    var lambda = Expression.Lambda<RoleDetailsUpdater>(
+      // .. the rest of the expression generation code still goes here
+    );
+    return lambda.Compile();
+
+then you could insert a break point before the return statement and look at the "Body" property of the "lambda" reference. It would have the following value:
+
+    .Block() {
+      .If ($source == null) {
+        .Throw .Constant<System.ArgumentNullException>(
+          System.ArgumentNullException: Value cannot be null.Parameter name: source
+        )
+      } .Else {
+        .Default(System.Void)
+      };
+      .If (
+        .Call $title.IndicatesChangeFromValue($source.Title)
+          || .Call $startDate.IndicatesChangeFromValue($source.StartDate)
+          || .Call $endDateIfAny.IndicatesChangeFromValue($source.EndDateIfAny)
+      ) {
+        .Return #Label1 { .New Tester.RoleDetails(
+        .Call $title.GetValue($source.Title),
+        .Call $startDate.GetValue($source.StartDate),
+        .Call $endDateIfAny.GetValue($source.EndDateIfAny)) }
+      } .Else {
+        .Return #Label1 { $source }
+      };
+      .Label
+        null
+      .LabelTarget #Label1:
+    }
+
+This isn't exactly C# but it *does* illustrate the code paths in a way that is fairly comprehensible and may highlight any logic errors you've made.
+
+### Performing other manipulations
+
+At this point, I'd say we've covered a lot of the basic and - hopefully - you're set up to break into the reference material (such as the MSDN docs). Most of the static "Expression" methods are sensibly named and so usually fairly easy to find information for with a little searching (or just relying on intellisense).
+
+If, for example, you had an **Expression** whose type was an array and you wanted an element from that array, you would use "Expression.ArrayAccess" (whose first parameter is the target **Expression** and the next is a set of index expression - the number of required index expressions will depend upon the number of dimensions the array has).
+
+Something I particularly remember finding difficult to track an example for was code where you needed local variables within a block. There are examples for accessing arguments and setting lambda return values and altering the values of the arguments, but setting a local variable within a block scope.. not as easy to find.
+
+I may well have been having a bad day when I was struggling with it - once you see how it's implemented, it looks easy! But I thought I'd use it as an excuse for another example. Because I'm still not an expert in writing this sort of code, I prepared this example in Visual Studio in the manner in which I explained above; bit-by-bit, starting with an implementation that returned a constant, then one that returned the hash code of a single property, then extended it to cover all of the variables and then deal with the special cases like a null "source" reference and then ValueType properties and then static properties.
+
+The example I had in mind was a way to generate a method that would calculate a hash code for a given type. As it stands, in isolation, it's not quite a real-world requirement - but hopefully you can conceive of how something not completely dissimilar *could* be useful. Plus it's a nice size in that it's not quite trivial but not enormous - and it reiterates some of the same techniques seen above.
+
+So.. if this was to be written using just reflection, it could be something like this:
+
+    public Func<T, int> GetHashCodeGenerator<T>()
+    {
+      // ToArray is called against these properties since the set is going to be enumerated every time
+      // the returned hash code generator is executed - so it makes sense to do the work to retrieve
+      // this data only once and then stash it away
+      var properties = typeof(T).GetProperties()
+        .Where(p => p.CanRead)
+        .OrderBy(p => p.Name)
+        .ToArray();
+      var firstIndexedProperty = properties.FirstOrDefault(p => p.GetIndexParameters().Any());
+      if (firstIndexedProperty != null)
+      {
+        throw new ArgumentException(string.Format(
+          "Indexed property encountered, this is not supported: {0}",
+          firstIndexedProperty.Name
+        ));
+      }
+
+      return source =>
+      {
+        if (source == null)
+          throw new ArgumentNullException("source");
+
+        var hashCode = 0;
+        foreach (var property in properties)
+        {
+          // Even if it's a static property, there is no problem executing property.GetValue(source),
+          // it will return the same value for any instance, but it won't throw an exception
+          var propertyValue = property.GetValue(source);
+          var propertyValueHashCode = (propertyValue == null) ? 0 : propertyValue.GetHashCode();
+          hashCode = 3 * (hashCode ^ propertyValueHashCode);
+        }
+        return hashCode;
+      };
+    }
+    
+This is called (using our faithful **RoleDetails** example class) in the manner:
+
+    // Retrieve a delegate that takes a RoleDetails instance and returns a hash code
+    var roleDetailsHashCodeGenerator = GetHashCodeGenerator<RoleDetails>();
+    
+    // Use this delegate to generate some hash codes
+    var role1HashCode = roleDetailsHashCodeGenerator(role1);
+    var role2HashCode = roleDetailsHashCodeGenerator(role2);
+
+Note: If you look carefully you'll see something odd - when I call "GetProperties" I use "OrderBy" on the results. This is because I included the code above (which relies on reflection for every call) and the code that I'll get to below (which uses reflection to generate a compiled expression to perform the same work) in the same test program and wanted them to return the same hash code for any given reference. Which doesn't seems unreasonable. But the algorithm requires that the properties be reported in a consistent order if the two implementations of that algorithm are to return matching hash codes. However, the MSDN article for "[Type.GetProperties](http://msdn.microsoft.com/en-us/library/aky14axb(v=vs.110).aspx)" states that
+
+> Your code must not depend on the order in which properties are returned, because that order varies.
+
+So if I was just writing a single version of this method then I probably wouldn't bother with the OrderBy call, but since I wanted to write a LINQ-expressions-based version *and* a non-expressions-based version *and I wanted the two versions to return identical results* then I *do* need to be explicit about the property ordering.
+
+### Returning to the matter in hand
+
+If you're happy with everything covered so far, then the code coming up won't pose any problem.
+
+There are some new **Expression** methods calls - "Expression.MultiplyAssign" corresponds to the C# statement "x *= y" or "x = x * y" and "Expression.ExclusiveOrAssign" corresponds to "x ^= y" or "x = x ^ y" (the XOR operation).
+
+It's worth being aware that LINQ expressions *can* be used to define looping constructs - such as a for, foreach or do-while loop - using "Expression.Loop" but you'll have to implement some of the logic of yourself. For a "for" loop, for example, you'll need to declare a local variable that is altered each iteration and then checked against a particular condition each time to determine whether the loop should be exited. For a "foreach" loop, you'll need to call the "GetEnumerator" method on the loop target and use the methods on that to proceed through or exit the loop.
+
+Here, though, I don't need any loops within the expressions. Since I know what properties must be considered when generating the expressions, I'm uneffectively unrolling the loop to generate a set of statements that retrieve a hash code for each property value and then combine them with an accumulator to come up with the final value.
+
+    public Func<T, int> GetCompiledHashCodeGenerator<T>()
+    {
+      var properties = typeof(T).GetProperties().Where(p => p.CanRead).OrderBy(p => p.Name);
+      var firstIndexedProperty = properties.FirstOrDefault(p => p.GetIndexParameters().Any());
+      if (firstIndexedProperty != null)
+      {
+        throw new ArgumentException(string.Format(
+          "Indexed property encountered, this is not supported: {0}",
+          firstIndexedProperty.Name
+        ));
+      }
+
+      var sourceParameter = Expression.Parameter(typeof(T), "source");
+      var accumulatorVariable = Expression.Variable(typeof(int), "accumulator");
+
+      var blockExpressions = new List<Expression>();
+
+      // Check for a null "source" reference (can be skipped entirely if T is a ValueType)
+      if (!typeof(T).IsValueType)
+      {
+        blockExpressions.Add(
+          Expression.IfThen(
+            Expression.Equal(sourceParameter, Expression.Constant(null)),
+            Expression.Throw(Expression.Constant(new ArgumentNullException("source")))
+          )
+        );
+      }
+
+      // Calculate a combined hash by starting with zero and then enumerating the properties -
+      // performing an XOR between the accumulator and the current property value and then
+      // multiplying before continuing
+      blockExpressions.Add(
+        Expression.Assign(accumulatorVariable, Expression.Constant(0))
+      );
+      var getHashCodeMethod = typeof(object).GetMethod("GetHashCode");
+      foreach (var property in properties)
+      {
+        // Static properties must specify a null target, otherwise there will be an exception
+        // thrown at runtime: "Static property requires null instance, non-static property
+        // requires non-null instance."
+        var isStaticProperty = property.GetGetMethod().IsStatic;
+        var propertyValue = Expression.Property(isStaticProperty ? null : sourceParameter, property);
+        if (property.PropertyType.IsValueType)
+        {
+          // If the property is a ValueType then we don't have to worry about calling GetHashCode
+          // on a null reference..
+          blockExpressions.Add(
+            Expression.ExclusiveOrAssign(
+              accumulatorVariable,
+              Expression.Call(propertyValue, getHashCodeMethod)
+            )
+          );
+        }
+        else
+        {
+          // .. otherwise we need to check for null and default to a zero hash code if this is the
+          // case (I picked zero since it's what Nullable<T> returns from its GetHashCode method
+          // if that Nullable<T> is wrapping a null value).
+          //
+          // Proof-reading update: I've just realised that an XOR-assign operation with zero is
+          // equivalent to no-operation and so we could do nothing if the property value is null.
+          // But by this point, I've already completed the first draft of the post and done some
+          // performance comparisons and I'm too lazy to do that all again! Maybe no-one will pick
+          // up on the algorithm mistake and then also not read this comment. If you *are* reading
+          // it.. well, hi! :)
+          blockExpressions.Add(
+            Expression.IfThenElse(
+              Expression.Equal(propertyValue, Expression.Constant(null)),
+              Expression.ExclusiveOrAssign(accumulatorVariable, Expression.Constant(0)),
+              Expression.ExclusiveOrAssign(
+                accumulatorVariable,
+                Expression.Call(propertyValue, getHashCodeMethod)
+              )
+            )
+          );
+        }
+        blockExpressions.Add(
+          Expression.MultiplyAssign(accumulatorVariable, Expression.Constant(3))
+        );
+      }
+
+      // The last expression in the block indicates the return value, so make it the
+      // "accumulatorVariable" reference
+      blockExpressions.Add(accumulatorVariable);
+      
+      // This Expression.Block method signature takes a set of local variable expressions (in this
+      // case there's only one; the accumulatorVariable) followed by the expressions that form the
+      // body of the block
+      return 
+        Expression.Lambda<Func<T, int>>(
+          Expression.Block(
+            new[] { accumulatorVariable },
+            blockExpressions
+          ),
+          sourceParameter
+        ).Compile();
+    }
+
+I wrote this in the way I recommended earlier; in bite-size chunks. Maybe one day I'll be able to just sit down and reel out complex trees of expressions in one fell swoop and instinctively know where any errors I introduce originate.. actually, if I've got a fictional "one day" then I might as well fantasise that I won't make any mistakes that need tracking down in the first place - which will be even better! However, *today*, I need to break it down and confirm each step.
+
+The first step was to take a source argument, call GetHashCode on it and return that directly - using the builtin "GetHashCode" method on **System.Object**, rather than implementing the logic myself. The next step was to loop through each property and generate expressions that would retrieve that property's value from the source reference and combine it with a local accumulator variable, returning this accumulator variable's final value at the end of the block. Then I added null checks to the property retrievals, defaulting to a hash code of zero to prevent trying to call GetHashCode on a null reference (zero is consistent with the hash code returned from **Nullable&lt;T&gt;** when it wraps a null value). Then I realised that this check could be skipped entirely if the property's PropertyType was a value-type, since that could never be null! The logic that dealt with static properties was added next. Finally, an if-null guard clause was added so that an **ArgumentNullException** would be raised if the source reference is null. Again, I realised that if the source type was a value-type then this was unnecessary - there's no need to check something for null if you know that it never can be null.
+
+Each step was small enough that any problems could easily be traced to their source but each one contributed real functionality.
+
+It was interesting that the expression-generating code lent itself to these "short cuts" in the final code (the don't-check-for-null-if-the-type-is-such-that-it-never-*can*-be-null short cuts). In the reflection version, we *could* write something like
+
+    if (!typeof(T).IsValueType && (source == null))
+      throw new ArgumentNullException("source");
+
+but there's no advantage to that over
+
+    if (source == null)
+      throw new ArgumentNullException("source");
+
+In the LINQ expression version, the advantage is that if "T" is a value type then the hash code generation will not include the if-null clause at all!
+
+This is a micro-optimisation, perhaps, especially when we're hoping for much greater saves overall due to avoiding reflection each time our version of GetHashCode is called. And, in a way, it probably *is* a micro-optimisation, but I would also argue that it's *correct* and it makes sense to do it *regardless* of any performance improvement, since it matches the object graph more closely and shows that you've thought about what you're actually doing.
+
+Talking of performance.. the point of this article was to talk about *how* to write LINQ expressions, it wasn't about *when* they should be used. But since we now have two implementations of a generic GetHashCode method - one requiring reflection for each call and one using a compiled expression - surely it would be silly not to take it as anecdotal evidence of the potential performance improvements??
+
+Here's the meat of a console app that should illustrate it. To be as accurate as possible, it needs to be built in release configuration and then run several times. Run at the command line (rather than through Visual Studio) to hook in as little debugging jiggery pokery as possible -
+
+    var role1 = new RoleDetails("Penguin Cuddler", DateTime.Now, null);
+
+    var reflectionBasedHashCodeGenerator = GetHashCodeGenerator<RoleDetails>();
+    var compiledHashCodeGenerator = GetCompiledHashCodeGenerator<RoleDetails>();
+
+    var timerReflection = new Stopwatch();
+    var timerCompiled = new Stopwatch();
+    for (var outerLoop = 0; outerLoop < 100; outerLoop++)
+    {
+      timerReflection.Start();
+      for (var innerLoop = 0; innerLoop < 10000; innerLoop++)
+        reflectionBasedHashCodeGenerator(role1);
+      timerReflection.Stop();
+
+      timerCompiled.Start();
+      for (var innerLoop = 0; innerLoop < 10000; innerLoop++)
+        compiledHashCodeGenerator(role1);
+      timerCompiled.Stop();
+    }
+    Console.WriteLine("Total Reflection: " + timerReflection.ElapsedMilliseconds + "ms");
+    Console.WriteLine("Total Compiled: " + timerCompiled.ElapsedMilliseconds + "ms");
+    Console.WriteLine(
+      "Improvement: {0}x",
+      ((double)timerReflection.ElapsedMilliseconds / timerCompiled.ElapsedMilliseconds).ToString("0.00")
+    );
+
+I ran this three times and got an average 3000ms for the reflection-only approach and 186ms for the compiled-expression version. That's a 16.1x improvement - not bad!
+
+Now, there *is* a cost to building and compiling these expressions. I would say that if you're not expecting to execute them hundreds of thousands of times, then what's the point of going through the pain of writing the expression-generating code - it would be *much* easier to just write the reflection-based version. And if you're running it (at least) hundreds of thousands of times, then the overhead of compiling the expressions will be negligible.
+
+But maybe that rationalisation would be a cop-out.
+
+So I changed the above code to consider the time taken to call GetHashCodeGenerator and GetCompiledHashCodeGenerator, such that it contributed to the timerReflection and timerCompiled totals.
+
+With this change, the averages over three runs were now 3008ms and 204ms, giving an average performance multiplier of 14.8 times (where each run performed a million calls per implementation). Still a very respectable performance bump for somewhere that you know it will make a difference (again, why bother with all this hard work if you don't already know that it's worth it - or, rather, if a profiler hasn't *shown* you that it will be).
+
+A couple of years ago, I wrote a library that basically aimed to be "like AutoMapper but supporting instantiate-by-constructor" (actually, I started it with the intention of it being an extension to AutoMapper to support instantiate-by-constructor - which it can still be used as - but then it took on a bit of a life of its own and became happy to stand on its own two feet). Earlier this year, I updated it to support optional constructor arguments and thought I'd look at how the performance of the library compared to AutoMapper. My library has less functionality than AutoMapper (though it does, of course, have the automated instantiate-by-constructor feature, which AutoMapper does not - the reason I wrote the library!) but by doing less and using compiled expressions for the entire translation, it tackled the example I was using (which was *not* chosen to try to game the system in any way, incidentally) 100x faster for each translation. Which just goes to show that if you avoid work you don't need to do (like the micro-optimisations above) and speed up the big slow bits (replacing repeated reflection with compiled expressions) you can get serious gains! You can read about it in [Reflection and C# optional constructor arguments](Post67).. just in case you want to pick holes in my reasoning :)
