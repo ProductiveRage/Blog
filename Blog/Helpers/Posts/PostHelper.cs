@@ -123,24 +123,26 @@ namespace Blog.Helpers.Posts
 			content.Append(
 				MarkdownHelper.TransformIntoHtml(markdownContent)
 			);
+			if (includePostedDate)
+				content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
 			if ((previousPostIfAny != null) || (nextPostIfAny != null))
 			{
 				content.Append("<div class=\"PreviousAndNext\">");
 				if (previousPostIfAny != null)
 				{
 					content.Append("<div class=\"Previous\">");
-					content.Append("<span>Previous:</span>");
+					content.Append("<h3>Last time:</h3>");
 					content.Append(
-						helper.ActionLink(previousPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = previousPostIfAny.Slug }, new { @class = "previous" })
+						helper.ActionLink(previousPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = previousPostIfAny.Slug }, new { @class = "Previous" })
 					);
 					content.Append("</div>");
 				}
 				if (nextPostIfAny != null)
 				{
 					content.Append("<div class=\"Next\">");
-					content.Append("<span>Next:</span>");
+					content.Append("<h3>Next:</h3>");
 					content.Append(
-						helper.ActionLink(nextPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = nextPostIfAny.Slug }, new { @class = "next" })
+						helper.ActionLink(nextPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = nextPostIfAny.Slug }, new { @class = "Next" })
 					);
 					content.Append("</div>");
 				}
@@ -161,8 +163,6 @@ namespace Blog.Helpers.Posts
 				content.Append("</ul>");
 				content.Append("</div>");
 			}
-			if (includePostedDate)
-				content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
 			if (includeTags)
 			{
 				var tagsToDisplay = post.Tags.Where(t => t.NumberOfPosts > 1); // There's no point rendering a tag unless other Posts have the same tag
