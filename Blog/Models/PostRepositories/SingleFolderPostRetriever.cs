@@ -42,6 +42,40 @@ namespace Blog.Models
 					.Select(values => Tuple.Create(values[0], values[1]));
 			}
 
+			// The relatedPostRelationships set contains tuples of Post Id to Ids of related Posts (in the order that they should appear)
+			const string relatedPostsFilename = "RelatedPosts.txt";
+			var relatedPostsFile = _folder.GetFiles(relatedPostsFilename).FirstOrDefault();
+			IEnumerable<Tuple<int, ImmutableList<int>>> relatedPostRelationships;
+			if (relatedPostsFile == null)
+				relatedPostRelationships = new List<Tuple<int, ImmutableList<int>>>();
+			else
+			{
+				relatedPostRelationships = readFileContents(relatedPostsFile)
+					.Replace("\r\n", "\n")
+					.Replace("\r", "\n")
+					.Split('\n')
+					.Select(entry => entry.Trim())
+					.Where(entry => (entry != "") && !entry.StartsWith("#") && entry.Contains(":"))
+					.Select(entry =>
+					{
+						int sourcePostId;
+						if (!int.TryParse(entry.Split(':').First(), out sourcePostId))
+							return null;
+						var relatedPostIds = entry.Split(':').Skip(1).First().Split(',')
+							.Select(commaSeparatedValue =>
+							{
+								int relatedPostId;
+								return int.TryParse(commaSeparatedValue, out relatedPostId) ? (int?)relatedPostId : null;
+							})
+							.Where(id => id != null)
+							.Select(id => id.Value)
+							.ToImmutableList();
+						return relatedPostIds.Any() ? Tuple.Create(sourcePostId, relatedPostIds) : null;
+					})
+					.Where(entry => entry != null)
+					.ToArray();
+			}
+
 			// We can use this functionality from the FullTextIndexer to generate the Post slug (it will replace accented characters, normalise whitespace,
 			// remove punctuation and lower case the content - all we need to do then is replace spaces with hypens)
 			var stringNormaliser = new DefaultStringNormaliser();
@@ -62,7 +96,7 @@ namespace Blog.Models
 						// I'd like, "c-sharp-state-machines" is better. The replacement is done for "C#" and "F#" (a space is required after the
 						// replacement content otherwise the "sharp" gets rolled into the next word)
 						var slugBase = title.Replace("C#", "c sharp ").Replace("F#", "f sharp ");
-						var slug =stringNormaliser.GetNormalisedString(slugBase).Replace(' ', '-');
+						var slug = stringNormaliser.GetNormalisedString(slugBase).Replace(' ', '-');
 						var redirectsForPost = new NonNullOrEmptyStringList(
 							redirects.Where(r => r.Item2 == slug).Select(r => r.Item1)
 						);
@@ -78,7 +112,7 @@ namespace Blog.Models
 						  title,
 						  fileSummary.IsHighlight,
 						  fileContents,
-						  fileSummary.RelatedPostIds,
+						  relatedPostRelationships.Any(r => r.Item1 == fileSummary.Id) ? relatedPostRelationships.First().Item2 : new ImmutableList<int>(),
 						  fileSummary.Tags.Select(tag => new TagSummary(tag, 1)).ToNonNullImmutableList()
 						));
 					}
@@ -86,10 +120,10 @@ namespace Blog.Models
 			}
 
 			var tagCounts = posts
-					.SelectMany(post => post.Tags)
-					.Select(tag => tag.Tag)
-					.GroupBy(tag => tag, StringComparer.OrdinalIgnoreCase)
-					.ToDictionary(groupedTag => groupedTag.Key, groupedTag => groupedTag.Count(), StringComparer.OrdinalIgnoreCase);
+				.SelectMany(post => post.Tags)
+				.Select(tag => tag.Tag)
+				.GroupBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+				.ToDictionary(groupedTag => groupedTag.Key, groupedTag => groupedTag.Count(), StringComparer.OrdinalIgnoreCase);
 			return new NonNullImmutableList<Post>(posts.Select(post =>
 				new Post(
 					post.Id,
@@ -172,34 +206,20 @@ namespace Blog.Models
 			else
 				return null;
 
-			var relatedPostIds = new List<int>();
-			var tags = new List<string>();
-			foreach (var relatedPostIdOrTag in segments.Skip(8))
-			{
-				int relatedPostId;
-				if (int.TryParse(relatedPostIdOrTag, out relatedPostId))
-					relatedPostIds.Add(relatedPostId);
-				else
-					tags.Add(relatedPostIdOrTag);
-			}
-
 			return new FileSummaryEntry(
 				id,
 				postDate,
 				isHighlight,
-				relatedPostIds.ToImmutableList(),
 				new NonNullOrEmptyStringList(
-					tags.Select(t => t.Trim()).Where(t => t != "").Distinct()
+					segments.Skip(8).Select(t => t.Trim()).Where(t => t != "").Distinct()
 				)
 			);
 		}
 
 		private class FileSummaryEntry
 		{
-			public FileSummaryEntry(int id, DateTime postDate, bool isHighlight, ImmutableList<int> relatedPostIds, NonNullOrEmptyStringList tags)
+			public FileSummaryEntry(int id, DateTime postDate, bool isHighlight, NonNullOrEmptyStringList tags)
 			{
-				if (relatedPostIds == null)
-					throw new ArgumentNullException("relatedPostIds");
 				if (tags == null)
 					throw new ArgumentNullException("tags");
 				if (tags.Any(t => t.Trim() == ""))
@@ -208,12 +228,10 @@ namespace Blog.Models
 				Id = id;
 				PostDate = postDate;
 				IsHighlight = isHighlight;
-				RelatedPostIds = relatedPostIds;
 				Tags = tags;
 			}
 			public int Id { get; private set; }
 			public DateTime PostDate { get; private set; }
-			public ImmutableList<int> RelatedPostIds { get; private set; }
 			public NonNullOrEmptyStringList Tags { get; private set; }
 			public bool IsHighlight { get; private set; }
 		}
