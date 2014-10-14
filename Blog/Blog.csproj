@@ -197,6 +197,7 @@
     <Content Include="App_Data\Posts\73,2014,8,19,22,46,0,0,Brackets,JavaScript.txt" />
     <Content Include="App_Data\Posts\74,2014,9,17,23,12,0,0,Immutability,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\75,2014,9,24,23,12,0,0,JavaScript,React,TypeScript.txt" />
+    <Content Include="App_Data\Posts\77,2014,10,14,23,07,0,0,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM,VBScript.txt" />
     <Content Include="App_Data\Posts\76,2014,10,2,21,49,0,0,Immutability.txt" />
     <Content Include="App_Data\Posts\Redirects.txt" />
