@@ -1,0 +1,279 @@
+## Locating TODO comments with Roslyn
+
+I picked up an old project recently that I knew I'd made good progress on and that the bits that were finished were looking good.. but also I knew that it had TODO comments littered throughout it to remind me what I *hadn't* finished.
+
+To get an idea just how many of these there were, I did a solution-wide search for "TODO" in Visual Studio. There were just over two hundred of them. The search results gave me a fair idea of where they were but I got it into my head that I wanted to export this into a list and then map them onto projects and - ideally - classes and methods. The first part is easy, the search results output contains the path to the file, which indicates the project name. The classes, also, could often be extracted from the filename - so long as there was only one class (or interface or enum or whatever) per file, though no nested types would be awkward.
+
+And this, really, would have been enough information to start tracking my progress and have a checklist that I could take satisfaction in crossing items off from. But of course I wanted more! Isn't this new* Roslyn thing supposed to be about parsing code, shouldn't I be able to use it to find out what properties or methods the TODO comments I've found are associated with? And don't I sometimes need a break from genuinely productive work to play with something new and shiny under the pretense of doing something useful with it?? :)
+
+\* *(Not that new, actually, seeing as it was announced for preview back in 2011)*.
+
+### The two sides of Roslyn
+
+Roslyn is often talked about as enabling a "compiler as a service" - where code can be compiled and executed on-the-fly. So some sort of scripting engine could be created to dynamically change behaviour on already-executing code. Essentially, Roslyn can take source code (C# or VB) and generate IL, which can then be executed and interacted with by the application that fed that source code through it.
+
+However, the other side of it is that it provides "rich code analysis APIs" (according to its [page on MSDN](http://msdn.microsoft.com/en-gb/vstudio/roslyn.aspx)) - meaning that it will help you examine the source code, even if you have no intention of executing that code. Which sounds exactly like what I want to try to locate my TODO comments within a containing method / property / type / namespace.
+
+If I had more ambitious aims in mind then it could also be used for all manner of IDE extensions for code investigation, refactoring or "best practices analysis". A bit like many of the features that [ReSharper](https://www.jetbrains.com/resharper) provides (though ReSharper predates it, and woe betide anyone who asks if they are thinking of integrating with Roslyn so that they don't have to maintain as much parsing code of their own - [Ask me again if ReSharper will use Roslyn.. I dare you](http://blog.jetbrains.com/dotnet/2014/04/10/resharper-and-roslyn-qa)).
+
+To getting started with Roslyn, you install it through NuGet - though, currently, it's marked as pre-release so mightn't show up when you search for it. The best thing to do is follow the instruction on the [NuGet package](https://www.nuget.org/packages/Microsoft.CodeAnalysis) page and run
+
+> Install-Package Microsoft.CodeAnalysis -Pre
+
+at the Package Manager Console.
+
+With this done, parsing code is as easy as
+
+    var parsedContent = CSharpSyntaxTree.ParseText(content);
+
+where "content" is a string. This string may be an entire file as you would expect to encounter it in a project - with a namespace containing class / interface / enum and fields / properties / methods / values - or it may be a "fragment", such as a single method or method call (as often illustrated when people talk about using Roslyn for scripting).
+
+The "ParseText" method returns a **SyntaxTree** instance. This is an immutable structure that describes the parsed content. I'm a huge fan of immutable structures since I think it makes code much easier to reason about (my love of immutability has been a theme through many of the posts I've written). In Roslyn's design it has been stated that
+
+> The short answer to why syntax trees are immutable in Roslyn is that it makes parallel work much easier.  You can take a syntax tree and pass it to any thread and not worry that someone else will mutate it while you are in the middle of doing analysis.  This is useful in the command line compiler so that multiple trees can have their methods bound in parallel (which may need to occasionally access information from a different tree), but it's EXTREMELY important for VS scenarios where we want to have an extensibility model that allows many extensions to analyze and transform the same tree in parallel, and it doesn't really work to have a model that forces all those separate extensions to co-ordinate locking a single tree.  Similarly, providing each extension its own copy of the tree would be prohibitive from a memory overhead point of view.
+
+(I took this from a Google Groups thread [Why are Roslyn Syntax Trees Immutable?](http://groups.google.com/d/msg/altnetisrael/0yUJJdg2D5g/CBk2Kn-mK9sJ) and the answer is attributed to "the Roslyn PM").
+
+Eric Lippert has also written about the design, saying that they wanted the data structures to be immutable and persistent and that
+
+> By persistence I mean the ability to reuse most of the existing nodes in the tree when an edit is made to the text buffer. Since the nodes are immutable, there's no barrier to reusing them, as I've discussed many times on this blog. We need this for performance; we cannot be re-parsing huge wodges of text every time you hit a key. We need to re-lex and re-parse only the portions of the tree that were affected by the edit, because we are potentially re-doing this analysis between every keystroke.
+
+This is in the context of using Roslyn to analyse code being written within Visual Studio - the full post is titled [Persistence, Facades and Roslyn's Red-Green Trees](http://blogs.msdn.com/b/ericlippert/archive/2012/06/08/persistence-facades-and-roslyn-s-red-green-trees.aspx).
+
+### Get to the point already!
+
+So. Enough history. Back to my TODO-search.
+
+The **SyntaxTree** returned from "ParseText" looks quite complex at first glance when you starting poking around it with Visual Studio's "QuickWatch" facility, at least (which is the first thing I did).
+
+However, Roslyn helpfully provides a **SyntaxWalker** class, which may be used to easily examine every node within the tree. It uses the vistor pattern to do this. Design patterns are said to be a benefit when their form is appropriate to your problem such that they extend your vocabulary to describe the solution. There seem like there are times, unfortunately, that people layer on design patterns and abstractions only because they think they should - which is why it's nice in cases like this where it makes perfect sense and succeeds in makings things simple if you know the pattern being used. Last year, I was writing a plugin for [dotLess](http://www.dotlesscss.org) which used the visitor pattern to traverse the nodes in a stylesheet (see [Cross Browser (Pseudo) Source Mapping with LESS](Post66)) and it was nice to see the exact same concept in use here.
+
+The simplest implementation is
+
+    public class TriviaVisitor : SyntaxWalker
+    {
+      public TriviaVisitor() : base(SyntaxWalkerDepth.StructuredTrivia) { }
+      protected override void VisitTrivia(SyntaxTrivia trivia)
+      {
+        // Examine Trivia here..
+      }
+    }
+
+When the "Visit" method is called (which is defined by the **SyntaxWalker** class) and given a parsed tree, the "VisitTrivia" method is called for every **SyntaxTrivia** instance that is encountered within that tree - eg.
+
+    (new TriviaVisitor()).Visit(
+      CSharpSyntaxTree.ParseText(content).GetRoot()
+    );
+
+Comments and whitespace are **SyntaxTrivia**. Everything else will be represented by the **SyntaxNode** and **SyntaxToken** types. A **SyntaxNode** is made up on **SyntaxToken**s. For example, a "**UsingDirectiveSyntax**" represents a "using" statement such as
+
+    using System;
+
+and will contain **SyntaxTokens** for the "using", "System" and ";" components of the statement.
+
+These **SyntaxNode**s and **SyntaxToken**s are part of the tree that describes that parsed content. Trivia, however, are not directly part of the hierarchical data - rather, they are related to tokens  and accessible through the token's "LeadingTrivia" and "TrailingTrivia" properties. Conversely, **SyntaxTrivia** instances have a "Token" property which allows you to map from the trivia back to the associated token.
+
+So, within a "VisitTrivia" method, we can identify trivia we're interested in (comments, in this case, rather than whitespace) and determine what token they're associated with. The token will have a "Parent" property, which is the **SyntaxNode** that it's part of. The node is part of a hierarchy, which can be traversed up through via the "Parent" property values - each node may be something we're interested in identifying; such as the method containing the comment, the type containing that method or the namespace containing that type (must remember, though, that not all comments will be within methods - some may be TODO comments annotating a class, or even just sitting out on their own in an otherwise-empty file).
+
+    public class CommentLocatingVisitor : SyntaxWalker
+    {
+      private readonly Action<ToDoComment> _commentLocated;
+      public CommentLocatingVisitor(Action<ToDoComment> commentLocated)
+	    : base(SyntaxWalkerDepth.StructuredTrivia)
+      {
+        if (commentLocated == null)
+          throw new ArgumentNullException("commentLocated");
+
+        _commentLocated = commentLocated;
+      }
+
+      protected override void VisitTrivia(SyntaxTrivia trivia)
+      {
+        if (_commentTypes.Contains(trivia.CSharpKind()))
+        {
+          string triviaContent;
+          using (var writer = new StringWriter())
+          {
+            trivia.WriteTo(writer);
+            triviaContent = writer.ToString();
+          }
+
+          // Note: When looking for the containingMethodOrPropertyIfAny, we want MemberDeclarationSyntax
+          // types such as ConstructorDeclarationSyntax, MethodDeclarationSyntax, IndexerDeclarationSyntax,
+          // PropertyDeclarationSyntax but NamespaceDeclarationSyntax and TypeDeclarationSyntax also
+          // inherit from MemberDeclarationSyntax and we don't want those
+          var containingNode = trivia.Token.Parent;
+          var containingMethodOrPropertyIfAny = TryToGetContainingNode<MemberDeclarationSyntax>(
+            containingNode,
+            n => !(n is NamespaceDeclarationSyntax) && !(n is TypeDeclarationSyntax)
+          );
+          var containingTypeIfAny = TryToGetContainingNode<TypeDeclarationSyntax>(containingNode);
+          var containingNameSpaceIfAny = TryToGetContainingNode<NamespaceDeclarationSyntax>(containingNode);
+          _commentLocated(new ToDoComment(
+            triviaContent,
+            trivia.SyntaxTree.GetLineSpan(trivia.Span).StartLinePosition.Line,
+            containingMethodOrPropertyIfAny,
+            containingTypeIfAny,
+            containingNameSpaceIfAny
+          ));
+        }
+        base.VisitTrivia(trivia);
+      }
+
+      private static HashSet<SyntaxKind> _commentTypes = new HashSet<SyntaxKind>(new[] {
+        SyntaxKind.SingleLineCommentTrivia,
+        SyntaxKind.MultiLineCommentTrivia,
+        SyntaxKind.DocumentationCommentExteriorTrivia,
+        SyntaxKind.SingleLineDocumentationCommentTrivia,
+        SyntaxKind.MultiLineDocumentationCommentTrivia
+      });
+
+      private T TryToGetContainingNode<T>(SyntaxNode node, Predicate<T> optionalFilter = null)
+        where T : SyntaxNode
+      {
+        if (node == null)
+          throw new ArgumentNullException("node");
+
+        var currentNode = node;
+        while (true)
+        {
+          var nodeOfType = currentNode as T;
+          if (nodeOfType != null)
+          {
+            if ((optionalFilter == null) || optionalFilter(nodeOfType))
+              return nodeOfType;
+          }
+          if (currentNode.Parent == null)
+            break;
+          currentNode = currentNode.Parent;
+        }
+        return null;
+      }
+    }
+
+This **CommentLocatingVisitor** class is instantiated with a callback that is executed for every comment that is encountered when its "ParseText" method is called and the provided root traversed.
+
+To keep things organised, this callback passes a **Comment** instance, as follows:
+
+    public class Comment
+    {
+      public Comment(
+        string content,
+        int lineNumber,
+        MemberDeclarationSyntax methodOrPropertyIfAny,
+        TypeDeclarationSyntax typeIfAny,
+        NamespaceDeclarationSyntax namespaceIfAny)
+      {
+        if (string.IsNullOrEmpty(content))
+          throw new ArgumentException("Null/blank content specified");
+        if (lineNumber < 1)
+          throw new ArgumentOutOfRangeException("lineNumber");
+
+        Content = content;
+        LineNumber = lineNumber;
+        MethodOrPropertyIfAny = methodOrPropertyIfAny;
+        TypeIfAny = typeIfAny;
+        NamespaceIfAny = namespaceIfAny;
+      }
+
+      /// <summary>
+      /// This will never be null or blank
+      /// </summary>
+      public string Content { get; private set; }
+
+      /// <summary>
+      /// This will always be a positive integer
+      /// </summary>
+      public int LineNumber { get; private set; }
+    
+      /// <summary>
+      /// This may be null since the comment may not exist within a method or property
+      /// </summary>
+      public MemberDeclarationSyntax MethodOrPropertyIfAny { get; private set; }
+
+      /// <summary>
+      /// This may be null since the comment may not exist within an class, interface or struct
+      /// </summary>
+      public TypeDeclarationSyntax TypeIfAny { get; private set; }
+
+      /// <summary>
+      /// This may be null since the comment may not exist within a method or property
+      /// </summary>
+      public NamespaceDeclarationSyntax NamespaceIfAny { get; private set; }
+    }
+
+So now, given the contents of any C# file, the comments can be identified and traced to the constructs that they're associated with. Now they just need to be filtered to those containing the text "TODO", since those are the particular comments of interest.
+
+For the first stab I took at this, I did a search-all-solution for "TODO" and copy-pasted the results into a file. I then read in this file, extracted the filenames and ran the above against the contents of each file.
+
+But surely there's a better way..
+
+### Parsing the solution
+
+What would be ideal would be the ability to point some code at a solution file, for it to determine what projects are in the solution, what C# code files are in the projects and then to extract all of the locations of TODO comments within those. None of this search-all / copy-paste / parse-the-results-and-read-the-files-from-there nonsense.
+
+There are two parts to this - reading the solution file to get the projects and reading the individual project files. I'll start with the latter since it turned out to be easier.
+
+If you add a reference to "Microsoft.Build" then you can can use the **ProjectCollection** type in a method such as
+
+    private static IEnumerable<FileInfo> GetCSharpCompileItemFilesForProject(FileInfo projectFile)
+    {
+      if (projectFile == null)
+        throw new ArgumentNullException("projectFile");
+
+      return (new ProjectCollection()).LoadProject(projectFile.FullName).AllEvaluatedItems
+        .Where(item => item.ItemType == "Compile")
+        .Select(item => item.EvaluatedInclude)
+        .Where(include => include.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+        .Select(include => new FileInfo(Path.Combine(projectFile.Directory.FullName, include)));
+    }
+
+Nice when the framework provides you just what you need! This is basically just looking for ".cs" items in a given project file and returning **FileInfo** instances such that the full path is made available (the filenames in the project will be paths relative to the location of the project file and so need to be combined with the project file location to get the full path of the file).
+
+The solution file parsing is not quite so elegant.
+
+There is a Stack Overflow question "[How do I compile a C# solution with Roslyn?](http://stackoverflow.com/questions/13280008/how-do-i-compile-a-c-sharp-solution-with-roslyn)" which talks about parsing a solution file. But it's very out of date and the code doesn't compile. But it leads to another question "[Roslyn / Find References - Can't properly load Workspace](http://stackoverflow.com/questions/23160685/roslyn-find-references-cant-properly-load-workspace)" which looks like it's going to help but I encountered the same problem as this question: "[MSBuildWorkspace.Create() throws exception](http://stackoverflow.com/questions/25504951/msbuildworkspace-create-throws-exception)". The gist is that to use this you need to Microsoft.Build version 14, whereas the version available (for VS 2013, at least) is version 4. It seems like the solution is to download the VS 2014 CTP or get the ISO file and root around for the version 14 assembly.
+
+At this point, I got bored with it and fell back to parsing the solution field with a regular expression, looking for ".csproj" files in what look like project declarations.
+
+    private static IEnumerable<FileInfo> GetProjectFilesForSolution(FileInfo solutionFile)
+    {
+      if (solutionFile == null)
+        throw new ArgumentNullException("solutionFile");
+
+      var projectFileMatcher = new Regex(
+        @"Project\(""\{\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\}""\) = ""(.*?)"", ""(?<projectFile>(.*?\.csproj))"", ""\{\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\}"""
+      );
+      foreach (Match match in projectFileMatcher.Matches(solutionFile.OpenText().ReadToEnd()))
+	  {
+        yield return new FileInfo(
+		  Path.Combine(solutionFile.Directory.FullName, match.Groups["projectFile"].Value)
+		);
+	  }
+    }
+
+It feels a bit dirty but it seems to do the job! And this is hardly production code so I can live with it.
+
+### Cryptic warnings
+
+There is another small niggle with all this code. It works but there's a compile warning
+
+> Found conflicts between different versions of the same dependent assembly that could not be resolved.  These reference conflicts are listed in the build log when log verbosity is set to detailed.
+
+I don't like compile warnings, if something's wrong then I want to make it right. Plenty of people have eloquently made the case for always resolving compile warnings so I won't go over old ground here - just suffice to say that I agree!
+
+The log verbosity can be altered by going to Tools / Option / Projects and Solutions / Build and Run, from there "MSBuild project build output verbosity" can be changed. So I set it to "Detailed" as instructed in the warning message and found.. nothing useful.
+
+It turns out that this warning is telling a bit of a fib and you actually need to bump the verbosity up another step to "Diagnostic". *Then* the log includes the following
+
+> There was a conflict between "Microsoft.Build, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" and "Microsoft.Build, Version=14.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a".
+
+It also includes lots of other useful information like what references have what dependencies, so I can see that Microsoft Build v4 is required by project item "Microsoft.Build" (meaning that is the version that I explicitly added as a reference to parse the project files). And I can see that Microsoft Build v14 is required by the project items "Microsoft.CodeAnalysis.Workspaces", "Microsoft.CodeAnalysis.VisualBasic.Workspaces" and "Microsoft.CodeAnalysis.CSharp.Workspaces", which are references pulled in by the Roslyn NuGet package.
+
+Unfortunately, I've already explained that I gave up trying to install Microsoft.Build v14! If this was "real" code then I would do it properly and investigate installing that package properly to get rid of this warning.. but for this sort of one-off task (pulling the TODO comments out of a solution, once) I decided I can live with the warning. At least I have an idea how to sort it out if I ever do want to use this code in a more demanding environment.
+
+### Parting words
+
+This first foray into Roslyn's capabilities has been interesting. I've clearly scratched only the very outer surface of it but it seems like a really well considered product, I think it could be useful in many scenarios and fully intend to have a poke around with its compiling capabilities at some point (since I do love a bit of dynamic compilation, as I was writing about last time!).
+
+If anything that I've written about today could be useful to you, I've put a complete solution up on Bitbucket - find it at [The TODOCommentRetriever](https://bitbucket.org/DanRoberts/todocommentretriever).
