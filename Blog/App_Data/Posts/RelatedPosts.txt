@@ -2,3 +2,4 @@
 # Blank lines and those starting with a hash are ignored
 
 77:74,68
+78:66,61
