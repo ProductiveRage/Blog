@@ -104,16 +104,18 @@ namespace Blog.Models
 						// One this pass, set every tag's NumberOfPosts value to one since we don't have enough data to know better. After all of the
 						// posts have been loaded, this can be fixed before the method terminates.
 						posts.Add(new Post(
-						  fileSummary.Id,
-						  fileSummary.PostDate,
-						  file.LastWriteTime,
-						  slug,
-						  redirectsForPost,
-						  title,
-						  fileSummary.IsHighlight,
-						  fileContents,
-						  relatedPostRelationships.Any(r => r.Item1 == fileSummary.Id) ? relatedPostRelationships.First().Item2 : new ImmutableList<int>(),
-						  fileSummary.Tags.Select(tag => new TagSummary(tag, 1)).ToNonNullImmutableList()
+							fileSummary.Id,
+							fileSummary.PostDate,
+							file.LastWriteTime,
+							slug,
+							redirectsForPost,
+							title,
+							fileSummary.IsHighlight,
+							fileContents,
+							relatedPostRelationships.Any(r => r.Item1 == fileSummary.Id)
+								? relatedPostRelationships.First(r => r.Item1 == fileSummary.Id).Item2
+								: new ImmutableList<int>(),
+							fileSummary.Tags.Select(tag => new TagSummary(tag, 1)).ToNonNullImmutableList()
 						));
 					}
 				}
