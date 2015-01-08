@@ -200,6 +200,7 @@
     <Content Include="App_Data\Posts\77,2014,10,14,23,07,0,0,LINQ,Reflection.txt" />
     <Content Include="App_Data\Posts\78,2014,11,2,19,38,0,0,Immutability,Roslyn.txt" />
     <Content Include="App_Data\Posts\79,2014,12,22,22,35,0,0,VBScript.txt" />
+    <Content Include="App_Data\Posts\80,2015,1,8,22,24,0,0,JavaScript,TypeScript,React.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM,VBScript.txt" />
     <Content Include="App_Data\Posts\76,2014,10,2,21,49,0,0,Immutability.txt" />
     <Content Include="App_Data\Posts\Redirects.txt" />
@@ -207,6 +208,7 @@
     <Content Include="Content\Content.less" />
     <Content Include="Content\Images\Posts\FluidLayouts.png" />
     <Content Include="Content\Images\Posts\FluidLayoutsGallery.png" />
+    <Content Include="Content\Images\Posts\FluxDiagram.png" />
     <Content Include="Content\Images\Posts\ProfilingTheProcessor.png" />
     <Content Include="Content\Images\Posts\StylesWithMarkerIds.png" />
     <Content Include="Content\Images\Posts\StylesWithoutMarkerIds.png" />

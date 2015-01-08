@@ -1,0 +1,303 @@
+## TypeScript classes for (React) Flux actions
+
+I've been playing with React over the last few months and I'm still a fan. I've followed Facebook's advice and gone with the "Flux" architecture (there's so many good articles about this out there that I couldn't even decide whic one to link to) but I've been writing the code using TypeScript. So far, most of my qualms with this approach have been with TypeScript rather than React; I don't like the closing-brace formatting that Visual Studio does and doesn't let you change, its generics system is really good but *not quite* as good as I'd like (not as good as C#'s, for example, and I sometimes wish generic type params were available at runtime for testing but I do understand why they're not). I wish the "Allow implicit 'any' types" option defaulted to unchecked rather than checked (I presume this is to encourage "gradual typing" but if I'm using TypeScript I'd rather go whole-hog).
+
+But what I thought were going to be the big problems with it haven't been, really - type definitions and writing the components (though I am using a bit of a hack that relies upon an older version of React - I'm hoping to change this when 0.13 comes out and introduces better support for ES6 classes).
+
+Writing the components in "pure" TypeScript results in more code than jsx.. it's not the end of the world, but something that would combine the benefits of both (strong typing *and* succint jsx format) would be wonderful. There are various possibilities that I believe people are looking into, from [modifying the TypeScript compiler to support jsx](https://github.com/ripieno/typescript-react-jsx) to the work that Facebook themselves are doing around "Flow" which "[Adds static typing to JavaScript to improve developer productivity and code quality](https://github.com/facebook/flow)". Neither of these are ready for me to integrate into Visual Studio, which I'm still using since I like it so much for my other development work.
+
+What I want to talk about today, though, is one of the ways that TypeScript's capabilities can make a nice tweak to how the Flux architecture may be realised. Hopefully the following isn't blindly obvious and well-known, I failed to find any other posts out there explaining it so I'm going to try to take credit for it! :)
+
+### As recommended and apparently done by everyone..
+
+Here's the diagram that everyone who's looked into Flux will have seen many times before (since I've nicked it straight from the [React blog's post](http://facebook.github.io/react/blog/2014/07/30/flux-actions-and-the-dispatcher.html) about it) -
+
+![The Flux Architecture](/Content/Images/Posts/FluxDiagram.png "The Flux Architecture")
+
+In the middle are the "Action Creators", which create objects that represent actions (and any associated data) so that the Dispatcher has something to send out. Stores listen for these actions - checking whether a given action is one that they're interested in and extracting the information from it as required.
+
+As a concrete example, here is how actions are created in Facebook's "TODO" example (from their [repo on GitHub](https://github.com/facebook/flux/blob/master/examples/flux-todomvc/js/actions/TodoActions.js)):
+
+    /*
+     * Copyright (c) 2014, Facebook, Inc.
+     * All rights reserved.
+     *
+     * This source code is licensed under the BSD-style license found in the
+     * LICENSE file in the root directory of this source tree. An additional grant
+     * of patent rights can be found in the PATENTS file in the same directory.
+     *
+     * TodoActions
+     */
+
+    var AppDispatcher = require('../dispatcher/AppDispatcher');
+    var TodoConstants = require('../constants/TodoConstants');
+
+    var TodoActions = {
+
+      /**
+       * @param  {string} text
+       */
+      create: function(text) {
+        AppDispatcher.dispatch({
+          actionType: TodoConstants.TODO_CREATE,
+          text: text
+        });
+      },
+
+      /**
+       * @param  {string} id The ID of the ToDo item
+       * @param  {string} text
+       */
+      updateText: function(id, text) {
+        AppDispatcher.dispatch({
+          actionType: TodoConstants.TODO_UPDATE_TEXT,
+          id: id,
+          text: text
+        });
+      },
+
+      /**
+       * Toggle whether a single ToDo is complete
+       * @param  {object} todo
+       */
+      toggleComplete: function(todo) {
+        var id = todo.id;
+        if (todo.complete) {
+          AppDispatcher.dispatch({
+            actionType: TodoConstants.TODO_UNDO_COMPLETE,
+            id: id
+          });
+        } else {
+          AppDispatcher.dispatch({
+            actionType: TodoConstants.TODO_COMPLETE,
+            id: id
+          });
+        }
+      },
+
+      /**
+       * Mark all ToDos as complete
+       */
+      toggleCompleteAll: function() {
+        AppDispatcher.dispatch({
+          actionType: TodoConstants.TODO_TOGGLE_COMPLETE_ALL
+        });
+      },
+
+      /**
+       * @param  {string} id
+       */
+      destroy: function(id) {
+        AppDispatcher.dispatch({
+          actionType: TodoConstants.TODO_DESTROY,
+          id: id
+        });
+      },
+
+      /**
+       * Delete all the completed ToDos
+       */
+      destroyCompleted: function() {
+        AppDispatcher.dispatch({
+          actionType: TodoConstants.TODO_DESTROY_COMPLETED
+        });
+      }
+
+    };
+
+    module.exports = TodoActions;
+
+Every action has an "actionType" property. Some have an "id" property, some have a "text" property, some have both, some have neither. Other examples I've seen follow a similar pattern where the ActionCreator (or ActionCreator**s**, since sometimes there are multiple - as in the [chat example](https://github.com/facebook/flux/tree/master/examples/flux-chat/js/actions) in that same Facebook repo) is what is responsible for knowing how data is represented by each action. Stores assume that if the "actionType" is what they expect then all of the other properties they expect to be associated with that action will be present.
+
+Here's a snippet I've taken from [another post](http://blog.krawaller.se/posts/react-js-architecture-flux-vs-reflux/):
+
+    var action = payload.action;
+    switch(action.actionType){
+      case AppConstants.ADD_ITEM:
+        _addItem(payload.action.item);
+        break;
+      case AppConstants.REMOVE_ITEM:
+        _removeItem(payload.action.index);
+        break;
+      case AppConstants.INCREASE_ITEM:
+        _increaseItem(payload.action.index);
+        break;
+      case AppConstants.DECREASE_ITEM:
+        _decreaseItem(payload.action.index);
+        break;
+    }
+
+Some actions have an "item" property, some have an "index". The ActionCreator was responsible for correctly populating data appropriate to the "actionType".
+
+### Types, types, types
+
+When I first start writing code like this for my own projects, it felt wrong. Wasn't I using TypeScript so that I had a nice reassuring type safety net to protect me against my own mistakes?
+
+*Side note: For me, this is one of the best advantages of "strong typing", the fact the compiler can tell me if I've mistyped a property or argument, or if I want to change the name of one of them then the compiler can change all references rather than it being a manual process. The other biggie for me is how beneficial it can be in helping document APIs (both internal and external) - for other people using my code.. or just me when it's been long enough that I can't remember all of the ins and outs of what I've written! These are more important to me than getting worried about whether "static languages" can definitely perform better than "dynamic" ones (let's not open that can of worms).*
+
+Surely, I asked myself, if these objects have properties that vary based upon an "actionType" magic string, these would be better expressed as actual types? Like classes?
+
+Working from the example above, there would be classes such as:
+
+    class AddItemAction {
+      constructor(private _index: number) { }
+      get index() {
+        return this._index;
+      }
+    }
+    export = AddItemAction;
+
+I'm a fan of the AMD pattern so I would have a separate file per action class and then explicitly "import" (in TypeScript terms) them into Stores that reference them. The main reason I'm leaning towards the AMD pattern is that you can use require.js to load in the script required to render the first "page" and then dynamically load in additional script as more functionality of the application is used. This should avoid the risk of the dreaded multi-megabyte initial download (and the associated delays). I'm still proving this to myself - it's looking very promising so far but I haven't written any multi-megabyte applications yet!
+
+I also like things to be immutable, otherwise the above could have been shortened even further to:
+
+    class AddItemAction {
+      constructor(public index: number) { }
+    }
+    export = AddItemAction;
+
+But, technically, this could lead to one Store changing data in an action, which could affect what another Store does with the data. An effect that would only happen if that first Store received the action before the second one. Yuck. I don't imagine anyone would *want* to do something like that but immutability means that it's not even possible, even by accident (*especially* by accident).
+
+So if there were classes for each action then the listening code would look more like this:
+
+    if (action instanceof AddItemAction) {
+      this._addItem(<AddItemAction>action);
+    }
+    if (action instanceof RemoveItemAction) {
+      this._removeItem(<RemoveItemAction>action);
+    }
+    if (action instanceof IncreaseItemAction) {
+      this._increaseItem(<IncreaseItemAction>action);
+    }
+    if (action instanceof DecreaseItemAction) {
+      this._decreaseItem(<DecreaseItemAction>action);
+    }
+    
+I prefer to have the functions receive the actual action (the **AddItemAction** instance is passed to the "_addItem" function, for example, rather than just the "index" property value). That is at least partly because it makes the type comparing code more succinct; it gets slightly longer if you have to test "action" against a type, then cast "action" to the correct type, then wrap it in brackets again so that the property can be accessed from it:
+
+    if (action instanceof AddItemAction) {
+      this._addItem((<AddItemAction>action).index);
+    }
+    
+So maybe it's laziness on my part. But for actions with more than one properties, it can be very helpful to pass the action rather than having to break out the individual properties to pass along.
+
+### Server vs User actions
+
+Another concept that this works well with is one that I think I first read at Atlassian's blog: [Flux Step By Step](http://blogs.atlassian.com/2014/08/flux-architecture-step-by-step/) - the idea of identifying a given action as originating from a view (from a user interaction, generally) or from the server (such as an ajax callback).
+
+They suggested the use of an **AppDispatcher** with two distinct methods, each wrapping an action up with an appropriate "source" value -
+
+    var AppDispatcher = copyProperties(new Dispatcher(), {
+
+      /**
+       * @param {object} action The details of the action, including the action's
+       * type and additional data coming from the server.
+       */
+      handleServerAction: function(action) {
+        var payload = {
+          source: 'SERVER_ACTION',
+          action: action
+        };
+        this.dispatch(payload);
+      },
+
+      /**
+       * @param {object} action The details of the action, including the action's
+       * type and additional data coming from the view.
+       */
+      handleViewAction: function(action) {
+        var payload = {
+          source: 'VIEW_ACTION',
+          action: action
+        };
+        this.dispatch(payload);
+      }
+
+    });
+
+Again, these are "magic string" values. I like the idea, but TypeScript has the tools to do better.
+
+I have a module with an enum for this:
+
+    enum PayloadSources {
+      Server,
+      View
+    }
+    export = PayloadSources;
+
+and then an **AppDispatcher** of my own -
+
+    import Dispatcher = require('third_party/Dispatcher/Dispatcher');
+    import PayloadSources = require('constants/PayloadSources');
+    import IDispatcherMessage = require('dispatcher/IDispatcherMessage');
+
+    var appDispatcher = (function () {
+      var _dispatcher = new Dispatcher();
+      return {
+        handleServerAction: function (action: any): void {
+          _dispatcher.dispatch({
+            source: PayloadSources.Server,
+            action: action
+          });
+        },
+
+        handleViewAction: function (action: any): void {
+          _dispatcher.dispatch({
+            source: PayloadSources.View,
+            action: action
+          });
+        },
+
+        register: function (callback: (message: IDispatcherMessage) => void): string {
+          return _dispatcher.register(callback);
+        },
+
+        unregister: function (id: string): void {
+          return _dispatcher.unregister(id);
+        },
+
+        waitFor: function (ids: string[]): void {
+          _dispatcher.waitFor(ids);
+        }
+      };
+    } ());
+    
+    // This is effectively a singleton reference, as seems to be the standard pattern for Flux
+    export = appDispatcher;
+
+The **IDispatcherMessage** is very simple:
+
+    import PayloadSources = require('constants/PayloadSources');
+    interface IDispatcherMessage {
+      source: PayloadSources;
+      action: any
+    }
+    export = IDispatcherMessage;
+
+This allows me to listen for actions with code thusly -
+
+    AppDispatcher.register(message => {
+      var action = message.action;
+      if (action instanceof AddItemAction) {
+        this._addItem(<AddItemAction>action);
+      }
+      if (action instanceof RemoveItemAction) {
+        this._removeItem(<RemoveItemAction>action);
+      }
+      // etc..
+
+Now, if I come across a good reason to rename the "index" property on the **AddItemAction** class, I can perform a refactor action that will fix it everywhere. If I don't use the IDE to perform the refactor, and just change the property name in one place, then I'll get TypeScript compiler errors about an "index" property that no longer exists.
+
+### The mysterious Dispatcher
+
+One thing I skimmed over in the above is what the "third_party/Dispatcher/Dispatcher" component is. The simple answer is that I took the [Dispatcher.js](https://github.com/facebook/flux/blob/master/src/Dispatcher.js) file from the Flux repo and messed about with it a tiny bit to get it to compile as TypeScript with my preferred disabling of the option "Allow implicit 'any' types". In case this is a helpful place for anyone to start, I've put the result up on pastebin as [TypeScript Flux Dispatcher](http://pastebin.com/wjqUty4U), along with the required support class [TypeScript Flux Dispatcher - invariant support class](http://pastebin.com/DzY3CgGD).
+
+### Final notes
+
+I'm still experimenting with React and Flux but this is one of the areas that I've definitely been happy with. I like the Flux architecture and the very clear way in which interactions are handled (and the clear direction of flow of information). Describing the actions with TypeScript classes feels very natural to me. It might be that I start grouping multiple actions into a single module as my applications get bigger, but for now I'm fine with one per file.
+
+The only thing I'm only *mostly* happy with is my bold declaration in the **AppDispatcher** class; "This is effectively a singleton reference, as seems to be the standard pattern for Flux". It's not the class that's exported from that module, it's an instance of the **AppDispatcher** which is used by everything in the app. This makes sense in a lot of ways, since it needs to be used in so many places; there will be various Stores that register to listen to it but there are likely to be many, *many* React components, any one of which could accept some sort of interaction that requires an action be created (and so be sent to the **AppDispatcher**). One alternative approach would be to use dependency injection to pass an **AppDispatcher** through every component that might need it. In fact, I did try that in one early experiment but found it extremely cumbersome, so I'm happy to settle for what I've got here.
+
+However, the reason (one of, at least!) that singletons got such a bad name is that they can making unit testing very awkward. I'm still in the early phases of investigating what I think is the best way to test a React / Flux application (there are a lot of articles out there explaining good ways to tackle it and I'm trying to work my way through some of their ideas). One thing that I'm contemplating, particularly for testing simple React components, is to take advantage of the fact that I'm using AMD everywhere and to try changing the require.js configuration for tests - for any given test, when an **AppDispatcher** is requested, some sort of mock object could be provided in its place.
+
+This would have the two main benefits that it could expose convenient methods to confirm that a particular action was raised following a given interaction (which may be the main point of that particular test) but also that there would be no shared state that needs resetting between tests; each test would provide its own **AppDispatcher** stand-in. I've not properly explored this yet, it's still in the idea phase, but I think it also has promise. And - if it all goes to plan - it's another reason way for me to convince myself that AMD loading within TypeScript is the way to go!
