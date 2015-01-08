@@ -1,0 +1,154 @@
+## If you can keep your head when all about you are losing theirs and blaming it on VBScript
+
+I've been migrating an old VBScript app to .net and some of those old idiosyncracies of VBScript have been rearing their head again. For a language that is intended to make things simple (and, in fairness, for many use cases it does), it really does have some confusing and complicated rules hidden behind its facade of ease!
+
+Language design quite interests me, there's always a view into someone's way of thinking, about how things should be done. And there's always compromises (like all programming). Is it really true that languages like [Smalltak have no "if" statement](http://stackoverflow.com/a/1937434)? Why did the features that got into C# 6 get in and why didn't other candidates? Should languages make immutable structures simple, or should these be difficult because immutability is expensive (yes, no and it's not - if you ask me)?
+
+Anyway, if you're not similarly interested *and* you're not just happy to point and laugh, not only at some of the decisions* made in VBScript, but also that someone *is still using it in this day and age* then this post might not be for you..
+
+\* I'm not really having a go at VBScript (tempting as it might be), its design comes from a difficult place in that it was supposed to be backwards compatible with VB6 where possible and "[it was designed for simple administration and web scripts, where often 'muddle on through' is exactly what you want it to do](http://blogs.msdn.com/b/ericlippert/archive/2004/08/25/error-handling-in-vbscript-part-three.aspx)". This quotes certainly goes some way to explaining its error model, along with why it can be so troublesome to write large, reliable applications in it (since this was never an intended use).
+
+### If This = That Then
+
+To remain focused, I'm just going to talk about the "IF" statement today.
+
+Simple, right?
+
+Well, this one is..
+
+    a = 1
+    b = 2
+    If (a = b) Then
+      ' No
+    End If
+
+The values *a* and *b* obviously are not the same, so this condition is not met.
+
+    a = 1
+    b = "1"
+    If (a = b) Then
+      ' No
+    End If
+
+Here, the values *a* and *b* would appear similar - if they were rendered to the screen or console, they would be appear as "1". But they're not the same; one's a number and one's a string. And because they are different, the condition that compares their values returns false.
+
+How about this one, then?
+
+    a = "1"
+    If (a = 1) Then
+      ' Yes
+    End If
+
+This condition *is* entered. er, what?! Isn't this the same as the example before it? A string "1" is being compared to a number 1 and we know that they're aren't the same.
+
+It turns out that if one side of a comparison is a numeric constant, then the other side will be converted into a number and these two values compared. So here, the string "1" on the left-hand side is converted into the number 1 and this, unsurprisingly, is found to match the number 1 on the right-hand side.
+
+Which explains this..
+
+    a = "aa"
+    If (a = 1) Then
+      ' Error! ("Type mismatch")
+    End If
+
+Here, the value on the left-hand side *can't* be converted into a number and so the process falls apart.
+
+This is talked about in an Eric Lippert post (the second I've linked to from here): [Typing Hard Can Trip You Up](http://blogs.msdn.com/b/ericlippert/archive/2004/07/30/202432.aspx), where he explains that some compile-time constants (such as the number 1 in the example above, but *not* a variable which is known to have a value of the number 1) enable special handling in comparisons. He refers to these literals as having "hard types", despite the "fact" that everything in VBScript is a variant. This was for consistency with VB6 - though in VB6, not everything had to be a variant, so maybe it made more sense there(??).
+
+So what about something like this?
+
+    a = "aa"
+    If (a = (1+0)) Then
+      ' No
+    End If
+
+Although the right-hand side is clearly a numeric value (something that *could* be quite easily determined when the script is interpreted), this does not trigger the same behaviour as the right-hand side is a calculated expression and not a simple literal. So what about..
+
+    a = "aa"
+    If (a = (1)) Then
+      ' Error! ("Type mismatch")
+    End If
+
+The right-hand side is a bracketed value, but the interpreter ignores the unnecessary bracketing and sees it as a literal - and so applies the convert-to-number logic.
+
+### String theory
+
+But number literals aren't the only ones that bring in their own magic. Strings do it too.
+
+    a = 1
+    If (a = "1") Then
+      ' Yes
+    End If
+
+Isn't this example just like the *(a = b)* example we saw where *a* was the number 1 and *b* the string "1"?? Well, no. Here, the string literal on the right-hand side introduces a behaviour where the other side of the comparison is converted into a string and then considered. So the number 1 becomes the string "1", which does in fact match the right-hand side string literal "1". Crazy.
+
+### True for booleans?
+
+So what about that last type of VBScript primitive type; the boolean?
+
+    a = "aa"
+    If (a = False) Then
+      ' No
+    End If
+
+You might have expected that the boolean literal False in the condition would result in the left-hand side being converted to a boolean - something which the string "aa" can not be. But no "Type mismatch" error is raised, the condition just isn't met. This is also explained by the [Typing Hard Can Trip You Up](http://blogs.msdn.com/b/ericlippert/archive/2004/07/30/202432.aspx) post - it's a bug! As if the whole system wouldn't have been confusing enough had there been an internal consistency for all primitive types, *this* comes along! When I first noticed the oddity with the numeric literals when examining some code, I poked around and came up with a whole variety of test cases and did a fairly good job of deducing the rules around numeric and string literals, it was only later that I found that Lippert post - had I not, I mighn't have realised about the booleans since they had slipped my mind while writing the examples. It seems crazy to me to think that that post was written more than ten years ago now, who would have thought that VBScript projects would still be clinging on for dear life (much as I'm slowly cutting the cords on the work projects) so far on? And I wonder how many people with VBScript experience actually know these rules - I've worked on projects using it over the last decade or so and normally things seem to just work (maybe that's a *slight* exaggeration!) and it's only when you dig deep into the edge cases that you realise there's such layers of crazy hiding down there.
+
+### Objects?
+
+Comparisons such as "=" are not for objects (there is the "IS" comparison for object equality).
+
+If an object reference appears on either side of an "=" comparison (or "<", ">", etc..) then it must have a parameter-less default property or method - this will be called and then the standard rules apply (if there is no such default then an "Object doesn't support this property of method" error will be raised - it's looking for a default property or method on the object and can't find one, so this kinda makes sense).
+
+If the default property or method returns another object then a "Type mismatch" error is raised. It doesn't matter if this object itself has a default member, the try-to-access-default-member logic does not apply recursively.
+
+There can be some minor complications when interacting with non-VBScript objects that are communicated with over IDispatch, since these may have additional rules of their own. But that's out of scope for today.
+
+### To err is human, but to really foul things up you need VBScript
+
+We're so close to being VBScript "IF" gurus now (it's probably best not to worry about what is being pushed out of your brain to make space for this information!) - but there's another spanner in the works yet: **On Error Resume Next**, the error-handling mechanism that just isn't quite what you'd expect in oh, so many cases.
+
+Let's try this one; a variation of one of the earlier number literal examples from above:
+
+    On Error Resume Next
+    a = "aa"
+    If (a = 1) Then
+      ' Yes
+    End If
+
+Without "On Error Resume Next" this results in an error as *aa* can not be converted into a number. *With* "On Error Resume Next", I would have expected the error to result in the entire conditional structure being skipped over. In other words, I would have expected this *not* to consider the condition met. But VBScript has other ideas. If a condition is considered and causes an error and "On Error Resume Next" is in play, then the condition is found to be met.
+
+We don't even need any of the number literal behaviour to trigger this, the following does the same
+
+    On Error Resume Next
+    If (1/0) Then
+      ' Yes
+    End If
+
+The "Division by zero" error with "On Error Resume Next" results in the condition being considered met. I really hadn't seen that one coming.
+
+The C# that I had imagined to be equivalent would be something like
+
+    try
+    {
+        if (1/0)
+        {
+            // Don't enter here, 1/0 throws an exception!
+        }
+    }
+    catch { }
+    
+.. but that's just not the case. VBScript's idea of "proceed to the next statement" does not follow the same logic as C#.
+
+I said that it's only "if a condition is considered and causes an error" that this occurs, so in the following example the first condition is met (as you would expect) and so the second condition is not even considered, and so its error-raising behaviour will not result in its content block being executed.
+
+    On Error Resume Next
+    If (1 = 1) Then
+      ' Yes
+    ElseIf (1/0) Then
+      ' No
+    End If
+
+### That's enough for today (my head hurts)
+
+Was I the only one surprised by all this? I presume that all of this weirdness can be linked back to some use cases where these rules made code look like it was doing "the right thing" but it's like one leaky abstraction after another!
+
+As I said at the start, though, I'm really not trying to take cheap shots at VBScript - the very fact that I looked into all this while migrating an important application written in it says a lot about it; that large production applications were able to be written in it and maintained until the present day does sort of speak quite highly about it. Or maybe it just harks to the eternal difficulty of the dreaded rewrite! While I feel a bit unfair slating it, let's put it this way - I'm not going to miss it when this transition is complete and it's finally gone! :)
