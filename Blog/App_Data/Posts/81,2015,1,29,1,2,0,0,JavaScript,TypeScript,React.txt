@@ -1,0 +1,194 @@
+## TypeScript / ES6 classes for React components - without the hacks!
+
+React 0.13 has just been released into beta, a release I've been eagerly anticipating! This has been the release where finally they will be supporting ES6 classes to create React components. Fully supported, no messing about and jumping through hoops and hoping that breaking API changes don't drop in and catch you off guard.
+
+Back in September, I wrote about [Writing React components in TypeScript](Post75) and realised that before I had actually posted it that the version of React I was using was out of date and I would have to re-work it all again or wait until ES6 classes were natively supported (which was on the horizon back then, it's just that there were no firm dates). I took the lazy option and have been sticking to React 0.10.. until now!
+
+### Getting the new code
+
+I've got my head around npm, which is the recommended way to get the source. I had a few teething problems a few months ago with first getting going (I need python?? Oh, not that version..) but now everything's rosy. So off I went:
+
+> npm install react@0.13.0-beta.1
+
+I saw that the "lib" folder had the source code for the files, the dependencies are all nicely broken up. Then I had a small meltdown and stressed about how to build from source - did I need to run browserify or something?? I got that working, with some light hacking it about, and got to playing around with it. It was only later that I realised that there's also a "dist" folder with built versions - both production (ie. minified) and development. Silly boy.
+
+To start with, I stuck to vanilla JavaScript to play around with it (I didn't want to start getting confused as to whether any problems were with React or with TypeScript *with* React). The online [JSX Compiler](http://facebook.github.io/react/jsx-compiler.html) can perform ES6 translations as well as JSX, which meant that I could take the example
+
+    class HelloMessage extends React.Component {
+      render() {
+        return <div>Hello {this.props.name}</div>;
+      }
+    }
+
+    React.render(<HelloMessage name="Sebastian" />, mountNode);
+
+and translate it into JavaScript (this deals with creating a class, derives it "from React.Component" and it illustrates what the JSX syntax hides - particularly the "React.createElement" call):
+
+    var ____Class1 = React.Component;
+    for (var ____Class1____Key in ____Class1) {
+      if (____Class1.hasOwnProperty(____Class1____Key)) {
+        HelloMessage[____Class1____Key] = ____Class1[____Class1____Key];
+      }
+    }
+    var ____SuperProtoOf____Class1 = ____Class1 === null ? null : ____Class1.prototype;
+    HelloMessage.prototype = Object.create(____SuperProtoOf____Class1);
+    HelloMessage.prototype.constructor = HelloMessage;
+    HelloMessage.__superConstructor__ = ____Class1;
+    
+    function HelloMessage() {
+      "use strict";
+      if (____Class1 !== null) {
+        ____Class1.apply(this, arguments);
+      }
+    }
+    HelloMessage.prototype.render = function() {
+      "use strict";
+      return React.createElement("div", null, "Hello ", this.props.name);
+    };
+
+    React.render(
+      React.createElement(HelloMessage, { name: "Sebastian" }),
+      mountNode
+    );
+
+I put this into a test page and it worked! ("mountNode" just needs to be a container element - any div that you want to render your content inside).
+
+The derive-class code isn't identical to that you see in TypeScript's output. If you've looked at what TypeScript emits, this might be familiar:
+
+    var __extends = this.__extends || function (d, b) {
+      for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+      function __() { this.constructor = d; }
+      __.prototype = b.prototype;
+      d.prototype = new __();
+    };
+
+I tried hacking this in, in place of the inheritance approach from the JSX Compiler and it still worked. I presumed it would, but it's always best to take baby steps if you don't understand it all perfectly - and I must admit that I've been a bit hazy on some of React's terminology around components, classes, elements, factories, whatever.. (despite having read "[Introducing React Elements](http://facebook.github.io/react/blog/2014/10/14/introducing-react-elements.html)" what feels like a hundred times).
+
+### Another wrong turn
+
+In the code above, the arrangement of the line
+
+    React.render(
+      React.createElement(HelloMessage, { name: "Sebastian" }),
+      mountNode
+    );
+
+is very important. I must have spent *hours* earlier struggling with getting it working in TypeScript because I thought it was
+
+    React.render(
+      React.createElement(new HelloMessage({ name: "Sebastian" })),
+      mountNode
+    );
+
+It's not.
+
+It it *not* a new instance passed to "createElement"; it's a type and a properties object. I'm not sure where I got the idea from that it was the other way around - perhaps because I got all excited about it working with classes and then presumed that you worked directly with instances of those classes. Doh.
+
+### Time for TypeScript!
+
+Like I said, I've been clinging to my hacked-about way to get TypeScript working with React until now (waiting until I could throw it away entirely, rather than replace it for something else.. which I would then have to throw away entirely when this release turned up). I took a lot of inspiration from code in the [react-typescript](https://github.com/fdecampredon/react-typescript) repo. But that repo hasn't been kept up to date (for the same reason as I had, I believe, that the author knew that it was only going to be required until ES6 classes were supported). There is a link there to [typed-react](https://github.com/Asana/typed-react/), which seems to have been maintained for 0.12. This seemed like the best place to start.
+
+In fact, after some investigation, very little needs changing. Starting with their React type definitions (from the file [typings/react/reactd.ts](https://github.com/Asana/typed-react/blob/master/typings/react/react.d.ts)), we need to expose the "React.Component" class but currently that is described by an interface. So the following must be changed -
+
+    interface Component<P> {
+      getDOMNode<TElement extends Element>(): TElement;
+      getDOMNode(): Element;
+      isMounted(): boolean;
+      props: P;
+      setProps(nextProps: P, callback?: () => void): void;
+      replaceProps(nextProps: P, callback?: () => void): void;
+    }
+
+for this -
+
+    export class Component<P> {
+      constructor(props: P);
+      protected props: P;
+    }
+
+I've removed isMounted and setProps because they've been deprecated from React. I've also removed the getDOMNode methods since I think they spill out more information than is necessary and I've removed replaceProps since the way that I've been using React I've not seen the use for it - I think it makes more sense to request a full re-render* rather than poke things around. You may not agree with me on these, so feel free to leave them in! Similarly, I've changed the access level of "props" to protected, since I don't think that it should be public information. This requires TypeScript 1.3, which might be why the typed-react version doesn't specify it.
+
+\* *When I say "re-render", I mean that when some action changes the state of the application, I call React.render again and let the Virtual DOM do it's magic around making this efficient. Plus I'm experimenting at the moment with making the most of immutable data structures and returning false from shouldComponentUpdate where it's clear that the data can't have changed - so the Virtual DOM has less work to do. But that's straying from the point of this post a bit..*
+
+Then the external interface needs changing from
+
+    interface Exports extends TopLevelAPI {
+      DOM: ReactDOM;
+      PropTypes: ReactPropTypes;
+      Children: ReactChildren;
+    }
+
+to
+
+    interface Exports extends TopLevelAPI {
+      DOM: ReactDOM;
+      PropTypes: ReactPropTypes;
+      Children: ReactChildren;
+      Component: Component<any>;
+    }
+
+Quite frankly, I'm not 100% sure why specifying "Component<any>" works as it does, since I would have thought that you could *only* then inherit from "Component<any>", rather than being able to specify whatever type param that you want. But it *does* work, thankfully (my understanding of type definitions is a little shallow at this point, so there's very likely something here that I don't quite understand which allows it work as it does).
+
+So now we can write this:
+
+    import React = require('react');
+
+    interface Props { name: string; role: string; }
+
+    class PersonDetailsComponent extends React.Component<Props> {
+      constructor(props: Props) {
+        super(props);
+      }
+      public render() {
+        return React.DOM.div(null, this.props.name + " is a " + this.props.role);
+
+      }
+    }
+
+    function Factory(props: Props) {
+      return React.createElement(PersonDetailsComponent, props);
+    }
+
+    export = Factory;
+
+Note that we *are* able to specify a type param for "React.Component" and, when you edit this in TypeScript, "this.props" is correctly identified as being of that type.
+
+The pattern I've used it to declare a class that is *not* exported. Rather, a "Factory" function is made available to the world. This is to prevent the problem that I described earlier - originally I was exporting the class and was trying to call
+
+    React.render(
+      React.createElement(new PersonDetailsComponent({
+        name: "Bob",
+        role: "Mouse catcher"
+      })),
+      mountNode
+    );
+
+but this does not work. The correct approach is to export a Factory method and then to consume the component thusly:
+
+    React.render(
+      PersonDetailsComponent({
+        name: "Bob",
+        role: "Mouse catcher"
+      }),
+      this._renderContainer
+    );
+
+Thankfully, the render method is specified in the type definition as
+
+    render<P>(
+      element: ReactElement<P>,
+      container: Element,
+      callback?: () => void
+    ): Component<P>;
+
+so, if you forget to apply the structure of non-exported-class / exported-Factory-method and tried to export the class and new-one-up and pass it to "React.render" directly, you would get a compile error such as
+
+> Argument of type 'PersonDetailsComponent' is not assignable to parameter of type 'ReactElement&lt;Props&gt;'
+
+I do love it when the compiler can pick up on your silly mistakes!
+
+### Migration plan
+
+The hacky way I've been working until now *did* allow instances of component classes to be used, so migrating over is going to require some boring mechanical work to change them - and to add Factory methods to each component. But, since they all shared a common base class (the "ReactComponentBridge"), it also shouldn't be too much work to change those base classes to "React.Component" in one search-and-replace. And there aren't too many other breaking changes to worry about. I was using "setProps" earlier on in development but I've already gotten rid of all those - so I'm optimistic that moving over to 0.13 isn't going to be too big of a deal.
+
+It's worth bearing in mind that 0.13 is still in beta at the moment, but it seems like the changes that I'm interested in here are unlikely to vary too much between now and the official release. So if I get cracking, maybe I can finish migrating not long after it's officially here - instead of being stuck a few releases behind!
