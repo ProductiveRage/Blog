@@ -9,3 +9,5 @@ c-state-machines c-sharp-state-machines
 reflection-and-c-optional-constructor-arguments reflection-and-c-sharp-optional-constructor-arguments
 the-c-css-parser-in-javascript the-c-sharp-css-parser-in-javascript
 implementing-finspired-with-updates-for-immutable-classes-in-c implementing-f-sharp-inspired-with-updates-for-immutable-classes-in-c-sharp
+
+typescript-classes-for-react-components-without-the-hacks typescript-es6-classes-for-react-components-without-the-hacks
