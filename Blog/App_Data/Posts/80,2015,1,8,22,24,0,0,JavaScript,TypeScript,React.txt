@@ -161,25 +161,27 @@ But, technically, this could lead to one Store changing data in an action, which
 So if there were classes for each action then the listening code would look more like this:
 
     if (action instanceof AddItemAction) {
-      this._addItem(<AddItemAction>action);
+      this._addItem(action);
     }
     if (action instanceof RemoveItemAction) {
-      this._removeItem(<RemoveItemAction>action);
+      this._removeItem(action);
     }
     if (action instanceof IncreaseItemAction) {
-      this._increaseItem(<IncreaseItemAction>action);
+      this._increaseItem(action);
     }
     if (action instanceof DecreaseItemAction) {
-      this._decreaseItem(<DecreaseItemAction>action);
+      this._decreaseItem(action);
     }
     
-I prefer to have the functions receive the actual action (the **AddItemAction** instance is passed to the "_addItem" function, for example, rather than just the "index" property value). That is at least partly because it makes the type comparing code more succinct; it gets slightly longer if you have to test "action" against a type, then cast "action" to the correct type, then wrap it in brackets again so that the property can be accessed from it:
+I prefer to have the functions receive the actual action. The **AddItemAction** instance is passed to the "_addItem" function, for example, rather than just the "index" property value - eg.
 
-    if (action instanceof AddItemAction) {
-      this._addItem((<AddItemAction>action).index);
+    private _addItem(action: AddItemAction) {
+      // Do whatever..
     }
-    
-So maybe it's laziness on my part. But for actions with more than one properties, it can be very helpful to pass the action rather than having to break out the individual properties to pass along.
+
+This is at least partly because it makes the type comparing code more succinct - the "action" reference will be of type "any" (as will be seen further on in this post) and so TypeScript lets us pass it straight in to methods such as _addItem since it presumes that if it's "any" then it can be used *anywhere*, even as an function argument that has a specific type annotation. The type check that is made before _addItem is called gives us the confidence that the data is appropriate to pass to _addItem, the TypeScript compiler will then happily take our word for it.
+
+**Update (25th February 2015):** A couple of people in the comments suggested that the action property on the payload should implement an interface to "mark" it as an action. This is something I considered originally but I dismissed it and I think I'm going to continue to dismiss it for the following reason: the interface would be "empty" since there is no property or method that all actions would need to share. If this were C# then every action class would have to explicitly implement this "empty interface" and so we could do things like search for all implementation of **IAction** within a given project or binary. In TypeScript, however, interfaces may be implemented implicitly ("[TypeScript is structural](http://blogs.msdn.com/b/typescript/archive/2013/01/24/interfaces-walkthrough.aspx)"). This means that *any* object may be considered to have (implicitly) implemented **IAction**, if **IAction** is an empty interface. And this means that there would be no reliable way to search for implementations of **IAction** in a code base. You could search for classes that *explicitly* implement it, but if you have to rely upon people to follow the convention of decorating all action classes with a particular interface then you might as well rely on a simpler convention such as keeping all actions within files under an "action" folder.
 
 ### Server vs User actions
 
@@ -279,10 +281,10 @@ This allows me to listen for actions with code thusly -
     AppDispatcher.register(message => {
       var action = message.action;
       if (action instanceof AddItemAction) {
-        this._addItem(<AddItemAction>action);
+        this._addItem(action);
       }
       if (action instanceof RemoveItemAction) {
-        this._removeItem(<RemoveItemAction>action);
+        this._removeItem(action);
       }
       // etc..
 
