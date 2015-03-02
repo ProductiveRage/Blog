@@ -197,11 +197,11 @@ namespace Blog.Helpers.Posts
             content.Append("<div class=\"Tags\">");
             content.Append("<label>Tags:</label>");
             content.Append("<ul>");
-            foreach (var tag in tagsToDisplay.Select(t => t.Tag))
+            foreach (var tagSummary in tagsToDisplay)
             {
                 content.AppendFormat(
                     "<li>{0}</li>",
-                    helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag }, null)
+                    helper.ActionLink(tagSummary.Tag, "ArchiveByTag", "ViewPost", new { Tag = tagSummary.Tag }, new { title = tagSummary.NumberOfPosts + " Posts" })
                 );
             }
             content.Append("</ul>");
