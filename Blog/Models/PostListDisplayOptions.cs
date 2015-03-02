@@ -2,8 +2,9 @@
 {
 	public enum PostListDisplayOptions
 	{
-		ArchiveByMonth,
-		ArchiveByTag,
+        ArchiveByEveryTitle,
+        ArchiveByMonth,
+        ArchiveByTag,
 		SinglePost
 	}
 }

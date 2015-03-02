@@ -27,18 +27,21 @@ namespace Blog
 			  "Read/{id}",
 			  new { controller = "ViewPost", action = "ArchiveById" }
 			);
-
 			routes.MapRoute(
 			  "ArchiveByTag",
 			  "Archive/Tag/{tag}",
 			  new { controller = "ViewPost", action = "ArchiveByTag" }
 			);
-
-			routes.MapRoute(
-			  "ArchiveByMonth",
-			  "Archive/{month}/{year}",
-			  new { controller = "ViewPost", action = "ArchiveByMonth" }
-			);
+            routes.MapRoute(
+              "ArchiveByMonth",
+              "Archive/{month}/{year}",
+              new { controller = "ViewPost", action = "ArchiveByMonth" }
+            );
+            routes.MapRoute(
+              "ArchiveByTitle",
+              "Archive",
+              new { controller = "ViewPost", action = "ArchiveByTitle" }
+            );
 
 			routes.MapRoute(
 			  "Search",

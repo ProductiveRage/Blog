@@ -151,6 +151,47 @@ namespace Blog.Controllers
 			);
 		}
 
+        [Stopwatch]
+        public ActionResult ArchiveByTitle()
+        {
+            var posts = _postRepository.GetAll();
+			if (posts.Count() == 0)
+				return new HttpNotFoundResult();
+
+            return View(
+                "PostsByTitle",
+                new PostListModel(
+                    "Every Post Title",
+                    posts
+                        .Select(post => new PostWithRelatedPostStubs(
+				            post.Id,
+				            post.Posted,
+				            post.LastModified,
+				            post.Slug,
+				            post.RedirectFromSlugs,
+				            post.Title,
+				            post.IsHighlight,
+				            post.MarkdownContent,
+                            new NonNullImmutableList<PostStub>(),
+				            post.Tags
+			            ))
+                        .OrderByDescending(post => post.Posted)
+                        .ToNonNullImmutableList(),
+                    null, // previousPostIfAny,
+                    null, // nextPostIfAny
+                    _postRepository.GetMostRecentStubs(5),
+                    _postRepository.GetStubs(null, null, true),
+                    _postRepository.GetArchiveLinks(),
+                    PostListDisplayOptions.ArchiveByEveryTitle,
+                    _optionalCanonicalLinkBase,
+                    _optionalGoogleAnalyticsId,
+                    _optionalDisqusShortName,
+                    new PostSlugRetriever(_postRepository),
+                    _cache
+                )
+            );
+        }
+
 		[Stopwatch]
 		public ActionResult ArchiveByMonthMostRecent()
 		{
