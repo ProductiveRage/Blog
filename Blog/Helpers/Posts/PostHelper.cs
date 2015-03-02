@@ -19,174 +19,197 @@ namespace Blog.Helpers.Posts
 {
 	public static class PostHelper
 	{
-		public static IHtmlString RenderPost(
-			this HtmlHelper helper,
-			PostWithRelatedPostStubs post,
-			Post previousPostIfAny,
-			Post nextPostIfAny,
-			IRetrievePostSlugs postSlugRetriever,
-			ICache cache)
-		{
-			if (helper == null)
-				throw new ArgumentNullException("helper");
-			if (post == null)
-				throw new ArgumentNullException("post");
-			if (postSlugRetriever == null)
-				throw new ArgumentNullException("postSlugRetriever");
-			if (cache == null)
-				throw new ArgumentNullException("cache");
+        public static IHtmlString RenderPostTitleSummary(this HtmlHelper helper, PostWithRelatedPostStubs post)
+        {
+            if (helper == null)
+                throw new ArgumentNullException("helper");
+            if (post == null)
+                throw new ArgumentNullException("post");
 
-			var cacheKey = string.Format(
-				"PostHelper-RenderPost-{0}-{1}-{2}",
-				post.Id,
-				(previousPostIfAny == null) ? 0 : previousPostIfAny.Id,
-				(nextPostIfAny == null) ? 0 : nextPostIfAny.Id
-			);
-			var cachedData = cache[cacheKey];
-			if (cachedData != null)
-			{
-				var cachedPostContent = cachedData as CachablePostContent;
-				if ((cachedPostContent != null) && (cachedPostContent.LastModified >= post.LastModified))
-					return (IHtmlString)MvcHtmlString.Create(cachedPostContent.RenderableContent);
-				cache.Remove(cacheKey);
-			}
+            var content = new StringBuilder();
+            content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
+            content.AppendFormat("<h2><a href=\"{0}\">{1}</a></h2>", HttpUtility.HtmlAttributeEncode(post.Slug), HttpUtility.HtmlEncode(post.Title));
+            content.Append(GetTagLinksContent(helper, post.Tags));
+            return (IHtmlString)MvcHtmlString.Create(content.ToString());
+        }
 
-			var content = GetRenderableContent(helper, post, previousPostIfAny, nextPostIfAny, true, true, true, postSlugRetriever);
-			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
-			return (IHtmlString)MvcHtmlString.Create(content);
-		}
+        public static IHtmlString RenderPost(
+            this HtmlHelper helper,
+            PostWithRelatedPostStubs post,
+            Post previousPostIfAny,
+            Post nextPostIfAny,
+            IRetrievePostSlugs postSlugRetriever,
+            ICache cache)
+        {
+            if (helper == null)
+                throw new ArgumentNullException("helper");
+            if (post == null)
+                throw new ArgumentNullException("post");
+            if (postSlugRetriever == null)
+                throw new ArgumentNullException("postSlugRetriever");
+            if (cache == null)
+                throw new ArgumentNullException("cache");
 
-		public static IHtmlString RenderPostForRSS(this HtmlHelper helper, PostWithRelatedPostStubs post, Uri requestHostUrl, IRetrievePostSlugs postSlugRetriever, ICache cache)
-		{
-			if (helper == null)
-				throw new ArgumentNullException("helper");
-			if (post == null)
-				throw new ArgumentNullException("post");
-			if (requestHostUrl == null)
-				throw new ArgumentNullException("requestHostUrl");
-			if (postSlugRetriever == null)
-				throw new ArgumentNullException("postSlugRetriever");
-			if (cache == null)
-				throw new ArgumentNullException("cache");
+            var cacheKey = string.Format(
+                "PostHelper-RenderPost-{0}-{1}-{2}",
+                post.Id,
+                (previousPostIfAny == null) ? 0 : previousPostIfAny.Id,
+                (nextPostIfAny == null) ? 0 : nextPostIfAny.Id
+            );
+            var cachedData = cache[cacheKey];
+            if (cachedData != null)
+            {
+                var cachedPostContent = cachedData as CachablePostContent;
+                if ((cachedPostContent != null) && (cachedPostContent.LastModified >= post.LastModified))
+                    return (IHtmlString)MvcHtmlString.Create(cachedPostContent.RenderableContent);
+                cache.Remove(cacheKey);
+            }
 
-			var cacheKey = "PostHelper-RenderPostForRSS-" + post.Id;
-			var cachedData = cache[cacheKey];
-			if (cachedData != null)
-			{
-				var cachedPostContent = cachedData as CachablePostContent;
-				if ((cachedPostContent != null) && (cachedPostContent.LastModified >= post.LastModified))
-					return (IHtmlString)MvcHtmlString.Create(cachedPostContent.RenderableContent);
-				cache.Remove(cacheKey);
-			}
+            var content = GetRenderableContent(helper, post, previousPostIfAny, nextPostIfAny, true, true, true, postSlugRetriever);
+            cache[cacheKey] = new CachablePostContent(content, post.LastModified);
+            return (IHtmlString)MvcHtmlString.Create(content);
+        }
 
-			var content = GetRenderableContent(helper, post, null, null, false, false, false, postSlugRetriever);
-			var doc = new HtmlDocument();
-			doc.LoadHtml(content);
-			MakeUrlsAbsolute(doc, "a", "href", requestHostUrl.Scheme, requestHostUrl.Host, requestHostUrl.Port);
-			MakeUrlsAbsolute(doc, "img", "src", requestHostUrl.Scheme, requestHostUrl.Host, requestHostUrl.Port);
-			using (var writer = new StringWriter())
-			{
-				doc.Save(writer);
-				content = writer.ToString();
-			}
+        public static IHtmlString RenderPostForRSS(this HtmlHelper helper, PostWithRelatedPostStubs post, Uri requestHostUrl, IRetrievePostSlugs postSlugRetriever, ICache cache)
+        {
+            if (helper == null)
+                throw new ArgumentNullException("helper");
+            if (post == null)
+                throw new ArgumentNullException("post");
+            if (requestHostUrl == null)
+                throw new ArgumentNullException("requestHostUrl");
+            if (postSlugRetriever == null)
+                throw new ArgumentNullException("postSlugRetriever");
+            if (cache == null)
+                throw new ArgumentNullException("cache");
 
-			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
-			return (IHtmlString)MvcHtmlString.Create(content);
-		}
+            var cacheKey = "PostHelper-RenderPostForRSS-" + post.Id;
+            var cachedData = cache[cacheKey];
+            if (cachedData != null)
+            {
+                var cachedPostContent = cachedData as CachablePostContent;
+                if ((cachedPostContent != null) && (cachedPostContent.LastModified >= post.LastModified))
+                    return (IHtmlString)MvcHtmlString.Create(cachedPostContent.RenderableContent);
+                cache.Remove(cacheKey);
+            }
 
-		private static string GetRenderableContent(
-			HtmlHelper helper,
-			PostWithRelatedPostStubs post,
-			Post previousPostIfAny,
-			Post nextPostIfAny,
-			bool includeTitle,
-			bool includePostedDate,
-			bool includeTags,
-			IRetrievePostSlugs postSlugRetriever)
-		{
-			if (helper == null)
-				throw new ArgumentNullException("helper");
-			if (post == null)
-				throw new ArgumentNullException("post");
-			if (postSlugRetriever == null)
-				throw new ArgumentNullException("postSlugRetriever");
+            var content = GetRenderableContent(helper, post, null, null, false, false, false, postSlugRetriever);
+            var doc = new HtmlDocument();
+            doc.LoadHtml(content);
+            MakeUrlsAbsolute(doc, "a", "href", requestHostUrl.Scheme, requestHostUrl.Host, requestHostUrl.Port);
+            MakeUrlsAbsolute(doc, "img", "src", requestHostUrl.Scheme, requestHostUrl.Host, requestHostUrl.Port);
+            using (var writer = new StringWriter())
+            {
+                doc.Save(writer);
+                content = writer.ToString();
+            }
 
-			var markdownContent = HandlePostLinks(
-				helper,
-				includeTitle ? ReplaceFirstLineHashHeaderWithPostLink(post.MarkdownContent, post.Id) : RemoveTitle(post.MarkdownContent),
-				postSlugRetriever
-			);
+            cache[cacheKey] = new CachablePostContent(content, post.LastModified);
+            return (IHtmlString)MvcHtmlString.Create(content);
+        }
 
-			var content = new StringBuilder();
-			if (includePostedDate)
-				content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
-			content.Append(
-				MarkdownHelper.TransformIntoHtml(markdownContent)
-			);
-			if (includePostedDate)
-				content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
-			if ((previousPostIfAny != null) || (nextPostIfAny != null))
-			{
-				content.Append("<div class=\"PreviousAndNext\">");
-				if (previousPostIfAny != null)
-				{
-					content.Append("<div class=\"Previous\">");
-					content.Append("<h3>Last time:</h3>");
-					content.Append(
-						helper.ActionLink(previousPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = previousPostIfAny.Slug }, new { @class = "Previous" })
-					);
-					content.Append("</div>");
-				}
-				if (nextPostIfAny != null)
-				{
-					content.Append("<div class=\"Next\">");
-					content.Append("<h3>Next:</h3>");
-					content.Append(
-						helper.ActionLink(nextPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = nextPostIfAny.Slug }, new { @class = "Next" })
-					);
-					content.Append("</div>");
-				}
-				content.Append("</div>");
-			}
-			if (post.RelatedPosts.Any())
-			{
-				content.Append("<div class=\"Related\">");
-				content.Append("<h3>You may also be interested in</h3>");
-				content.Append("<ul>");
-				foreach (var relatedPost in post.RelatedPosts)
-				{
-					content.AppendFormat(
-						"<li>{0}</li>",
-						helper.ActionLink(relatedPost.Title, "ArchiveBySlug", "ViewPost", new { Slug = relatedPost.Slug }, null)
-					);
-				}
-				content.Append("</ul>");
-				content.Append("</div>");
-			}
-			if (includeTags)
-			{
-				var tagsToDisplay = post.Tags.Where(t => t.NumberOfPosts > 1); // There's no point rendering a tag unless other Posts have the same tag
-				if (tagsToDisplay.Any())
-				{
-					content.Append("<div class=\"Tags\">");
-					content.Append("<label>Tags:</label>");
-					content.Append("<ul>");
-					foreach (var tag in tagsToDisplay.Select(t => t.Tag))
-					{
-						content.AppendFormat(
-							"<li>{0}</li>",
-							helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag }, null)
-						);
-					}
-					content.Append("</ul>");
-					content.Append("</div>");
-				}
-			}
+        private static string GetRenderableContent(
+            HtmlHelper helper,
+            PostWithRelatedPostStubs post,
+            Post previousPostIfAny,
+            Post nextPostIfAny,
+            bool includeTitle,
+            bool includePostedDate,
+            bool includeTags,
+            IRetrievePostSlugs postSlugRetriever)
+        {
+            if (helper == null)
+                throw new ArgumentNullException("helper");
+            if (post == null)
+                throw new ArgumentNullException("post");
+            if (postSlugRetriever == null)
+                throw new ArgumentNullException("postSlugRetriever");
 
-			return content.ToString();
-		}
+            var markdownContent = HandlePostLinks(
+                helper,
+                includeTitle ? ReplaceFirstLineHashHeaderWithPostLink(post.MarkdownContent, post.Id) : RemoveTitle(post.MarkdownContent),
+                postSlugRetriever
+            );
 
-		/// <summary>
+            var content = new StringBuilder();
+            if (includePostedDate)
+                content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
+            content.Append(
+                MarkdownHelper.TransformIntoHtml(markdownContent)
+            );
+            if (includePostedDate)
+                content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));
+            if ((previousPostIfAny != null) || (nextPostIfAny != null))
+            {
+                content.Append("<div class=\"PreviousAndNext\">");
+                if (previousPostIfAny != null)
+                {
+                    content.Append("<div class=\"Previous\">");
+                    content.Append("<h3>Last time:</h3>");
+                    content.Append(
+                        helper.ActionLink(previousPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = previousPostIfAny.Slug }, new { @class = "Previous" })
+                    );
+                    content.Append("</div>");
+                }
+                if (nextPostIfAny != null)
+                {
+                    content.Append("<div class=\"Next\">");
+                    content.Append("<h3>Next:</h3>");
+                    content.Append(
+                        helper.ActionLink(nextPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = nextPostIfAny.Slug }, new { @class = "Next" })
+                    );
+                    content.Append("</div>");
+                }
+                content.Append("</div>");
+            }
+            if (post.RelatedPosts.Any())
+            {
+                content.Append("<div class=\"Related\">");
+                content.Append("<h3>You may also be interested in</h3>");
+                content.Append("<ul>");
+                foreach (var relatedPost in post.RelatedPosts)
+                {
+                    content.AppendFormat(
+                        "<li>{0}</li>",
+                        helper.ActionLink(relatedPost.Title, "ArchiveBySlug", "ViewPost", new { Slug = relatedPost.Slug }, null)
+                    );
+                }
+                content.Append("</ul>");
+                content.Append("</div>");
+            }
+            if (includeTags)
+                content.Append(GetTagLinksContent(helper, post.Tags));
+            return content.ToString();
+        }
+
+        private static string GetTagLinksContent(HtmlHelper helper, NonNullImmutableList<TagSummary> tags)
+        {
+            if (helper == null)
+                throw new ArgumentNullException("helper");
+            if (tags == null)
+                throw new ArgumentNullException("tags");
+
+            var tagsToDisplay = tags.Where(t => t.NumberOfPosts > 1); // There's no point rendering a tag unless other Posts have the same tag
+            if (!tagsToDisplay.Any())
+                return "";
+
+            var content = new StringBuilder();
+            content.Append("<div class=\"Tags\">");
+            content.Append("<label>Tags:</label>");
+            content.Append("<ul>");
+            foreach (var tag in tagsToDisplay.Select(t => t.Tag))
+            {
+                content.AppendFormat(
+                    "<li>{0}</li>",
+                    helper.ActionLink(tag, "ArchiveByTag", "ViewPost", new { Tag = tag }, null)
+                );
+            }
+            content.Append("</ul>");
+            content.Append("</div>");
+            return content.ToString();
+        }
+
+        /// <summary>
 		/// Update any markdown links where the target is of the form "Post{0}" to replace with the real url
 		/// </summary>
 		private static string HandlePostLinks(HtmlHelper helper, string content, IRetrievePostSlugs postSlugRetriever)

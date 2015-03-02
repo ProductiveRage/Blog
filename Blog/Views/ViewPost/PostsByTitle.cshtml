@@ -1,0 +1,14 @@
+﻿@model Blog.Models.PostListModel
+@using Blog.Helpers.Posts;
+
+@{
+    ViewBag.Title = Model.Title;
+    Layout = "~/Views/Shared/SiteMasterWithSidebar.cshtml";
+}
+
+@foreach (var post in Model.Posts)
+{
+				<div class="Content @Model.PostListDisplay">
+					@Html.RenderPostTitleSummary(post)
+				</div>
+}

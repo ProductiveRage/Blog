@@ -26,6 +26,13 @@ body
 		}
 	}
 
+    .SidebarLink()
+    {
+		color: #f1f1f1;
+		display: block;
+		&:hover { color: #c0c0c0; }
+    }
+
 	.SidebarContainerWithLinkListItems()
 	{
 		.SidebarContainer();
@@ -36,12 +43,7 @@ body
 			{
 				text-indent: -8px; // Indent any wrapped lines
 				line-height: 20px;
-				> a
-				{
-					color: #f1f1f1;
-					display: block;
-					&:hover { color: #c0c0c0; }
-				}
+				> a { .SidebarLink(); }
 			}
 		}
 	}
@@ -57,7 +59,7 @@ body
 	}
 	
 	div.Recent,
-	div.Featured,
+	div.Featured
 	{
 		.SidebarContainerWithLinkListItems();
 		> ul > li { padding: 0 0 8px 0; }
@@ -66,14 +68,10 @@ body
 			padding: 8px 0 0 0;
 			> a
 			{
-				color: #f1f1f1;
-				background: url("../Content/Images/RSSFeedIcon.png") 0 3px no-repeat;
-				&:hover
-				{
-					color: #c0c0c0;
-					background-position: 0 -45px;
-				}
-				padding: 0 0 0 20px;
+                .SidebarLink();
+				background: url("../Content/Images/RSSFeedIcon.png") 0 1px no-repeat;
+				&:hover { background-position: 0 -47px; }
+				padding: 1px 0 3px 20px;
 			}
 		}
 	}
@@ -81,6 +79,10 @@ body
 	div.History
 	{
 		.SidebarContainerWithLinkListItems();
+        div.EveryTitle {
+            padding-top: 8px;
+            > a { .SidebarLink(); }
+        }
 		@media screen and (max-width: 35em) {
 			> ul > li { padding: 0 0 8px 0; }
 		}
