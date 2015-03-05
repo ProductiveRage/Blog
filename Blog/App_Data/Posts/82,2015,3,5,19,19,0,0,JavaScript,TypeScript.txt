@@ -1,0 +1,315 @@
+## Simple TypeScript type definitions for AMD modules
+
+I wanted to write a TypeScript type definition file for a JavaScript module that I wrote last year, so that I could use it from within TypeScript in a seamless manner - with argument and return type annotations present. I considered porting it to TypeScript but since all that I really wanted was the type annotations, it seemed like a type definition file would be just the job and prevent me from maintaining the code in two languages (well, three, actually, since I originally ported it from C#).
+
+The module in question is the [CSS Parser](https://bitbucket.org/DanRoberts/cssparserjs) that I previously wrote about porting (see [The C# CSS Parser in JavaScript](Post73)), it's written to be referenced directly in the browser as a script tag or to be loaded asynchronously (which I also wrote about in [JavaScript dependencies that work with Brackets, Node and in-browser](Post72)).
+
+I wanted to write a type definition to work with the AMD module loading that TypeScript supports. And this is where I came a bit unstuck.
+
+I must admit that, writing this now, it seems that nothing that I'm about to cover is particularly complicated or confusing - it's just that when I tried to find out how to do it, I found it really difficult! The [DefinitelyTyped](https://github.com/borisyankov/DefinitelyTyped) GitHub repo seemed like it should be a good start, since surely it would cover any use case I could thing of.. but it was also difficult to know where to start since I couldn't think of any packages that I knew, that would support AMD and whose type definitions would be small enough that I would be able to understand them by just trying to stare them down.
+
+There is an official TypeScript article that is commonly linked to by Stack Overflow answers: [Writing Definition (.d.ts) Files](https://typescript.codeplex.com/wikipage?title=Writing%20Definition%20%28.d.ts%29%20Files), but this seems to take quite a high level view and I couldn't work out how to expose my module's functionality in an AMD fashion.
+
+### The short answer
+
+In my case, I basically had a module of code that exposed functions. Nothing needed to be instantiated in order to calls these functions, they were just available.
+
+To reduce it down to the most simple case, imagine that my module only exposed a single function "GetLength" that took a single parameter of type string and returned a value of type number, the type definition would then be:
+
+    declare module SimpleExample {
+      export function GetLength(content: string): number;
+    }
+
+    export = SimpleExample;
+    
+This allows for the module to be used in TypeScript elsewhere with code such as
+
+    import simpleExample = require("simpleExample");
+    
+    console.log(simpleExample.GetLength("test"));
+
+So easy! So straight-forward! And yet it seemed like it took me a long time to get to this point :(
+
+One of the problems I struggled with is that there are multiple ways to express the same thing. The following seemed more natural to me, in a way -
+
+    interface SimpleExample {
+      GetLength(content: string): number;
+    }
+
+    declare var simpleExampleInstance: SimpleExample;
+    export = simpleExampleInstance;
+
+It is common for a module to build up an instance to export as the AMD interface and the arrangement above does, in fact, explicitly describe the module as containing an instance that implements a specified interface. This interface is what consuming TypeScript code will work against.
+
+*Side note: It doesn't matter what name is given to "simpleExampleInstance" since it is just a variable that is being directly exported.*
+
+In this simple case, the TypeScript example still works - the module may be consumed and the "GetLength" method may be called as expected. It is only when things become more complicated (as we shall see below) that this approach becomes troublesome (meaning we will see that the "declare module" approach turns out to be a better way to do things).
+
+### Implementation details
+
+So that's a simple example, now to get back to the case I was actually working on. The first method that I want to expose is "ParseCss". This takes in a string and returns an array of "categorised character strings" - these are strings of content with a "Value" string, an "IndexInSource" number and a "CharacterCategorisation" number. So the string
+
+    body { color: red; }
+    
+is broken down into
+
+    Value: "body", IndexInSource: 0, CharacterCategorisation: 4
+    Value: " ", IndexInSource: 4, CharacterCategorisation: 7
+    Value: "{", IndexInSource: 5, CharacterCategorisation: 2
+    Value: " ", IndexInSource: 6, CharacterCategorisation: 7
+    Value: "color", IndexInSource: 7, CharacterCategorisation: 4
+    Value: ":", IndexInSource: 12, CharacterCategorisation: 5
+    Value: " ", IndexInSource: 13, CharacterCategorisation: 7
+    Value: "red", IndexInSource: 14, CharacterCategorisation: 6
+    Value: ";", IndexInSource: 17, CharacterCategorisation: 3
+    Value: " ", IndexInSource: 18, CharacterCategorisation: 7
+    Value: "}", IndexInSource: 19, CharacterCategorisation: 1
+    
+The CharacterCategorisation values come from a enum-like type in the library; an object named "CharacterCategorisationOptions" with properties named "Comment", "CloseBrace", "OpenBrace", etc.. that are mapped onto numeric values. These values are an ideal candidates for representation by the TypeScript "const enum" construct - and since there are a fixed set of values it's no problem to explicitly include them in the type definition. (Note that the "const enum" was introduced with TypeScript 1.4 and is not available in previous versions).
+
+This leads to the following:
+
+    declare module CssParser {
+      export function ParseCss(content: string): CategorisedCharacterString[];
+
+      export interface CategorisedCharacterString {
+        Value: string;
+        IndexInSource: number;
+        CharacterCategorisation: CharacterCategorisationOptions;
+      }
+      
+      export const enum CharacterCategorisationOptions {
+        Comment = 0,
+        CloseBrace = 1,
+        OpenBrace = 2,
+        SemiColon = 3,
+        SelectorOrStyleProperty = 4,
+        StylePropertyColon = 5,
+        Value = 6,
+        Whitespace = 7
+      }
+    }
+
+    export = CssParser;
+
+This is the first point at which the alternate "interface" approach that I mentioned earlier starts to fall apart - it is not possible to nest the enum within the interface, TypeScript will give you compile warnings. And if it is not nested within the interface then it can't be explicitly exported from the module and could not be be accessed from calling code.
+
+To try to make this a bit clearer, what we *could* do is
+
+    interface CssParser {
+      ParseCss(content: string): CategorisedCharacterString[];
+    }
+
+    interface CategorisedCharacterString {
+      Value: string;
+      IndexInSource: number;
+      CharacterCategorisation: CharacterCategorisationOptions;
+    }
+
+    declare const enum CharacterCategorisationOptions {
+      Comment = 0,
+      CloseBrace = 1,
+      OpenBrace = 2,
+      SemiColon = 3,
+      SelectorOrStyleProperty = 4,
+      StylePropertyColon = 5,
+      Value = 6,
+      Whitespace = 7
+    }
+
+    declare var parser: CssParser;
+    export = parser;
+    
+and then we *could* consume this with
+
+    import parser = require("cssparser/CssParserJs");
+    
+    var content = parser.ParseCss("body { color: red; }");
+    
+but we could *not* do something like
+
+    var firstFragmentIsWhitespace =
+      (content[0].CharacterCategorisation === parser.CharacterCategorisationOptions.Whitespace);
+    
+since the "CharacterCategorisationOptions" type is not exported from the module.
+
+Using the "declare module" approach allows us to nest the enum in that module which then *is* exported and then so *can* be accessed by the calling code.
+
+The same applies to exporting nested classes. Which leads me on to the next part of the parser interface - if the parsing method encounters content that it can not parse then it will throw a "ParseError". This error class has "name" and "message" properties like any other JavaScript Error but it has an additional "indexInSource" property to indicate where the troublesome character(s) occurred.
+
+The type definition now looks like
+
+    declare module CssParser {
+      export function ParseCss(content: string): CategorisedCharacterString[];
+
+      export interface CategorisedCharacterString {
+        Value: string;
+        IndexInSource: number;
+        CharacterCategorisation: CharacterCategorisationOptions;
+      }
+      
+      export const enum CharacterCategorisationOptions {
+        Comment = 0,
+        CloseBrace = 1,
+        OpenBrace = 2,
+        SemiColon = 3,
+        SelectorOrStyleProperty = 4,
+        StylePropertyColon = 5,
+        Value = 6,
+        Whitespace = 7
+      }
+      
+      export class ParseError implements Error {
+        constructor(message: string, indexInSource: number);
+        name: string;
+        message: string;
+        indexInSource: number;
+      }      
+    }
+
+    export = CssParser;
+
+There are complications around extending the Error object in both JavaScript and TypeScript, but I don't need to worry about that here since the library deals with it, all I need to do is describe the library's interface.
+
+This type definition now supports the following consuming code -
+
+    import parser = require("cssparser/CssParserJs");
+    
+    try {
+      var content = parser.ParseCss("body { color: red; }");
+      console.log("Parsed into " + content.length + " segment(s)");
+    }
+    catch (e) {
+      if (e instanceof parser.ParseError) {
+        var parseError = <parser.ParseError>e;
+        console.log("ParseError at index " + parseError.indexInSource + ": " + parseError.message);
+      }
+      else {
+        console.log(e.message);
+      }
+    }
+    
+The library has two other methods to expose yet. As well as "ParseCss" there is a "ParseLess" function - this applies slightly different rules, largely around the handling of comments ([Less](http://lesscss.org/) supports single line comments that start with "//" whereas CSS only allows the "/* .. */" format).
+
+And then there is the "ExtendedLessParser.ParseIntoStructuredData" method. "ParseCss" and "ParseLess" do a very cheap pass through style content to try to break it down and categorise sections while "ParseIntoStructuredData" takes that data, processes it more thoroughly and returns a hierarchical representation of the styles.
+
+The final type definition becomes
+
+    declare module CssParser {
+      export function ParseCss(content: string): CategorisedCharacterString[];
+      export function ParseLess(content: string): CategorisedCharacterString[];
+
+      export module ExtendedLessParser {
+        export function ParseIntoStructuredData(
+          content: string | CategorisedCharacterString[],
+          optionallyExcludeComments?: boolean
+        ): CssFragment[];
+
+        interface CssFragment {
+          FragmentCategorisation: FragmentCategorisationOptions;
+          Selectors: string[];
+          ParentSelectors: string[][];
+          ChildFragments: CssFragment;
+          SourceLineIndex: number;
+        }
+        export const enum FragmentCategorisationOptions {
+          Comment = 0,
+          Import = 1,
+          MediaQuery = 2,
+          Selector = 3,
+          StylePropertyName = 4,
+          StylePropertyValue = 5
+        }
+      }
+
+      export interface CategorisedCharacterString {
+        Value: string;
+        IndexInSource: number;
+        CharacterCategorisation: CharacterCategorisationOptions;
+      }
+      export const enum CharacterCategorisationOptions {
+        Comment = 0,
+        CloseBrace = 1,
+        OpenBrace = 2,
+        SemiColon = 3,
+        SelectorOrStyleProperty = 4,
+        StylePropertyColon = 5,
+        Value = 6,
+        Whitespace = 7
+      }
+
+      export class ParseError implements Error {
+        constructor(message: string, indexInSource: number);
+        name: string;
+        message: string;
+        indexInSource: number;
+      }
+    }
+
+    export = CssParser;
+    
+The "ExtendedLessParser.ParseIntoStructuredData" nested method is exposed as a function within a nested module. Similarly, the interface and enum for its return type are both nested in there. The method signature is somewhat interesting in that the library will accept either a string being passed into "ParseIntoStructuredData" or the result of a "ParseLess" call. TypeScript has support for this and the method signature indicates that it will accept either "string" or "CategorisedCharacterString[]" (this relies upon "union type" support that became available in TypeScript 1.4). There is also an optional argument to indicate that comments should be excluded from the return content, this is also easy to express in TypeScript (by including the question mark after the argument name).
+
+### Limitations
+
+For the module at hand, this covers everything that I needed to do!
+
+However.. while reading up further on type definitions, I did come across one limitation that I think is unfortunate. There is no support for get-only properties on either interfaces or classes. For my CSS Parser, that isn't an issue because I didn't write it in a manner that enforced immutability. But if the **CssFragment** type (for example) *was* written with properties that only supported "get" then I might have wanted to write the interface as
+
+    interface CssFragment {
+      get FragmentCategorisation(): FragmentCategorisationOptions;
+      get Selectors(): string[];
+      get ParentSelectors(): string[][];
+      get ChildFragments(): CssFragment;
+      get SourceLineIndex(): number;
+    }
+
+But this is not supported. You will get compile errors.
+
+In fairness, this shouldn't be a surprise, since TypeScript does not support properties in interfaces in its regular code; so it's not only within type definitions that it throws its toys out of the pram when you try to do this.
+
+So, instead, you might try to represent that data with a class, since classes *do* support get-only properties in regular TypeScript. However, if you attempt to write
+
+    export class CssFragment {
+      get FragmentCategorisation(): FragmentCategorisationOptions;
+      get Selectors(): string[];
+      get ParentSelectors(): string[][];
+      get ChildFragments(): CssFragment;
+      get SourceLineIndex(): number;
+    }
+
+then you would *still* receive a compile error
+
+> An accessor cannot be declared in an ambient context
+
+Interestingly, this should *also* not be too surprising (although it surprised me until I looked into it!) since the following code is legal:
+
+    class ClassWithGetOnlyName {
+      get name(): string {
+        return "Jim";
+      }
+    }
+
+    var example = new ClassWithGetOnlyName();
+    example.name = "Bob"; // Setting a property that only has a getter!
+    
+    alert(example.name);
+
+Here, the alert will show "Jim" since that is what the property getter returns. But it is not illegal to try to *set* the property (it's just that the "setting" action is effectively ignored). So TypeScript doesn't support the notion of a "get-only" (or "readonly") property.
+
+I think this is unfortunate, considering there are more and more libraries being released that incorporate immutability (Facebook released a library *dedicated* to immutable collections: [immutable-js](https://github.com/facebook/immutable-js)). There are issues in TypeScript's GitHub repo about this already, albeit with no ready solution available: see [Compiler allows assignments to read-only properties](https://github.com/Microsoft/TypeScript/issues/339) and [Suggestion: read-only modifier](https://github.com/Microsoft/TypeScript/issues/12).
+
+If you're writing a library from scratch that has immutable types then you can work around it by returning data from functions instead of properties - eg.
+
+    class ClassWithGetOnlyName {
+      getName(): string {
+        return "Jim";
+      }
+    }
+
+    var example = new ClassWithGetOnlyName();
+    alert(example.getName());
+
+However, if you wanted to write a type definition for an existing library that was intended to return immutable types (that exposed the data through properties) then you would be unable to represent this in TypeScript. Which is a pity.
+
+Which leaves me ending on a bum note when, otherwise, this exercise has been a success! So let's forget the downsides for now and celebrate the achievements instead! The CSS Parser JavaScript port is now available with a TypeScript definition file - hurrah! Everyone should now scurry off and download it from either npm ([npmjs.com/package/cssparserjs](https://www.npmjs.com/package/cssparserjs)) or [bitbucket.org/DanRoberts/cssparserjs](https://bitbucket.org/DanRoberts/cssparserjs) and get parsing!! :)
