@@ -4,6 +4,8 @@ React 0.13 has just been released into beta, a release I've been eagerly anticip
 
 Back in September, I wrote about [Writing React components in TypeScript](Post75) and realised that before I had actually posted it that the version of React I was using was out of date and I would have to re-work it all again or wait until ES6 classes were natively supported (which was on the horizon back then, it's just that there were no firm dates). I took the lazy option and have been sticking to React 0.10.. until now!
 
+**Update (16th March 2015):** React 0.13 was officially released last week, it's no longer in beta - this is excellent news! There appear to be very little changed since the beta so everything here is still applicable.
+
 ### Getting the new code
 
 I've got my head around npm, which is the recommended way to get the source. I had a few teething problems a few months ago with first getting going (I need python?? Oh, not that version..) but now everything's rosy. So off I went:
@@ -88,6 +90,8 @@ It it *not* a new instance passed to "createElement"; it's a type and a properti
 
 Like I said, I've been clinging to my hacked-about way to get TypeScript working with React until now (waiting until I could throw it away entirely, rather than replace it for something else.. which I would then have to throw away entirely when this release turned up). I took a lot of inspiration from code in the [react-typescript](https://github.com/fdecampredon/react-typescript) repo. But that repo hasn't been kept up to date (for the same reason as I had, I believe, that the author knew that it was only going to be required until ES6 classes were supported). There is a link there to [typed-react](https://github.com/Asana/typed-react/), which seems to have been maintained for 0.12. This seemed like the best place to start.
 
+**Update (16th March 2015):** With React 0.13's official release, the [DefinitelyTyped repo](https://github.com/borisyankov/DefinitelyTyped/tree/master/react) has been updated and now *does* work with 0.13, I'm leaving the below section untouched for posterity but you might want to skip to the next section "Writing a TypeScript React component" if you're using the DefinitelyTyped definition.
+
 In fact, after some investigation, very little needs changing. Starting with their React type definitions (from the file [typings/react/reactd.ts](https://github.com/Asana/typed-react/blob/master/typings/react/react.d.ts)), we need to expose the "React.Component" class but currently that is described by an interface. So the following must be changed -
 
     interface Component<P> {
@@ -129,6 +133,8 @@ to
 
 Quite frankly, I'm not 100% sure why specifying "Component<any>" works as it does, since I would have thought that you could *only* then inherit from "Component<any>", rather than being able to specify whatever type param that you want. But it *does* work, thankfully (my understanding of type definitions is a little shallow at this point, so there's very likely something here that I don't quite understand which allows it work as it does).
 
+### Writing a TypeScript React component
+
 So now we can write this:
 
     import React = require('react');
@@ -150,10 +156,14 @@ So now we can write this:
     }
 
     export = Factory;
+    
+Note that we are able to specify a type param for "React.Component" and, when you edit this in TypeScript, "this.props" is correctly identified as being of that type.
 
-Note that we *are* able to specify a type param for "React.Component" and, when you edit this in TypeScript, "this.props" is correctly identified as being of that type.
+**Update (16th March 2015):** If you are using the DefinitelyTyped definitions then you need to specify both "Props" *and* "State" type params (I recommend that Component State never be used and that it always be specified as "{}", but that's out of the scope of this post) - ie.
 
-The pattern I've used it to declare a class that is *not* exported. Rather, a "Factory" function is made available to the world. This is to prevent the problem that I described earlier - originally I was exporting the class and was trying to call
+    class PersonDetailsComponent extends React.Component<Props, {}> {
+
+The pattern I've used is to declare a class that is *not* exported. Rather, a "Factory" function is made available to the world. This is to prevent the problem that I described earlier - originally I was exporting the class and was trying to call
 
     React.render(
       React.createElement(new PersonDetailsComponent({
@@ -186,6 +196,16 @@ so, if you forget to apply the structure of non-exported-class / exported-Factor
 > Argument of type 'PersonDetailsComponent' is not assignable to parameter of type 'ReactElement&lt;Props&gt;'
 
 I do love it when the compiler can pick up on your silly mistakes!
+
+**Update (16th March 2015):** Again, there is a slight difference between the [typed-react](https://github.com/Asana/typed-react/) definition that I was originally using and the now-updated [DefinitelyTyped repo](https://github.com/borisyankov/DefinitelyTyped/tree/master/react) version. With DefinitelyTyped, the render method is specified as:
+
+    render<P, S>(
+        element: ReactElement<P>,
+        container: Element,
+        callback?: () => any
+    ): Component<P, S>
+        
+but the meaning is much the same.        
 
 ### Migration plan
 
