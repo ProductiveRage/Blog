@@ -4,7 +4,7 @@ I've been playing around with writing a Full Text Indexer - not for any practica
 
 I was working under no false illusions - even if the basic concept was easy our integration has all sorts of issues dealing with indexing across different languages, filtering shared content for use in different websites, all sorts.. but I thought it might be a way to learn something new so why not!
 
-At its core, once all of the source content has been parsed and analysed, there's a mapping of string matches back to results with appropriate weightings for the mappings. I initially used a Dictionary&lt;string, WeightedEntry&lt;TKey&gt;&gt; where WeightedEntry&lt;TKey&gt; is a key / weight pair. It struck me that the built-in class is a very general purpose implementation and surely it should be possible to write something that would perform better for more specific circumstances. For instance, I'll consider dropping mutability and only accept strings for keys if these can somehow be traded for performance.
+At its core, once all of the source content has been parsed and analysed, there's a mapping of string matches back to results with appropriate weightings for the mappings. I initially used a **Dictionary&lt;string, WeightedEntry&lt;TKey&gt;&gt;** where **WeightedEntry&lt;TKey&gt;** is a key / weight pair. It struck me that the built-in class is a very general purpose implementation and surely it should be possible to write something that would perform better for more specific circumstances. For instance, I'll consider dropping mutability and only accept strings for keys if these can somehow be traded for performance.
 
 ### The naive approach
 
@@ -22,25 +22,29 @@ Turns out that after running some tests that the built-in Dictionary was still a
 
 At some point I remembered reading that Microsoft made available the source for the .Net Framework so why not have a bit of a peek - maybe I'll learn something! I've also poked around in source with [dotPeek](http://www.jetbrains.com/decompiler/) in the past and I believe that will hook into source servers these days.
 
-After a quick shufty it seems like it's using a bucketed approach and basing the number of buckets on a prime number related to the capacity of the dictionary.... er, what?! I presume this is based on a well researched and performant algorithm thought up by clever people and implemented in .Net as a speedy generic implementation. Looks like improving on this will be more difficult that I first imagined (granted, I didn't think my original naive thoughts were particularly realistic!).
+After a quick shufty it seems like it's using a bucketed approach and basing the number of buckets on a prime number related to the capacity of the dictionary.... er, what?! I presume this is based on a well researched and performant algorithm thought up by clever people and implemented in .Net as a speedy generic implementation. Looks like improving on this will be more difficult that I first imagined (granted, I didn't think my original naive thoughts were particularly realistic).
 
-### One more try!
+### One more try
 
-The night I came to this point I went to bed and was bothered by what I'd found and ended up keeping myself half awake with ideas about data splitting and bucketing and lots of things that probably made no sense. It was like the opposite of the clarity of a ["shower moment"](http://online.wsj.com/article/SB124535297048828601.html) when a solution pops unbidden into your mind, I was just thinking round and round in circles. 
+The night I came to this point I went to bed and was bothered by what I'd found and ended up keeping myself half awake with ideas about data splitting and bucketing and lots of things that probably made no sense. It was like the opposite of the clarity of a "[shower moment](http://online.wsj.com/article/SB124535297048828601.html)" when a solution pops unbidden into your mind, I was just thinking round and round in circles. 
 
-But I came out it wondering - if bucketing the values to reduce the number of comparisons (even if these comparisons are only of hashed values) yields such improved performance, and since computers love simple binary operations the best, then wouldn't have nested buckets which we fall through by repeatedly diving the hash value by two until we get to the value (if present) be faster again?? All I'd be doing would be bit-shifting the hash and AND'ing the last bit to determine whether to go one way or the other as we go through the layers. I could even represent the set of "buckets" with structs and push them all into one array - that should make accessing the data that much faster as the memory access if more predictable? Right?? Maybe I could experiment with optimising the cases of key requests for keys that are not present in the data - perhaps it would be quicker to have a "key-not-found" bucket which loops back on itself instead of having to check at each division whether the next bucket exists, surely it would be quicker for the cases where the key _is_ found since there would be less work performed each step!
+But I came out of it wondering - if bucketing the values to reduce the number of comparisons (even if these comparisons are only of hashed values) yields such improved performance, and since computers love simple binary operations the best, then wouldn't having nested buckets which we fall through by repeatedly dividing the hash value by two until we get to the value (if present) be faster again??
 
-Well.. I'll not ramble on too much more about this - the .Net Dictionary still beat me!
+All I'd be doing would be bit-shifting the hash and AND'ing the last bit to determine whether to go one way or the other as I go through the layers. I could even represent the set of "buckets" with structs and push them all into one array - that should make accessing the data that much faster as the memory access is more predictable? Right??
+
+And maybe I could experiment with optimising for cases where keys are *not* present in the data - perhaps it would be quicker to have a "key-not-found" bucket which loops back on itself instead of having to check at each division whether the next bucket exists, surely it would be quicker for the cases where the key _is_ found since there would be less work performed each step!
+
+Well.. I'll not ramble on too much more about this. The .Net Dictionary still beat me.
 
 (Just in case you have a morbid curiousity to the myriad ways in which I failed - and in which I succeeded - there will be a link to a Bitbucket repository further down with example code).
 
 ### Some algorithm research!
 
-I had a little break from it all (to wallow in the disappointment) before realising I'd basically missed a trick. How often is it that Google doesn't have the answer one way or the other?! More specifically, I'm thinking there must have been many many people who have tried to solve similar problems before.. Maybe I should have thought of this when I looked at the Framework source. Maybe I should have thought of it in the first place! But then I would have missed out on the fun of poking about with the existing Dictionary and tinkering about with all of the above!
+I had a little break from it all (to wallow in the disappointment) before realising I'd basically missed a trick. How often is it that Google doesn't have the answer one way or the other?! More specifically, I'm thinking there must have been many many people who have tried to solve similar problems before.. Maybe I should have thought of this when I looked at the Framework source. Maybe I should have thought of it in the first place! But then I would have missed out on the fun of poking about with the existing Dictionary and tinkering about with all of the above.
 
 So it's proper research time!
 
-I must admit that my knowledge of lower level algorithms and structures is a bit lacking. I have a Maths degree so never covered all those courses from Computer Science, I'm mostly self-taught. Well I've _heard_ about these mysterious red/black trees, binary search trees, self-adjusting balancing search trees, tries - it's just that I don't know what they all are! Maybe one them can help. I mean, if these have been tested and applied to similar specialised scenarios then I can use someone else's genius to make my own code faster - good times!
+I must admit that my knowledge of lower level algorithms and structures is a bit lacking. I have a Maths degree so never covered all those courses from Computer Science, I'm mostly self-taught. Well I've _heard_ about these mysterious red/black trees, binary search trees, self-adjusting balancing search trees, tries - it's just that I don't know what they all are! Maybe one of them can help. I mean, if these have been tested and applied to similar specialised scenarios then I can use someone else's genius to make my own code faster - good times!
 
 ### The Ternary Search Tree
 
