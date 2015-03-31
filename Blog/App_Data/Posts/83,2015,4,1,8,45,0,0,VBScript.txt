@@ -1,0 +1,534 @@
+## Translating VBScript into C#
+### aka: Possibly the stupidest idea I've ever seriously attempted
+
+A long time ago I wrote a VBScript parser. Most of one, at least. With this in hand, I figured it couldn't be too hard to take a parsed syntax tree and generate C# that performed the same work - VBScript is simple! It's just functions and classes, it doesn't have closures or inheritance to complicate things. It's somewhat relaxed in how it deals with type comparisons, but that's because it's somewhat relaxed about how it deals with types! It could be considered a dynamic language but that just means that a bit of reflection will be required at runtime in the emitted C#. HOW HARD COULD IT BE.
+
+This was a long time ago. A slightly less long time ago, I actually made a proper stab at it. At the time, we had huge swathes of code at work relying upon so called "Classic" ASP. The performance of these sites is fine.. so long as there are *plenty* of servers to spread the load over. Today, much of this is being re-written but there is *still* a lot of code that relies upon Classic ASP / VBScript and its particular performance characteristics (read: not good). If the code that was not important enough to be rewritten could be made faster "for free" or if the code that *was* good enough but that wouldn't be rewritten *yet* could be made faster by magic, how good would that be! (Very good).
+
+I'm willing to make certain compromises: Eval, Execute and ExecuteGlobal would result in already "dynamic" code potentially having to be re-analysed and rewritten at runtime. That sounds insanely complicated when considered in terms of a one-pass-conversion from VBScript to C# and I can live without them (I'm *happier* without them!) so they're out.
+
+Also, VBScript has a deterministic garbage collector, which seems to be why people in the days of yore used to slap "Set x = Nothing" calls at the end of functions - I don't think they did it *solely* to drive me mad (if you don't know what I'm talking about then you are either lucky enough never to have dealt with it or *you* were one of the ones doing it and don't realise why it's a waste of typing.. help me out Eric: [When are you required to set objects to Nothing](http://blogs.msdn.com/b/ericlippert/archive/2004/04/28/when-are-you-required-to-set-objects-to-nothing.aspx)). Trying to emulate this perfectly would also be incredibly difficult with .net's non-determinstic GC. Maybe some sort of reference counting alternate GC could be squeezed in, but this process is going to be difficult enough without going to such lengths. (I'll make sure that all resources are disposed of after any single script / request is processed, which should be good enough).
+
+A final compromise is that this is *not* going to be comparable in performance to manually-written C# code - if the VBScript could be translated into C# by a real, thinking person then that would be much better! But so long as it's significantly quicker than the original VBScript, then that will be fine. Or maybe a parallel goal could be considered - if you have a Classic ASP site and the code is all translated into C# then you could host your site on Linux using Mono and not wory about Windows Server licenses!
+
+### From VBScript snippet to C# executable code
+
+**Problem one:** VBScript just sits around isolated in a script, waiting for a request to hit it. When this happens, it starts at the top and then only jumps around when it hits IF blocks, or FUNCTION calls or CLASS instantiations, or whatever. C# is not quite like this, C# wants a clear-cut *explicit* entry point.
+
+Take the following:
+
+    For i = 1 To 5
+      Response.Write "Hello world " & i
+    Next
+
+And, instead, imagine it described by a C# class thus:
+
+    using System;
+    using System.Collections;
+    using System.Runtime.InteropServices;
+    using CSharpSupport;
+    using CSharpSupport.Attributes;
+    using CSharpSupport.Exceptions;
+
+    namespace TranslatedProgram
+    {
+      public class Runner
+      {
+        private readonly IProvideVBScriptCompatFunctionalityToIndividualRequests _;
+        public Runner(IProvideVBScriptCompatFunctionalityToIndividualRequests compatLayer)
+        {
+          if (compatLayer == null)
+            throw new ArgumentNullException("compatLayer");
+          _ = compatLayer;
+        }
+
+        public void Go(EnvironmentReferences env)
+        {
+          if (env == null)
+            throw new ArgumentNullException("env");
+
+          for (env.i = (Int16)1; _.StrictLTE(env.i, 5); env.i = _.ADD(env.i, (Int16)1))
+          {
+            _.CALL(env.response, "Write", _.ARGS.Val(_.CONCAT("Hello world ", env.i)));
+          }
+        }
+
+        public class EnvironmentReferences
+        {
+          public object response { get; set; }
+          public object i { get; set; }
+        }
+      }
+    }
+    
+*Then* imagine that you have an entry point into a C# project (it could be a console application if the source VBScript was an admin script but for now let's assume it's an ASP.Net project). The work at this entry point could be something like:
+
+    var env = new TranslatedProgram.EnvironmentReferences
+    {
+        response = Response
+    };
+    using (var compatLayer = CSharpSupport.DefaultRuntimeSupportClassFactory.Get())
+    {
+      new TranslatedProgram.Runner(compatLayer).Go(env);
+    }
+    
+This assumes that "Response" is a reference to an object that exposes the interface that the original script expected (which is only a "Write" method with a single property in the example above). If we're in an ASP.Net MVC Controller then we have just such a reference handily available. If we wanted to just write some test code then we could instead construct something like
+
+    public class ResponseMock
+    {
+      public void Write(object value)
+      {
+        Console.Write(value);
+      }
+    }
+    
+and then use that as the value for the **TranslatedProgram.EnvironmentReferences** "response" property.
+
+Hurrah! We've just saved the stuck-in-VBScript world! Rejoice! Let's all use this magic translation process and leave VBScript behind.
+
+What's that? This all sounds a bit hypothetical? Well.. take a look at the Bitbucket repo [VBScriptTranslator](https://bitbucket.org/DanRoberts/vbscripttranslator).
+
+Or, actually, don't yet. I want to take a brief foray into the madnesses of VBScript (we're not going to delve *right* into them, we may never emerge back out!). Then I'm going to make a confession. But don't skip all the excitement before hitting the bad news - it's just about to get good!
+
+### VBScript classes and scoping
+
+Imagine another example. One that is somewhat contrived, such that it serves no genuine purpose when executed, but that manages to capture a surpring number and range of WTFs in a small number of lines of code. Something like..
+
+    On Error Resume Next
+    Dim o: Set o = new C1
+    Dim a: a = 1
+    o.F1(a)
+    If o.F2(a) Then
+      Response.Write "Hurrah! (a = " & a & ")<br/>"
+    Else
+      Response.Write "Ohhhh.. sad face (a = " & a & ")<br/>"
+    End If
+
+    Class C1
+      Function F1(b)
+        Response.Write "b is " & b & " (a = " & a & ")<br/>"
+        b = 2
+        Response.Write "b is " & b & " (a = " & a & ")<br/>"
+      End Function
+
+      Function F2(c)
+        Response.Write "c is " & c & " (a = " & a & ")<br/>"
+        c = 3
+        Response.Write "c is " & c & " (a = " & a & ")<br/>"
+        Response.Write "Time to die: " & (1/0)
+      End Function
+    End Class
+
+VBScript veterans pop quiz! (If anyone could bear to claim such an accolade today). What will the output of this be?
+
+If you guessed the following, then you might want to seek medical guidance, you've internalised the VBScriptz too deep and you may never regain your sanity:
+
+> b is 1 (a = 1)
+
+> b is 2 (a = 1)
+
+> c is 1 (a = 1)
+
+> c is 3 (a = 3)
+
+> Hurrah! (a = 3)
+
+To someone who *didn't* know VBScript, the first two lines may seem perfectly acceptable - it looks like a function F1 was called, an argument was passed, its value was changed within that function (where it is referred to as "b") but in the caller's scope the value was not affected (where it is referred to as "a"). I mean, languages tend to pass arguments "by-value", right, which is why the change to "b" did not affect "a"?
+
+Wrong! Oh, no no no. VBScript passes "by-ref" by default, so since the "b" argument was not declared to be either "ByVal" or "ByRef" then VBScript prefers by-ref.
+
+So why does it not change during the F1 call but it *does* during the F2 call? Well, when you're not interested in the return value of a function then you shouldn't wrap the arguments in brackets. In fact, when the VBScript interpreter looks at the line
+
+    o.F1(a)
+    
+It sees a function call where the set of arguments is *not* wrapped in brackets (because that's not allowed when the return value is not being considered) but where *the single value "a" is wrapped in brackets.* And VBScript takes this to mean pass this argument as by-value, even if the receiving function wants to take the argument by-ref.
+
+This is different to the line
+
+    If o.F2(a) Then
+    
+since we *do* consider the return value, so the brackets *do* surround the function call's argument set and are *not* a special wrapper just around "a".
+
+So that it's clear that there is no ambiguity, if F1 took two arguments then it would not be valid to call it and ignore the return value *and* try to wrap the arguments in brackets thusly:
+
+    o.F1(a, b)
+    
+This would result in a "compile error" (which is what happens when the interpreter refuses to even attempt to run the script) -
+
+> VBScript compilation error: Cannot use parenteses when calling a Sub
+
+While we're thinking about how this variable "a" is and isn't being mistreated, did you notice that it's being accessed from within the functions F1 and F2 *that are within the class **C1***? This would *not* be a very natural arrangement in a C# program since it means that any class instance (any instance of **C1** or of any other class that a program may care to define) must be able to access references and function in the "outer most scope" (which is what I call the twilight zone of code in VBScript files that "just exists", unbound by any containing class). This sounds a bit like they are static variables and functions - but if this were the case then concurrent requests would manipulate this shared state at the same time. And if I'm going to switch to C# to see a boost in performance, I don't want to be in a place where only a single request can execute at a time and the state must be reset between!
+
+At this point, there has been no explanation for the cheery execution of the "Hurrah" statement. There is an IF statement that guards access to the displaying of this message, and the evaluation of this IF condition involves calling the function F2, which clearly results in a division-by-zero error. Well before I shed any light on that, I want to bombard you with another crazy C# code sample -
+
+    using System;
+    using System.Collections;
+    using System.Runtime.InteropServices;
+    using CSharpSupport;
+    using CSharpSupport.Attributes;
+    using CSharpSupport.Exceptions;
+
+    namespace TranslatedProgram
+    {
+      public class Runner
+      {
+        private readonly IProvideVBScriptCompatFunctionalityToIndividualRequests _;
+        public Runner(IProvideVBScriptCompatFunctionalityToIndividualRequests compatLayer)
+        {
+          if (compatLayer == null)
+            throw new ArgumentNullException("compatLayer");
+          _ = compatLayer;
+        }
+
+        public void Go(EnvironmentReferences env)
+        {
+          if (env == null)
+            throw new ArgumentNullException("env");
+
+          var _env = env;
+          var _outer = new GlobalReferences(_, _env);
+
+          var errOn = _.GETERRORTRAPPINGTOKEN();
+          _.STARTERRORTRAPPINGANDCLEARANYERROR(errOn);
+          _.HANDLEERROR(errOn, () => {
+            _outer.o = _.NEW(new c1(_, _env, _outer));
+          });
+          _.HANDLEERROR(errOn, () => {
+            _outer.a = (Int16)1;
+          });
+          _.HANDLEERROR(errOn, () => {
+            _.CALL(_outer.o, "F1", _.ARGS.Val(_outer.a));
+          });
+          if (_.IF(() => _.CALL(_outer.o, "F2", _.ARGS.Ref(_outer.a, v2 => { _outer.a = v2; })), errOn))
+          {
+            _.HANDLEERROR(errOn, () => {
+              _.CALL(
+                _env.response,
+                "Write",
+                _.ARGS.Val(_.CONCAT("Hurrah! (a = ", _outer.a, ")<br/>"))
+              );
+            });
+          }
+          else
+          {
+            _.HANDLEERROR(errOn, () => {
+              _.CALL(
+                _env.response,
+                "Write",
+                _.ARGS.Val(_.CONCAT("Ohhhh.. sad face (a = ", _outer.a, ")<br/>"))
+              );
+            });
+          }
+          _.RELEASEERRORTRAPPINGTOKEN(errOn);
+        }
+
+        public class GlobalReferences
+        {
+          private readonly IProvideVBScriptCompatFunctionalityToIndividualRequests _;
+          private readonly GlobalReferences _outer;
+          private readonly EnvironmentReferences _env;
+          public GlobalReferences(
+            IProvideVBScriptCompatFunctionalityToIndividualRequests compatLayer,
+            EnvironmentReferences env)
+          {
+            if (compatLayer == null)
+              throw new ArgumentNullException("compatLayer");
+            if (env == null)
+              throw new ArgumentNullException("env");
+            _ = compatLayer;
+            _env = env;
+            _outer = this;
+            o = null;
+            a = null;
+          }
+
+          public object o { get; set; }
+          public object a { get; set; }
+        }
+
+        public class EnvironmentReferences
+        {
+          public object response { get; set; }
+        }
+
+        [ComVisible(true)]
+        [SourceClassName("C1")]
+        public sealed class c1
+        {
+          private readonly IProvideVBScriptCompatFunctionalityToIndividualRequests _;
+          private readonly EnvironmentReferences _env;
+          private readonly GlobalReferences _outer;
+          public c1(
+            IProvideVBScriptCompatFunctionalityToIndividualRequests compatLayer,
+            EnvironmentReferences env,
+            GlobalReferences outer)
+          {
+            if (compatLayer == null)
+              throw new ArgumentNullException("compatLayer");
+            if (env == null)
+              throw new ArgumentNullException("env");
+            if (outer == null)
+              throw new ArgumentNullException("outer");
+            _ = compatLayer;
+            _env = env;
+            _outer = outer;
+          }
+
+          public object f1(ref object b)
+          {
+            object retVal = null;
+            _.CALL(
+              _env.response,
+              "Write",
+              _.ARGS.Val(_.CONCAT("b is ", b, " (a = ", _outer.a, ")<br/>"))
+            );
+            b = (Int16)2;
+            _.CALL(
+              _env.response,
+              "Write",
+              _.ARGS.Val(_.CONCAT("b is ", b, " (a = ", _outer.a, ")<br/>"))
+            );
+            return retVal;
+          }
+
+          public object f2(ref object c)
+          {
+            object retVal = null;
+            _.CALL(
+              _env.response,
+              "Write",
+              _.ARGS.Val(_.CONCAT("c is ", b, " (a = ", _outer.a, ")<br/>"))
+            );
+            b = (Int16)3;
+            _.CALL(
+              _env.response,
+              "Write",
+              _.ARGS.Val(_.CONCAT("c is ", b, " (a = ", _outer.a, ")<br/>"))
+              );
+            _.CALL(
+              _env.response,
+              "Write",
+              _.ARGS.Val(_.CONCAT("Time to die: ", _.DIV((Int16)1, (Int16)0)))
+            );
+            return retVal;
+          }
+        }
+      }
+    }
+
+This is a C# representation of the spot-the-WTFs VBScript sample above. And there's a lot to take in!
+
+In terms of scoping, it's interesting to note that all variables and functions that are in VBScript's "outer most scope" are wrapped in a **GlobalReferences** class in the C# version. This is like the **EnvironmentReferences** in the first example, but instead of being passed in to the **Runner**'s Go method, it is instantiated and manipulated solely within the translated program.
+
+The "Go" method sets the "o" and "a" properties of the **GlobalReferences** class right at the start with the lines:
+
+    _outer.o = _.NEW(new c1(_, _env, _outer));
+    
+    _outer.a = (Int16)1;
+    
+Then a reference to this **GlobalReferences** class is passed around any other translated classes - the class "C1" has become a C# class whose constructor takes an argument for the "compatibility layer" (that handles a lot of the nitty gritty of behaving precisely like VBScript) along with arguments for both the **EnvironmentReferences** and **GlobalReferences** instances. This **GlobalReferences** class is how state is shared between the outer scope and any class instances.
+
+The key difference between **EnvironmentReferences** and **GlobalReferences**, by the way, is that the former consists of undeclared variables - these might be external references (such as "Response"), which should be set by the calling code before executing "Go". Or they might just be variables that were never explicitly declared in the original source - why oh why was [Option Explicit](https://msdn.microsoft.com/en-us/library/y9341s4f.aspx) something to opt *into*?? (That's a rhetorical question, it's waaaaay too late to worry about it now). Meanwhile, **GlobalReferences** consists of variables and functions that were explicitly declared in the source - these are not exposed to the calling code, they are only used internally within the **TranslatedProgram** class' execution. So they both have a purpose and they may both be required by translated classes such as "C1" - you may conveniently note that both functions "F1" and "F2" refer to "\_env.response" and "\_outer.a" (properties from the **EnvironmentReferences** and **GlobalReferences** instances, respectively).
+
+### Error-handling
+
+Now let's really go crazy. VBScript's error handling is.. unusual, particularly if you are used to C# or VB.Net or JavaScript (which are just the first examples which came immediately to mind).
+
+In C#, the following
+
+    try
+    {
+      Console.WriteLine("Go");
+      Console.WriteLine("Go!");
+      throw new Exception("Don't go");
+      Console.WriteLine("GO!");
+    }
+    catch { }
+    
+would display
+
+> Go
+
+> Go!
+
+But when you tell VBScript not to stop for errors, it takes its task seriously! This code:
+      
+    On Error Resume Next
+    Response.Write "<p>Go</p>"
+    Response.Write "<p>Go!</p>"
+    Err.Raise vbObjectError, "Example", "Don't go!"
+    Response.Write "<p>GO!</p>"
+    On Error Goto 0
+
+will display
+
+> Go
+
+> Go!
+
+> GO!
+
+Unlike in C#, the error does *not* stop it in its path, it carries on *over* the error.
+
+In fact, in the IF condition in the example above, when the expression that it's evaluating throws an error (division by zero), because On Error Resume Next is hanging around, it *still* pushes on - not content to abandon the IF construct entirely, the condition-evaluation-error spurs it on to charge into the truth branch of the conditional. Which explains why it happily renders the "Hurrah" message.
+
+This is why every line in the C# version of the code individually gets checked for errors (through the "HANDLEERROR" compatibility method), if any of them fail then it will just march on to the next! Even the call to the "IF" function has some special handling to swallow errors and always return true if VBScript-style error handling is in play. This poses some interesting challenges - variables must not be declared in these lambdas used by HANDLEERROR, for example, since then they wouldn't be available *outside* of the lambda, which would be inconsistent with the VBScript source. There are more complications I could go into, but I think I'll leave them for another day.
+
+### Some burning questions about the translated code above
+
+**Why are there no HANDLEERROR calls in the functions "f1" and "f2"?** In VBScript, On Error Resume Next only affects the current scope, so enabling it in the "outer most scope" does not mean that it is enabled within functions that are then called. As soon as a line in one of these function fails, the function will terminate immediately. The On Error Resume Next in the outer most scope, however, means that this error will then be silently ignored. (If error-trapping / error-ignoring was required within the functions then distinct On Error Resume Next statements would be required *within* each function).
+
+**What's this "errOn" variable?** In C#, a try..catch has a very clearly delineated sphere of influence. In VBScript, the points at which error-trapping are enabled and disabled can not be known at compile time and so the translator code has to consider anywhere that it *might* be enabled and wrap all the potentially-affected statements in a HANDLEERROR call. It then keeps track, using an "error token", of when errors really do need to be swallowed at runtime. The "STARTERRORTRAPPINGANDCLEARANYERROR" call corresponds to the On Error Resume Next statement. If there was an On Error Goto 0 (VBScript's "undo On Error Resume Next" command) then there would be a corresponding "STOPERRORTRAPPINGANDCLEARANYERROR" call. Every time HANDLEERROR is called, if the work it wraps throws an error then it checks the state of the error token - if the token says to swallow the error then it does, if the token says to let the error bloom into a beautiful ball of flames then it does.
+
+**What's up with funky method call syntax - the "_.ARGS.Val" and "_.ARGS.Ref" in particular??** Firstly, method calls could not be translated into really plain and simple C#, as you might have hoped. This is for multiple reasons. The biggie is that, in VBScript, if you call a function and give it the wrong number of arguments then you get a runtime error. Not a *compile* time error (where the interpreter will refuse to even attempt to run your code). Being a runtime error, this could be swallowed if an On Error Resume Next was sticking its big nose in. But in C#, if you have a method call with the wrong number of arguments then you get a compile error and you wouldn't be able to execute code that came from runnable VBScript.
+
+**So why not use "dynamic"?** It seems like an obvious choice to make would be a liberal sprinkling of the "[dynamic](https://msdn.microsoft.com/en-us/library/dd264741.aspx)" keyword throughout the code. But that would have all sorts of problems. Imagine this code (contrived though it may be):
+
+    CallDoSomethingForValue new Incrementer, 1
+    CallDoSomethingForValue new LazyBoy, 1
+
+    Function CallDoSomethingForValue(o, value)
+      o.DoSomething value
+    End Function
+
+    Class Incrementer
+      Function DoSomething(ByRef value)
+        value = value + 1
+      End Function
+    End Class
+    
+    Class LazyBoy
+      Function DoSomething(ByVal value)
+        ' Lazy Boy doesn't actually do anything with the value
+      End Function
+    End Class
+    
+The line
+
+    o.DoSomething value
+    
+would have to become either
+
+    // This form is required when calling the LazyBoy's "DoSomething" method
+    ((dynamic)o).DoSomething(ref value);
+    
+or
+
+    // This form is required when calling the LazyBoy's "Incrementer" method
+    ((dynamic)o).DoSomething(value);
+    
+There is no way to write that line such that it will work with a "ByRef" value *and* a "ByVal" method argument; one of them will fail at runtime. The only way to deal with it is to do some runtime analysis, which is pretty much what I do. If I can be absolutely sure when translating that the argument will be passed by-val (like if it's a literal such as a number, string, boolean or builtin constant, or if it's the return value of a function, or if it's wrapped in magic make-me-ByVal brackets like I talked about earlier, etc..) then the C# looks something like
+
+    _.CALL(o, "DoSomething", _.ARGS.Val("abc"));
+    
+but if it may have to be passed by-ref, then it will look someting like
+
+    _.CALL(o, "DoSomething", _.ARGS.Ref(value, v => { value = v; }));
+    
+The "Ref" variation has to accept the input argument value and then provide a way for the "CALL" method to push a new value back on top of it. When it executes, the target function's method signature is inspected and some jiggery pokery done if it *is* a by-ref argument.
+
+"Val" and "Ref" may be combined if there are multiple arguments with different characteristics - eg. if a method takes three arguments where the first and last are known to be by-val but the middle one might have to be by-ref then we get this:
+
+    _.CALL(o, "DoSomethingElse", _.ARGS.Val(1).Ref(value, v => { value = v; }).Val(2));
+    
+**Runtime analysis? So it's really slow?** Reflection is used to try to identify what function on a target reference should be called - and what arguments, if any, need the by-ref treatment. This is not something that is particularly quick to do in .net (or anywhere, really; reflection is hardly something associated with ultimate, extreme, mind-bending performance). However, it does then compile and cache LINQ expressions for the calls - so if you are running the same code over and over again (if, say, you were hosting a web site and basically hitting a lot of the same code paths while people browse your site) then you would not pay the "reflection toll" over and over again.
+
+**So it's really fast and you've done performance analysis and it's a tightly optimised product?** No. It's not even a functionally-complete product yet. Stop getting so carried away.
+
+**Why are the class and function names lower-cased in the C# code?** VBScript is a case-insensitive language. C# is not, C# *cares* about case. This means that, where direct named references exist, a consistency must be applied - for example, in the VBScript examples there was a class named "C1" which could be instantiated with
+
+    Set o1 = new C1 ' Upper case "C1"
+    
+*or* with
+
+    Set o1 = new c1 ' Lower case "c1"
+    
+.. in C# there will need to be consistency, so everything is lower-cased - this includes variable names, function names, property names, class names.
+
+There is some magic involved with the "CALL" method, so the string arguments passed to "CALL" are *not* monkeyed about with - but it knows at runtime what sort of manipulation might have to be supported and makes it all work. This is why the functions "f1" and "f2" have lower-cased names where they are defined, but when mentioned as arguments passed to the CALL method they appear in their original form of "F1" and "F2".
+
+This is important since the CALL target may not actually be code that the translator has wrangled - it might be a function on a COM component, for example. Which wouldn't be a problem if the *only* possible transformations related to casing of names but there are other things to account for, such as keywords that are legal in VBScript but not in C# - these also are renamed in the translated code. (If you have a VBScript function named "Params" then it must be tweaked somehow for C# since "params" is a C# reserved keyword - so the function would be renamed in the translated code but the string "Params" would still appear in calls to CALL, since CALL can perform the same name-mappings at runtime that the translator does at translation time).
+
+### So it's all rainbows and unicorns thens?
+
+Well... erm, no. Not quite. There's good news and bad news. The good news is that *a lot* of it *does* work. Everything described above works - you can take that VBScript example, pass it through the translator and then execute the code that it spits out. Good news part one.
+
+Good news part two is that I've run thousands and thousands of lines of real, production VBScript code through the translator and I've so far only found a single form of statement that trips it up. But I've got a nice succinct reproduce case put aside that I intend to use to deal with the problem soon.
+
+Slightly less good news is that I know of some edge cases to do with runtime error-handling that are misbehaving - resulting in the translator emitting C# that is not valid. There are similar issues to do with the propagation of by-ref function arguments; as shown above, when by-ref arguments are passed to the CALL method, they are referenced within a lambda (so that they may be overwritten, since they need to be treated as by-ref arguments). But if the variable being passed happens to be a "ref" argument of the containing function then there will be a "ref" variable referenced within a lambda, which is also not valid C#. I have a strategy to make this all work properly, though, that I've started implementing but not finished yet.
+
+The other bad news is that the runtime "compability library" is.. patchy, shall we say. Woefully incomplete might  be (much) more accurate. I think that all of the methods are present in the interface (though not always with the correct signatures), it's just that I need to flesh them out. So even if your real world script was translated perfectly into C#, when you tried to execute it it would probably fall over very quickly.
+
+A big part of the problem is just how flexible VBScript decides to be. Re-implementing its built-in functions takes care, an eye for detail and a perverse fascination with trying to work out what was going through the minds of the original authors. Take the "ROUND" function, for example. Now, a grizzled VBScripter might immediately think "[Banker's rounding](http://blogs.msdn.com/b/ericlippert/archive/2003/09/26/bankers-rounding.aspx)"! But that's the easy bit. You might be wondering what else could be complicated about the rounding of a number.. and that would be the mistake! Who says it needs to be a number that gets passed in?! The ROUND function will take a string, if it can be parsed into a numeric value. It will accept "Empty", which is VBScript's idea of an undefined value - null in C# terms. It won't accept "Null", though. Oh, no no. "Null" in VBScript isn't actually an absence of a value, it's a *particular* value that historically people have misused to indicate an absence of a value - using it when they should have used "Empty" ("Null" is actually equivalent to "System.DBNull.Value" in .net and its purpose in VBScript really revolves around database access - say if you wanted to pass a value to an ADO command parameter to say that it must be a null value in the data, then you would use "Null".. of course, if you write old-school ever-popular-in-VBScript *string-concatenation*-based SQL queries then you would never have worried about values for command parameters; you'd be too busy being hacked through SQL injection attacks).
+
+Sorry, I got a bit side-tracked there. But unfortunately, I'm not finished talking about ROUND yet. What happens if you pass it an instance of a class? Surely *that* would be invalid?? Well, if that class has a default parameter-less function or readable property then ROUND will even consider *that* (and try and parse it into a numeric value if it isn't already a number).
+
+My point is: being as flexible as VBScript ain't easy.
+
+### How do you actually do the translation??????????
+
+Up until this point, it's been all "if this" and "you can" that and "it should" the other (unless you already cheated and followed the Bitbucket link I told you not to go to earlier!) so I guess I need to talk about actually running the translator.
+
+Well here we go..
+
+    var scriptContent = "Response.Write \"I want to be C#!\"";
+
+    var translatedStatements = CSharpWriter.DefaultTranslator.Translate(
+      scriptContent,
+      new[] { "Response" }
+    );
+    Console.WriteLine(
+      string.Join(
+        Environment.NewLine,
+        translatedStatements.Select(c => (new string(' ', c.IndentationDepth * 4)) + c.Content)
+      )
+    );
+
+The **DefaultTranslator**'s "Translate" function takes in a string of VBScript and a list of references that are expected to be present at runtime\*. It gives you back a set of **TranslatedStatement** instances that all have "Content" and "IndentationDepth" properties, allowing you to format your new lovely auto-generated C# code using tabs *or* spaces, based upon the indentation depth of the statement and your own personal formatting opinions (I've used spaces in the example above since tabs introduce too much whitespace when viewed *in the console window* - I am not getting into tabs vs spaces debate here! :)
+
+The default is to create a new class called "Runner" in a new namespace called "TranslatedProgram" with an entry method called "Go". (If you look at "Translate" method's implementation then you'll be able to see how to tweak any of these values, but let's keep it simple for now).
+
+\* *Note: The default configuration is for the translator to include C# comments at the top highlighting all of the undeclared variables, along with the lines on which they are accessed - to point out how naughty you've been by not using Option Explicit**. You don't want these warnings for environment references that you would never explicitly declare (such as Request, Response, etc.. if you are running in an ASP context) so the translator accepts a set of reference names that may be expected to be defined, even though there is no "DIM" statement for them.*
+
+Now, as we already saw way up there somewhere, this code can be executed like so:
+
+    var env = new TranslatedProgram.EnvironmentReferences
+    {
+      response = new ResponseMock()
+    };
+    using (var compatLayer = CSharpSupport.DefaultRuntimeSupportClassFactory.Get())
+    {
+      new TranslatedProgram.Runner(compatLayer).Go(env);
+    }
+    
+If you've *reallllllllllly* been paying attention, then you might have noticed that in the example above, the translated code to create a new instance of "C1" looks like this -
+
+    _outer.o = _.NEW(new c1(_, _env, _outer));
+
+The new instance is returned via a "NEW" method, whose only job is to track object creation. When the Dispose method on the "compatLayer" instance is called, any objects that were created during that execution will also be disposed if they implement **IDisposable**. And any VBScript class with a "Class\_Terminate" will be transformed into a C# class that implements **IDisposable**. So after every "script run", every applicable "Class\_Terminate" is guaranteed to be run so that any releasing that they want to do may be done. Not the same as a deterministic garbage collector, but close enough for me!
+
+One final note: the **DefaultTranslator** expects to operate only on "pure" VBScript content. Which, if you're considering some old-timey admin script, is fine. But if you're looking at ASP pages, with their static markup interspersed with script, then it's a different story. The good news on that front is that all that is required is a first pass at the ASP file to deal with flattening any server-side includes and to then take all of the static markup and force it into explicit Response.Write calls.
+
+*And* to do some manipulations with script blocks such as
+
+    <% =GetName() %>
+    
+since they *also* need to be translated into explicit Response.Write calls. In this case:
+
+    Response.Write GetName()
+    
+I've got something in the pipeline that will do this work, then you'll be able to reduce the translation work to this:
+
+    var translatedStatements = DefaultASPTranslator.Translate(scriptContent);
+    
+It will even be able to default the assume-these-are-already-declared environment references to be the ASP Application, Response, Request, Session, and Server objects - meaning there's one less thing for you, the translation maestro, to have to specify. Hooray!
+
+### The code
+
+So there we are. I think that in both my professional and personal life, I've tackled some fairly challenging projects.. but this, undoutedly, ranks *way* up there with the toughest. I've got a lot of experience with C# and with VBScript and, while I didn't really think it would be easy, I was amazed at all the subtleties of VBScript's "flexibility" (I could think of some other adjectives) and I've really enjoyed the puzzle of trying to make it fit (at least fit *enough*) with C#.
+
+Not to mention that the original code I started from was old. *Really* old. People talk about looking back at code that you wrote six months ago - trying looking back on code you wrote six *years* ago. Ouch. But it was a chance to refactor where necessary, to resist refactoring where I could get away with it and then to slowly add tests to try to illustrate new functionality and fixes and offer a comforting safety net against regressions. I will freely admit that a lot of the code still is far from pretty. And the test coverage could be higher. And a lot of the tests are really kinda *integration* tests rather than unit tests - there's no external dependencies like file or DB access, but a lot of them still don't have the tight laser focus that a true *unit* test should. But then this is my own project, I'll do it however I like! :D
+
+It still has a long way to go but I'm getting real satisfaction out of the idea of completing something so "non-trivial". (If I'm being honest, this project is a bit of an exercise in bullheadness and wanting to see something all the way through!). Now, had I been able to do this ten years.. well it might be worth a little more to the world then just a curious insight into my mind - but better late than never, right??
+
+Find the [VBScriptTranslator](https://bitbucket.org/DanRoberts/vbscripttranslator) on Bitbucket.
