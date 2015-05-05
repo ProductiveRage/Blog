@@ -1,0 +1,243 @@
+## Writing a Brackets extension in TypeScript, in Brackets
+
+For a while now, I've been meaning to try writing a TypeScript extension for [Adobe Brackets](http://brackets.io/) - I like the editor, I like the fact that extensions are written in JavaScript, I like TypeScript; it seemed like an ideal combination!
+
+But to really crank it up, I wanted to see if I could put Visual Studio aside for a while (my preferred editor for writing TypeScript) and trying writing the extension for Brackets *with* Brackets. I'd written an [extension](https://bitbucket.org/DanRoberts/bracketsstyleformatterextension) before and I was sure that I'd heard about some sort of extension for Brackets to support TypeScript, so I got stuck in..
+
+### Teaching Brackets about TypeScript
+
+The short answer is that this *is* possible. The slightly longer answer is that it's possible but with a bit of work and the process is a bit rough around the edges.
+
+What I'm using for editing is the extension [brackets-typescript](https://github.com/fdecampredon/brackets-typescript), which appears as "Brackets TypeScript" when you search for "TypeScript" in the Extension Manager. It's written by [fdecampredon](https://github.com/fdecampredon) (whose work I also relied upon last year for "[Writing React components in TypeScript](Post75)" - a busy guy!).
+
+This is the best extension for TypeScript but the TypeScript version is out of date in the released version of the extension - it doesn't yet use 1.4 and so some nice features such as union types and const enums are not available. The [GitHub code](https://github.com/fdecampredon/brackets-typescript) *has* been updated to use 1.4.1, but that version of the extension has not been released yet. I contacted the author and he said that he intends to continue work on the extension soon but he's been sidelined with a pull request for the TypeScript Team to handle React's JSX format (see [JSX Support #2673](https://github.com/Microsoft/TypeScript/pull/2673) - like I said, he's a busy guy :)
+
+I tried cloning the repo and building it myself, but one of the npm dependencies ("typescript-project-services") is not available and I gave up.
+
+So, for now, I'm having to live with an old version of the TypeScript compiler for editing purposes. I've been unable to determine precisely what version *is* being used, I tried looking through the source code but couldn't track it down. I suspect it's 0.9 or 1.0 since it supports generics but not the changes listed for 1.1 in the [TypeScript Breaking Changes](https://github.com/Microsoft/TypeScript/wiki/Breaking-Changes) documentation.
+
+Another gotcha with this extension is that it does *not* appear to work correctly if you directly open a single TypeScript file. Occasionally it will appear to work but the majority of the time you will not get any intellisense or other features, even if you have the expected ".brackets.json" file (see below) alongside the file or in a parent folder. The way that you *can* get this to work is to decide where the base folder for your work is going to be, to put the ".brackets.json" file in there and then to open that folder in Brackets. *Then* you can add / open individual files within that folder as required and the TypeScript integration will work. I couldn't find this documented or described anywhere, and came to this conclusion through trial-and-error\*.
+
+\* *Maybe this is the common workflow for people who use Brackets a lot; maybe I'm the strange one that goes around opening individual files ad hoc all the time..?*
+
+The other thing you need is a ".brackets.json" file alongside your source to specify some configuration for the extension.
+
+If you're creating an extension of your own, I would recommend a basic folder structure of
+
+> /build
+
+> /src
+
+where the TypeScript files live within "src". And so "src" is the folder that would be opened within Brackets while writing the extension, and is also the folder in which to place the following ".brackets.json" file:
+
+    {
+        "typescript": {
+            "target": "ES5",
+            "module": "amd",
+            "noImplicitAny": true,
+            "sources" : [
+                "**/*.d.ts",
+                "**/*.ts"
+            ]
+        }
+    }
+    
+For a Brackets extension, supporting ES5 (rather than ES3) and using the "AMD" module loading mechanism make sense (and are consistent with the environment that Brackets extensions operate in). Setting "noImplicitAny" to "true" is a matter of taste, but I think that the "any" concept in TypeScript should always be explicitly opted *into* since you're sacrificing compiler safety, which you should only do intentionally.
+
+So now we can start writing TypeScript in Brackets! But we are far from done..
+
+### Teaching TypeScript about Brackets
+
+The next problem is that there don't appear to be any TypeScript defintions available for writing Brackets extensions.
+
+What I particularly want to do with my extension is write a linter for [less stylesheets](http://lesscss.org/). In order to do this, I need to do something such as:
+
+    var AppInit = brackets.getModule("utils/AppInit"),
+        CodeInspection = brackets.getModule("language/CodeInspection");
+
+    function getBrokenRuleDetails(text: string, fullPath: string) {
+        var errors = [{
+            pos: { line: 4, ch: 0 },
+            message: "Example error on line 5",
+            type: CodeInspection.Type.ERROR
+        }];
+        return { errors: errors }
+    }
+
+    AppInit.appReady(() => {
+        CodeInspection.register(
+            "less",
+            { name: "Example Linting Results", scanFile: getBrokenRuleDetails }
+        );
+    });
+    
+This means that TypeScript needs to know that there is a module "brackets" available at runtime and that it has a module-loading mechanism based upon strings identifiers (such as "utils/AppInit" and "language/CodeInspection"). For this, a "brackets.d.ts" needs to be created in the "src" folder (for more details than I'm going to cover here, see my post from earlier in year: [Simple TypeScript type definitions for AMD modules](Post82)).
+
+Conveniently, TypeScript has the ability to "[Overload on Constants](http://blogs.msdn.com/b/typescript/archive/2013/03/25/working-on-typescript-0-9-generics-overload-on-constants-and-compiler-performance.aspx)", which means that a method can be specified with different return types for known constants for argument(s). This is an unusual feature (I can't immediately think of another statically-typed language that supports this; C# definitely doesn't, for example). The reason that it exists in TypeScript is interoperability with JavaScript. The example from the linked article is:
+
+    interface Document {
+        createElement(tagName: string): HTMLElement;
+        createElement(tagName: 'canvas'): HTMLCanvasElement;
+        createElement(tagName: 'div'): HTMLDivElement;
+        createElement(tagName: 'span'): HTMLSpanElement;
+        // + 100 more
+    }
+
+This means that "Document.createElement" is known to return different types based upon the "tagName" value. It's clear how it is useful for "createElement" (since different node types are returned, based upon the tagName) and it should be clear how it will be helpful here - the "brackets.getModule" function will return different types based upon the provided module identifier.
+
+I'm a long way from having a comprehensive type definition for Brackets' API, I've written just enough to integrate with it's linting facilities. The type definition required for that is as follows:
+
+    declare module brackets {
+        function getModule(name: "utils/AppInit"): AppInit;
+        function getModule(name: "language/CodeInspection"): CodeInspection;
+        function getModule(name: string): void;
+
+        interface AppInit {
+            appReady: (callback: () => void) => void;
+        }
+
+        interface CodeInspection {
+            register: (extension: string, lintOptions: LintOptions) => void;
+            Type: CodeInspectionTypeOptions
+        }
+
+        interface LintOptions {
+            name: string;
+            scanFile: (text: string, fullPath: string) => LintErrorSet
+        }
+
+        interface LintErrorSet { errors: LintErrorDetails[] }
+
+        interface LintErrorDetails {
+            pos: { line: number; ch: number };
+            message: string;
+            type: string
+        }
+
+        interface CodeInspectionTypeOptions {
+            WARNING: string;
+            ERROR: string
+        }
+    }
+
+The "Overload on Constants" functionality has a limitation in that a method signature is required that does *not* rely upon a constant value, so above there is a "getModule" method that handles any unsupported module name and returns void. It would be nice if there was a way to avoid this and to *only* define "getModule" methods for known constants, but that is not the case and so a void-returning "catch all" variation must be provided.
+
+There is another limitation that is unfortunate. The **LintErrorDetails** interface has had to be defined with a **string** "type" property, it would have been better if this could have been an enum. However, the constants within Brackets are within the "CodeInspection" module - eg.
+
+    CodeInspection.Type.ERROR
+    
+The "CodeInspection" reference is returned from a "getModule" call and so must be an interface or class, and an enum may not be nested within an interface or class definition. If "CodeInspection" was identified as a module then an enum *could* be nested in it, but then the getModule function definition would complain that
+
+> Type reference cannot refer to container 'brackets.CodeInspector'
+
+.. which is a pity. So the workaround is to have **LintErrorDetails** take a **string** "type" property but for a non-nested enum to be exposed from "CodeInspection" that may be used for those values. So it's valid to define error instances with the following:
+
+    var errors = [{
+        pos: { line: 4, ch: 0 },
+        message: "Example error on line 5",
+        type: CodeInspection.Type.ERROR
+    }];
+
+but unfortunately it's also valid to use nonsense string "type" values, such as:
+
+
+    var errors = [{
+        pos: { line: 4, ch: 0 },
+        message: "Example error on line 5",
+        type: "BlahBlahBlah"
+    }];
+    
+### Compile-on-save
+
+So, at this point, we can actually start writing a linter extension in TypeScript. However, the Brackets TypeScript extension doesn't support compiling this to JavaScript. So we can write as much as we like, it's not going to be very useful!
+
+This is another to-do item for the Brackets TypeScript extension (according to a [discussion on CodePlex](https://typescript.codeplex.com/discussions/473914)) and so hopefully the following will not be required forever. However, right now, some extra work *is* needed..
+
+The go-to solution for compiling TypeScript seems to be to use [Grunt](http://gruntjs.com/) and [grunt-ts](https://github.com/TypeStrong/grunt-ts).
+
+If you have npm installed then this is fairly easy. However there are - again - some gotchas. In the "grunt-ts" readme, it says you can install it using
+
+> npm install grunt-ts
+
+"in your project directory". I would recommend that this "project directory" be the root where the "src" and "build" folders that I suggested live. However, when I tried this, it created the "grunt-ts" folder in a "node_modules" folder in a parent a couple of levels up from the current directory! Probably I'd done something silly with npm. But a way to avoid this is to *not* specify npm packages individually at the command line and to instead create a "package.json" file in your project root (again, I'm referring to the folder that *contains* the "src" and "build" folders) - eg.
+
+    {
+        "name": "example.less-linter",
+        "title": "Example LESS Linter",
+        "description": "Extension for linting LESS stylesheets",
+        "version": "0.1.0",
+        "engines": {
+            "brackets": ">=0.40.0"
+        },
+        "devDependencies": {
+            "grunt-ts": ">= 4.0.1",
+            "grunt-contrib-watch": ">= 0.6.1",
+            "grunt-contrib-copy": ">= 0.8.0"
+        }
+    }
+
+This will allow you to run
+
+> npm install
+
+from the project folder and have it pull in everything you'll need into the appropriate locations.
+
+The plan is to configure things such that any TypeScript (or TypeScript definition) file change will result in them all being re-compiled and then the JavaScript files copied into the "build" folder, along with this package.json file. That way, the "build" folder can be zipped up and distributed (or dropped into Bracket's "extensions" folder for immediate testing).
+
+Here's the "gruntfile.js" that I use (this needs to be present in the project root, alongside the "package.json" file and "src" / "build" folders) -
+
+    /*global module */
+    module.exports = function (grunt) {
+        "use strict";
+        grunt.initConfig({
+            ts: {
+                "default": {
+                    src: ["src/**/*.d.ts", "src/**/*.ts"]
+                },
+                options: {
+                    module: "amd",
+                    target: "es5",
+                    sourceMap: true,
+                    noImplicitAny: true,
+                    fast: "never"
+                }
+            },
+            copy: {
+                main: {
+                    files: [
+                        { expand: true, cwd: "src/", src: ["**.js"], dest: "build/" },
+                        { src: ["package.json"], dest: "build/" }
+                    ]
+                }
+            },
+            watch: {
+                scripts: {
+                    files: ["src/**/*.d.ts", "src/**/*.ts"],
+                    tasks: ["ts", "copy"],
+                    options: { spawn: false }
+                }
+            }
+        });
+
+        grunt.loadNpmTasks("grunt-contrib-watch");
+        grunt.loadNpmTasks("grunt-contrib-copy");
+        grunt.loadNpmTasks("grunt-ts");
+
+        grunt.registerTask("default", ["ts", "copy", "watch"]);
+    };
+
+There is some repeating of configuration (such as "es5" and "amd" TypeScript options) since this does not share any configuration with the Brackets TypeScript extension. The idea is that you fire up Brackets and open the "src" folder of the extension that you're writing. Then open up a command prompt and navigate to the project directory root and execute Grunt. This will compile your current TypeScript files and copy the resulting JavaScript from "src" into "build", then it will wait until any of the ".ts" (or ".d.ts") files within the "src" folder are changed and repeat the build &amp; copy process.
+
+It's worth noting that grunt-ts has some file-watching logic built into it, but if you want the source and destination folders to be different then it uses a hack where it injects a ".basedir.ts" file into the source, resulting in a ".basedir.js" in the destination - which I didn't like. It also doesn't support additional actions such as copying the "package.json" from the root into the "build" folder. The [readme for grunt-ts](https://github.com/TypeStrong/grunt-ts) recommends using grunt-contrib-watch for more complicated watch configurations, so that's what I've done.
+
+One other issue I had with grunt-ts was with its "fast compile" option. This would always work the first time, but subsequent compilations would seem to lose the "brackets.d.ts" file and so claim that "brackets" was not a known module. This was annoying but easy to fix - the gruntfile.js above sets ts.options.fast to "never". This may mean that the compilation step will be a bit slower, but unless you're extension is enormous then this shouldn't be an issue.
+
+### Final tweaks
+
+And with that, we're basically done! We can write TypeScript against the Brackets API (granted, if you want to use more functions in the API than I've defined then you'll have to get your hands dirty with the "brackets.d.ts" file) and this code can be compiled into JavaScript and copied into a "build" folder along with the package definition.
+
+The only other thing I'd say is that I found the "smart indenting" in Brackets to be appalling with TypeScript - it moves things all over the place as you go from one line to another! It's easily disabled, though, thankfully. There's a configuration file that needs editing - see the comment by "rkn" in [Small little Adobe Brackets tweak – remove Smart Indent](http://www.raymondcamden.com/2012/08/22/Small-little-Adobe-Brackets-tweak-remove-Smart-Indent#comment-1713742741). Once you've done this, you don't need to restart Brackets; it will take effect immediately.
+
+And now we really are done! Happy TypeScript Brackets Extension writing! Hopefully I'll have my first TypeScript extension ready to release in an early state soon.. :)
+
+(For convenience junkies, I've created a Bitbucket repo with everything that you need; the "[Example TypeScript Brackets Extension](https://bitbucket.org/DanRoberts/example-typescript-brackets-extension)").

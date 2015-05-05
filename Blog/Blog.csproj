@@ -240,6 +240,7 @@
     <Content Include="App_Data\Posts\81,2015,1,29,1,2,0,0,JavaScript,TypeScript,React.txt" />
     <Content Include="App_Data\Posts\82,2015,3,5,19,19,0,0,JavaScript,TypeScript.txt" />
     <Content Include="App_Data\Posts\83,2015,4,1,8,45,0,0,VBScript.txt" />
+    <Content Include="App_Data\Posts\84,2015,5,5,22,50,0,0,Brackets,TypeScript.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM,VBScript.txt" />
     <Content Include="App_Data\Posts\76,2014,10,2,21,49,0,0,Immutability.txt" />
     <Content Include="App_Data\Posts\Redirects.txt" />
