@@ -241,6 +241,7 @@
     <Content Include="App_Data\Posts\82,2015,3,5,19,19,0,0,JavaScript,TypeScript.txt" />
     <Content Include="App_Data\Posts\83,2015,4,1,8,45,0,0,VBScript.txt" />
     <Content Include="App_Data\Posts\84,2015,5,5,22,50,0,0,Brackets,TypeScript.txt" />
+    <Content Include="App_Data\Posts\85,2015,5,26,11,42,0,0,DuoCode,React.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM,VBScript.txt" />
     <Content Include="App_Data\Posts\76,2014,10,2,21,49,0,0,Immutability.txt" />
     <Content Include="App_Data\Posts\Redirects.txt" />
@@ -326,7 +327,11 @@
     <None Include="App_Data\SearchIndex.dat" />
     <Content Include="Views\Shared\SiteMasterWithSearchOnlySidebar.cshtml" />
     <Content Include="Views\RSS\Feed.cshtml" />
-    <Content Include="packages.config" />
+    <Content Include="packages.config">
+      <SubType>Designer</SubType>
+    </Content>
+    <None Include="Properties\PublishProfiles\Productive Rage FTP.pubxml" />
+    <Content Include="Views\ViewPost\PostsByTitle.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\BlogBackEnd\BlogBackEnd.csproj">
