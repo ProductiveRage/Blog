@@ -34,3 +34,5 @@ _ReSharper*/
 *.orig
 
 [Pp]ackages\*
+
+SearchIndex.dat
