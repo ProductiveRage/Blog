@@ -4,7 +4,7 @@ Back in January, I heard about [DuoCode](http://duoco.de/) and signed up to be p
 
 The compilation process has been really fast on the (admittedly small) projects I've been trying out and the translation itself seems faultless - I've tried to catch it out in a variety of ways, seeing if it could handle "ref" or "out" arguments, for example (since JavaScript has no concept of this), playing with generics, trying out LINQ statements, generating anonymous types.. it really does seem to do it all! Suffice to say, I'm very impressed with what I've seen.
 
-But.. (there's always a but).. they currently say on their FAQ page, under "How much does DuoCode code?" -
+But.. (there's always a but).. they currently say on their FAQ page, under "How much does DuoCode cost?" -
 
 > A pricing model will be introduced in the future, after the Beta period is over.
 
