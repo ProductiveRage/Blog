@@ -1,0 +1,310 @@
+## Throwing exceptions through COM
+
+At work, I've got a project where we're trying to migrate from an old technology to new - we've got COM components that used to be hosted in one environment that has now been replaced, with a view to replacing the legacy COM components in the future. This means that these components are often brought to life in this new environment and have some of their internal functionality relying on calls back into the new host. In a roundabout way, what I'm trying to say is that these COM components are called *by* .net code, they call back *into* that .net code themselves and sometimes have to deal with exceptions being thrown by the .net code they're calling and have to communicate those failures back *up* to the .net code that called *them*!
+
+Phew! I think I just made unnecessarily hard work out of that introduction! :D
+
+So.. an interesting problem has arisen in this scenario. There are limits to the ways in which managed (.net) code can talk with unmanaged (COM) code. Most of the time you can get away with following a few simple rules around types and then letting the .net interoperability magic do its work.
+
+One place where this falls down is in exception handling. Specifically, if the (.net) hosting environment calls a COM component that calls back into the host - if that call throws an exception then that exception travels through the COM component and comes out the other side.. just not quite in the way that you might expect. Exceptions from COM components can basically only express a string message and a 32-bit "HRESULT" value (this is simplifying a bit, but it's close enough). The HRESULT value is a status code that follows a particular format (see the MSDN article "[HRESULT](https://msdn.microsoft.com/en-us/library/cc231198.aspx)" for the full details, but I'll touch on it further down).
+
+If the HRESULT is a value that .net recognises as relating nicely to a particular framework exception, then it will represent the error from the COM component as an instance of that exception - eg. "COR\_E\_ENDOFSTREAM" (0x80070026, or -2147024858 as an **Int32**) will result in an **EndOfStreamException** being raised. Any value that isn't considered special enough to have its own framework type will be raised as a **COMException**.
+
+This means that if you have any custom exceptions that you want to have pass through the system then you're in for a nasty surprise.
+
+Take the following contrived example:
+
+    public string GetMagicName(int id)
+    {
+      try
+      {
+        return GetMagicNameFromComponent(id);
+      }
+      catch (WidgetiserException e)
+      {
+        // Log Widgetiser dependency failure..
+        throw;
+      }
+    }
+
+    private string GetMagicNameFromComponent(int id)
+    {
+      // Note: The "_widgetiser" reference is a ComVisible .net component passed into
+      // the COM component as a dependency
+      dynamic legacyComponent = Activator.CreateInstance(
+        Type.GetTypeFromProgID("OldSystem.Calculator")
+      );
+      legacyComponent.Widgetiser = _widgetiser;
+      return legacyComponent.GetMagicName(id);
+    }
+
+There is a fictional "Calculator" COM component that was used by the old system. It had a "Widgetiser" dependency that was provided by this old system. In the new system, this component is still required but as part of the work of replacing the system around it, a new "Widgetiser" has been created - it is a facade over functionality in the new system, such that the interface expected by the legacy components is still available.
+
+In this story I'm telling, sometimes the call into the legacy component fails. Of those times, it is useful for us to know which were due to a problem raised by the "Widgetiser" and which were due to something else that originated in the component. Helpfully, the Widgetiser throws specialised exceptions -
+
+    [Serializable]
+    public class WidgetiserException : Exception
+    {
+      protected WidgetiserException(string message, string gadgetName) : base(message)
+      {
+        GadgetName = gadgetName;
+      }
+
+      public string GadgetName { get; private set; }
+
+      private const string GADGET_NAME_ID = "GadgetName";
+      protected WidgetiserException(SerializationInfo info, StreamingContext context)
+        : base(info, context)
+      {
+        GadgetName = info.GetString(GADGET_NAME_ID);
+      }
+      public override void GetObjectData(SerializationInfo info, StreamingContext context)
+      {
+        info.AddValue(GADGET_NAME_ID, GadgetName);
+        base.GetObjectData(info, context);
+      }
+    }
+
+This follows the best practices (it ends with the word "Exception", it's serialisable and it has the serialisation-based constructor and GetObjectData method).
+
+However..
+
+In testing, it's found that the "Log Widgetiser dependency failure.." condition is never entered.
+
+This shouldn't (now) be a surprise since I've just explained that custom exceptions can never come directly from COM failures; any exception may only be represented by a **COMException** or some other specific framework exception classes.
+
+But I want my custom exceptions! And I don't want to have to worry about whether particular code in my new system is allowed to throw custom exceptions because it will only ever be called by .net code, or if it will have to stick to built-in exception types since it *might* be called by legacy components.
+
+### Working with what we've got
+
+So what we're basically limited to working with is a message (string) and a "HRESULT". If the Widgetiser throws an exception then, while it will be transformed into a **COMException** when it comes out of the COM component, whatever message and HRESULT values we specify will be maintained.
+
+The HRESULT is a structure that describes a response - either a success or a failure. The first (ie. most significant) of its 32 bits indicates "severity" (1 being failure, 0 being success). Then there's a reserved bit, then a bit to indicate whether this is a "customer" response (1) or a Microsoft / framework value (0). Then two more bits we don't worry about and set to zero, then 11 bits to indicate a "Facility" (but since the options for Facility are things like "The error code is specific to Windows CE" and "The source of the error code is a Windows Defender component" it makes sense to leave these all as zero for custom errors, which means "Default Facility"). *Then* there's 16 bits for an error code. This, basically, can be whatever you like but each code should uniquely identify a given error type.
+
+So, if we raise custom exceptions that have unique error codes then we could potentially use the HRESULT value from the **COMException** to map back to the original type (just like happens with those special exception types that .net automatically maps, like COR\_E\_ENDOFSTREAM to **EndOfStreamException**).
+
+The simplest approach, then, would be to change our calling code -
+
+    public string GetMagicName(int id)
+    {
+      try
+      {
+        return GetMagicNameFromComponent(id);
+      }
+      catch (COMException e)
+      {
+        if (e.HResult == WidgetiserException.UNIQUE_HRESULT)
+        {
+          // Log Widgetiser dependency failure..
+        }
+      }
+    }
+
+    private string GetMagicNameFromComponent(int id)
+    {
+      // Note: The "_widgetiser" reference is a ComVisible .net component passed into
+      // the COM component as a dependency
+      dynamic legacyComponent = Activator.CreateInstance(
+        Type.GetTypeFromProgID("OldSystem.Calculator")
+      );
+      legacyComponent.Widgetiser = _widgetiser;
+      return legacyComponent.GetMagicName(id);
+    }
+
+and to change the exception class slightly -
+
+    [Serializable]
+    public class WidgetiserException : COMException
+    {
+      public static readonly int UNIQUE_HRESULT = -1610612735;
+      protected WidgetiserException(string message, string gadgetName)
+        : base(message, UNIQUE_HRESULT)
+      {
+        // .. the rest of the class is unaltered..
+        
+*(Note: Inheriting from **COMException** doesn't magically allow for the exception class to be recognised when it pops out of a COM component, but it does have a constructor that takes a message and a HRESULT value, which is handy here).*
+
+This still feels too error-prone for my liking, though. What if I add a range of custom exceptions that need to be supported? Then I'd need to check for all of these different HRESULT values in my try..catch blocks.
+
+A slight variation would be to have a helper function "TryToRetrieveCustomException" -
+
+    public static Exception TryToRetrieveCustomException(COMException e)
+    {
+      if (e.HResult == WidgetiserException.ERROR_HRESULT)
+        return new WidgetiserException(e.message, "something");
+      return null;
+    }
+
+and to call *this* from within each catch block. That way, when new exceptions are defined they only need to explicitly be considered by the "TryToRetrieveCustomException" function and not within every possibly-affected catch block.
+
+Another thing that bothers me is that (returning to my example) the "GetMagicName" function has to consider that it's relying upon a COM component and that a **COMException** must be caught. In the future, the COM component may get re-written into a .net version - at which point, it will look odd to future maintainers that a **COMException** is being caught when, really, it's a **WidgetiserException** that is of interest.
+
+We can do better.
+
+### The "COMSurvivableException"
+
+In case you weren't paying full attention, there is *another* problem in the "TryToRetrieveCustomException" function above - the constructor on the **WidgetiserException** takes two arguments; the message and the gadgetName. When "TryToRetrieveCustomException" creates a new **WidgetiserException**, it can only set the message (not the gadgetName) since that's all that's available on the **COMException** that is has a reference to. It doesn't know what the gadgetName should be!
+
+Let's jump straight into a possible solution -
+
+    [Serializable]
+    public abstract class COMSurvivableException : COMException
+    {
+      private static readonly Dictionary<ushort, Reviver> _revivers
+        = new Dictionary<ushort, Reviver>();
+      protected COMSurvivableException(string messageWithAnyStateData, Reviver reviver)
+        : base(messageWithAnyStateData)
+      {
+        if (string.IsNullOrWhiteSpace(messageWithAnyStateData))
+          throw new ArgumentException("Null/blank messageWithAnyStateData specified");
+        if (reviver == null)
+          throw new ArgumentNullException("reviver");
+
+        lock (_revivers)
+        {
+          _revivers[UniqueErrorCode] = reviver;
+        }
+        HResult = CustomErrorHResultGenerator.GetHResult(UniqueErrorCode);
+      }
+
+      protected delegate COMSurvivableException Reviver(string messageWithAnyStateData);
+
+      protected abstract ushort UniqueErrorCode { get; }
+
+      protected COMSurvivableException(SerializationInfo info, StreamingContext context)
+        : base(info, context) { }
+
+      [DebuggerStepThrough]
+      public static void RethrowAsOriginalIfPossible(COMException e)
+      {
+        if (e == null)
+          throw new ArgumentNullException("e");
+
+        var uniqueErrorCode = CustomErrorHResultGenerator.GetErrorCode(e.HResult);
+        Reviver reviver;
+        lock (_revivers)
+        {
+          if (!_revivers.TryGetValue(uniqueErrorCode, out reviver))
+            return;
+        }
+        throw reviver(e.Message);
+      }
+
+      private static class CustomErrorHResultGenerator
+      {
+        private const int CUSTOMERROR_BASE
+          = (1 << 31) /* Severity = 1 */
+          | (1 << 29) /* Customer = 1 */;
+          
+        public static int GetHResult(ushort errorCode)
+        {
+          return CUSTOMERROR_BASE | errorCode;
+        }
+
+        private const int ERROR_CODE_MASK = (int)short.MaxValue;
+        public static ushort GetErrorCode(int hresult)
+        {
+          return (ushort)(hresult & ERROR_CODE_MASK);
+        }
+      }
+    }
+    
+This is a base class that exceptions may be derived from if they must be able to survive travelling through COM components.
+
+Each derived class will be responsible for declaring a unique error code and a "reviver". The error code is of type **ushort**, which is a 16 bit .net type - there's no point making the derived types do the maths around working out how to set the is-failure, is-custom-error, etc.. bits in a HRESULT. A reviver is basically just a way to de-serialise data that is stored in the message property.
+
+Derived classes are responsible for serialising data in the message property - this sounds like it could be complex but it can also be very simple in many cases (as shown below). The **COMSurvivableException** maintains mappings of error codes to revivers so that it can implement a "RethrowAsOriginalIfPossible" function to handle translating a **COMException** back into a more meaningful type.
+
+In practice, this means that we could implement **WidgetiserException** as
+
+    [Serializable]
+    public class WidgetiserException : COMSurvivableException
+    {
+      protected WidgetiserException(string message, string gadgetName)
+        : base(GetMessageWithStateData(message, gadgetName), Revive)
+      {
+        GadgetName = gadgetName;
+      }
+
+      public string GadgetName { get; private set; }
+
+      protected override ushort UniqueErrorCode { get { return 1; } }
+
+      private const string GADGET_NAME_ID = "GadgetName";
+      protected WidgetiserException(SerializationInfo info, StreamingContext context)
+        : base(info, context)
+      {
+        GadgetName = info.GetString(GADGET_NAME_ID);
+      }
+      public override void GetObjectData(SerializationInfo info, StreamingContext context)
+      {
+        info.AddValue(GADGET_NAME_ID, GadgetName);
+        base.GetObjectData(info, context);
+      }
+
+      private static string GetMessageWithStateData(string message, string gadgetName)
+      {
+        return (message ?? "").Replace("\n", " ") + "\n" + gadgetName;
+      }
+      private static COMSurvivableException Revive(string messageWithAnyStateData)
+      {
+        var messageParts = (messageWithAnyStateData ?? "").Split(new[] { '\n' }, 2);
+        if (messageParts.Length != 2)
+          throw new Exception("Invalid state data");
+        return new WidgetiserException(messageParts[0], messageParts[1]);
+      }
+    }
+    
+and then change the COM component calling code to
+    
+    public string GetMagicName(int id)
+    {
+      try
+      {
+        return GetMagicNameFromComponent(id);
+      }
+      catch (WidgetiserException e)
+      {
+        // Log Widgetiser dependency failure..
+        throw;
+      }
+    }
+
+    private string GetMagicNameFromComponent(int id)
+    {
+      try
+      {
+        // Note: The "_widgetiser" reference is a ComVisible .net component passed into
+        // the COM component as a dependency
+        dynamic legacyComponent = Activator.CreateInstance(
+          Type.GetTypeFromProgID("OldSystem.Calculator")
+        );
+        legacyComponent.Widgetiser = _widgetiser;
+        return legacyComponent.GetMagicName(id);
+      }
+      catch (COMException e)
+      {
+        COMSurvivableException.RethrowAsOriginalIfPossible(e);
+        throw;
+      }
+    }
+    
+Note that the "GetMagicName" function has now returned to the idealised version that I started with.
+
+There are a couple of sacrifices - the **WidgetiserException** has expanded a little and it has become aware that it must be "COM-survivable". This adds some maintenance burden in that all exceptions that may have to pass through a COM component need to know that this may happen. And, in the glorious future in which all COM components have been rewritten with efficient, clean, testable, *beautiful* .net versions, it will look strange that there are still exceptions in use which identify themselves as COM-survivable. When this day arrives, it should not be much work to change the custom exceptions to *not* derive from **COMSurvivableException** - and doing so should be a pleasingly cathartic way to celebrate the completed migration :)
+
+Another cost is that the call to the COM component has now got an *additional* try..catch block. I think this is a very reasonable trade-off, though, since now the complexity has been pushed right down to the call site of the COM component (the "GetMagicNameFromComponent" function) - the function that calls *that* ("GetMagicName") is clean. And when the COM component is no longer used, when the "Activator.CreateInstance" call is replaced with a simple new'ing-up of a .net class, the no-longer-necessary try..catch may be removed - this is another benefit to the complexity being pushed down to the call site; it's clear what it's for (unlike in the first solution I proposed, where it's *not* clear why the "GetMagicNumber" function has to go querying HRESULT values until you look into the "GetMagicNameFromComponent" that it calls).
+
+### Other remarks
+
+The **WidgetiserException** class above uses a very coarse "serialisation" mechanism - it hopes that the "message" string will have no line returns in (replacing any that it *does* have with spaces) and then uses a line return as a delimiter in a string that combines the "message" and "gadgetName" properties. This is very simple to "deserialise", the combined string need only be split on the first line return and then the two original values are once again available. It's feasible that this approach would not be acceptable in some use cases (if the "message" value must be allowed to contain line returns) but I just used it to make the example clear. The serialisation mechanism could use the .net xml serialiser, for example, to cram the exception's state into a string. Or you might be a big fan of [Json.NET](http://www.newtonsoft.com/json) and want to serialise into json. So long as you can record the derived classes' data in a string to give to the **COMSurvivableException**, you can do whatever you want!
+
+On the **COMSurvivableException** class itself, you might notice that it has to lock its error-code-to-reviver mappings dictionary whenever a new instance of an exception is created that is derived from this abstract class. And locks it *again* when that mapping data is read in order to try to translate a **COMException** back into its original form. There are times to stress and worry about whether locking is going to affect throughput and what it might do to concurrency, but when you're throwing an exception then you're already in the middle of a fairly expensive operation (it has to generate a stack trace, aside from anything else) and so this is not somewhere where a little bit of locking is going to be anything to lose sleep over.
+
+The "RethrowAsOriginalIfPossible" function on the **COMSurvivableException** class is decorated with the "DebuggerStepThrough" attribute. This instructs the debugger never to break inside this function. Considering that the sole purpose of this method is to raise an exception for the caller, it makes little sense to allow the debugger to stop *inside* the function - the point is to deliver interesting information to the *caller* of "RethrowAsOriginalIfPossible" and *that* is where it may make sense for a debugger to stop on an exception. Only a minor tweak but it makes this whole dirty workaround a little more palatable when used in the real world.
+
+### More information
+
+I've already linked to the [MSDN article that explains the layout of the HRESULT value](https://msdn.microsoft.com/en-us/library/cc231198.aspx) but it might also be of interest to know which HRESULT values are automatically translated into framework exception types - see [How to: Map HRESULTs and Exceptions](https://msdn.microsoft.com/en-us/library/9ztbc5s1(v=vs.110).aspx). That article lists the constants by name, I don't know of any better way to find out what the numeric values are (should you need them) than putting the name into Google and following a link or two!
+
+Finally, there was an old MSDN article about doing something similar in nature to what I've covered here - but it seems to have gone off-line now, the link I had to it is broken. Thankfully the [WayBackMachine](http://archive.org/web/) can help us and make available [Throwing Custom Exception Types from a Managed COM+ Server Application](http://web.archive.org/web/20080223185930/http://msdn.microsoft.com/msdnmag/issues/04/03/ExceptionsinCOM/default.aspx). From what I understand, this talks about wrapping components fully in a proxy object that maps custom exceptions based upon HRESULT and that serialises exception state as XML. There are complexities around proxying in this sort of manner but the article is worth a read - the benefits are that the custom exceptions do not need to be derived from anything other than **Exception** and, once the proxies are created, you don't need to add extra try..catch blocks around COM component calls in order to map exceptions. The downsides include potential complications around deployment and debugging, which are described in the article.
