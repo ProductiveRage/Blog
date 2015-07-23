@@ -242,6 +242,7 @@
     <Content Include="App_Data\Posts\83,2015,4,1,8,45,0,0,VBScript.txt" />
     <Content Include="App_Data\Posts\84,2015,5,5,22,50,0,0,Brackets,TypeScript.txt" />
     <Content Include="App_Data\Posts\85,2015,5,26,11,42,0,0,DuoCode,React.txt" />
+    <Content Include="App_Data\Posts\87,2015,7,23,21,17,0,0,Bridge,React.txt" />
     <Content Include="App_Data\Posts\86,2015,6,14,21,29,0,0,COM.txt" />
     <Content Include="App_Data\Posts\9,2011,8,27,10,20,0,0,COM,VBScript.txt" />
     <Content Include="App_Data\Posts\76,2014,10,2,21,49,0,0,Immutability.txt" />
