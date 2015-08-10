@@ -1,0 +1,606 @@
+## Parsing TypeScript definitions (functional-ly.. ish)
+
+A couple of things have happened recently, I've started using Visual Studio 2015 and C# 6 ([read-only auto-properties](http://csharp.2000things.com/2014/10/31/1216-c-6-0-initializing-read-only-auto-properties-within-constructors/), where have you been all my life???) and I've been playing around with using [Bridge.net to write React applications in C#](Post87). So far, I've only written the bare minimum of bindings that I required to use React in Bridge so I was wondering if there was a shortcut to extending these - like taking the [DefinitelyTyped TypeScript/React bindings](https://github.com/borisyankov/DefinitelyTyped/blob/master/react/react.d.ts) and converting them somehow.
+
+Looking at those TypeScript bindings, there really isn't *that* much content and it's not particularly complicated. Translating the majority of it into C# Bridge.net bindings by hand would probably not be a huge deal. But I don't really want to have to spend much time trying to update bindings when new versions of React come out (in fairness, React is fairly stable now and I suspect that any changes in the future will be very minor for most of the surface area of these bindings).
+
+.. if I'm being really honest, though, I didn't just start out trying to manually translate the TypeScript bindings because I wanted to play around with writing some code! In the professional world, if there's a chance that a one-off(ish) operation like this will be much quicker (and not much less accurate) to perform by hand than by code then it's not an easy sell to say that you should code up an awesome general solution (that *probably*.. or.. *hopefully* will work) instead.-But this is all for my own enjoyment, so I'm going to do it however I damn well please! :D
+
+Back in 2013, I wrote a post about [parsing CSS](Post57). It pulled the style sheet input through an interface:
+
+    public interface IReadStringContent
+    {
+      char? Current { get; }
+      uint Index { get; }
+      IReadStringContent GetNext();
+    }
+
+This allowed the source to be abstracted away (is it a fixed string, is it a huge file being streamed in chunks; who cares!) and it allowed the logic around where-is-the-current-position-in-the-content to be hidden somewhat (which is where a lot of the complications and the off-by-one errors creep into things like this).
+
+So I figured this seemed like a resonable place to start. But I also wanted to throw a few more ideas into the mix - I'm all for describing structures with immutable classes (if you've read *any* other post on this site, you probably already know that!) but I wanted to play around with using an F#-esque **Optional** class to allow the type system to indicate where nulls are and aren't acceptable. In the past, I've relied on comments - eg.
+
+    public interface IReadStringContent
+    {
+      /// <summary>
+      /// This will be null if all of the content has been consumed
+      /// </summary>
+      char? Current { get; }
+      
+      /// <summary>
+      /// This will be an index within the string or the position immediately
+      /// after it (if all content has been read)
+      /// </summary>
+      uint Index { get; }
+
+      /// <summary>
+      /// This will never return null. If all of the content has been read
+      /// then the returned reference will have a null Current character
+      /// </summary>
+      IReadStringContent GetNext();
+    }
+
+I think that, *really*, I want to give [Code Contracts](https://msdn.microsoft.com/en-us/library/dd264808%28v=vs.110%29.aspx?f=255&MSPPError=-2147217396) another try (so that I could describe in source code where nulls are not acceptable and then have the compiler verify that every call to such functions matches those constaints). But every time I try contracts again I find it daunting. And for this little project, I wanted to have fun with coding and not get bogged down again with something that I've struggled with in the past\*.
+
+\* *(Even typing that, it sounds like a poor excuse.. which it is; one day I'll give them a proper go!)*
+
+Anyway.. my point is, I'm getting bored of writing "This will never return null" or "This is optional and may return null" in. Over.. and over.. and over again. What I'd like is to know that a **string** property will never be null in my own code because if it *was* allowed to be null then the return type would be **Optional&lt;string&gt;** and not just **string**.
+
+Well, there just happens to be such a construct that someone else has written that I'm going to borrow (steal). There's a GitHub project [ImmutableObjectGraph](https://github.com/AArnott/ImmutableObjectGraph) that is about using T4 templates to take a minimal representation of a class and transforming it into a fully-populated immutable type, saving you from having to write the repetitive boiler plate code yourself. (There's actually less of this type of boiler pate required if you use C# 6 and the project is in the process of changing to use [Roslyn](https://github.com/dotnet/roslyn) instead of dirty T4 templates). I digress.. the point is that there is an optional type out there that does the job pretty well.
+
+    // Borrowed from https://github.com/AArnott/ImmutableObjectGraph but tweaked slightly
+    [DebuggerDisplay("{IsDefined ? Value.ToString() : \"<missing>\",nq}")]
+    public struct Optional<T>
+    {
+      private readonly T value;
+      private readonly bool isDefined;
+
+      [DebuggerStepThrough]
+      public Optional(T value)
+      {
+        // Tweak - if this is initialised with a null value then treat that the same
+        // as this being a "Missing" value. I think you should either have a value or
+        // not have a value (which is what null should be). I don't think you should
+        // be able to choose between having a "real" value, having a value that is
+        // null and having a Missing value. Not having a value (ie. null) and
+        // Missing should be the same thing.
+        this.isDefined = (value != null);
+        this.value = value;
+      }
+
+      public static Optional<T> Missing
+      {
+        [DebuggerStepThrough]
+        get { return new Optional<T>(); }
+      }
+
+      public bool IsDefined
+      {
+        [DebuggerStepThrough]
+        get { return this.isDefined; }
+      }
+
+      public T Value
+      {
+        [DebuggerStepThrough]
+        get { return this.value; }
+      }
+
+      [DebuggerStepThrough]
+      public static implicit operator Optional<T>(T value)
+        => new Optional<T>(value);
+
+      public T GetValueOrDefault(T defaultValue)
+        => this.IsDefined ? this.value : defaultValue;
+    }
+
+    public static class Optional
+    {
+      public static Optional<T> For<T>(T value) => value;
+    }
+
+
+I'm also thinking of trying to make all classes either abstract or sealed - inheritance always makes me a bit nervous when I'm trying to write "value-like" classes (I might want to write a nice custom Equals implementation, but then I start worrying that if someone derives from the type then there's no way to require that they also write their own Equals function that ensures that any new data they add to the type is considered in the comparison). Interestingly, someone posted a question Stack Overflow about this a few years ago, so rather than talk any more about it I'll just link to that: [why are concrete types rarely useful as bases for further derivation](http://stackoverflow.com/questions/2016608/why-are-concrete-types-rarely-useful-as-bases-for-further-derivation/2016927#2016927).
+
+On a less significant note, I've been meaning to create functions as static by default for a while now. I'm going to make a concerted effort this time. If a function in a class does not need to access any instance state, then marking it as static is a good way to highlight this fact to the reader - it's a sort-of indicator that the function is pure (nitpickers might highlight the fact that a static function could still interact with any static state that the containing class has, but - even in these cases - marking it as static still reduces the possible references that it could affect). Little touches like this can make code more readable, I find. The only problem comes when you could pass just that one piece of state into it, keeping the function static and pure.. but then you find you need to make a change and pass it *another* piece of state - at which point should you say that the number of arguments required offsets the benefits of purity? (I don't have an easy answer to that, in case you were wondering!).
+
+By applying these principles, I've found that the style of code that I wrote changed a bit. And I think that the patterns that came out are quite interesting - maybe some of this is due to the changing nature of C#, or maybe it's because I've read so many blog posts over the last couple of years about functional programming that some of it was bound to stick!
+
+### Getting on with it
+
+Imagine that, during parsing a TypeScript definition, we find ourselves within an interface and need to parse a property that it has -
+
+    name: string;
+    
+*(I've picked this as a simple starting point - I realise that it seems an arbitrary place to begin at, but I had to start somewhere!)*
+
+I want to pick out the property name ("name") and its type ("string"). I could go through each character in a loop and keep track of when I hit token delimiters (such as the ":" between the name and the type), but it seems like this is going to be code that will need writing over and over again for different structures. As such, it seems like somewhere that a helper function would be very useful in cutting down on code duplication and "noise" in the code - eg.
+
+    public static Optional<MatchResult<string>> MatchAnythingUntil(
+      IReadStringContent reader,
+      ImmutableList<char> acceptableTerminators)
+    {
+      var content = new StringBuilder();
+      while (reader.Current != null)
+      {
+        if (acceptableTerminators.Contains(reader.Current.Value))
+        {
+          if (content.Length > 0)
+            return MatchResult.New(content.ToString(), reader);
+          break;
+        }
+        content.Append(reader.Current);
+        reader = reader.GetNext();
+      }
+      return null;
+    }
+
+*(Note: I'm using the [Microsoft Immutable Collections](https://www.nuget.org/packages/System.Collections.Immutable.Net40/) NuGet package, which is where the "ImmutableList" type comes from).*
+
+This relies upon the **Optional** type that I mentioned before, but also a **MatchResult** class -
+
+    public sealed class MatchResult<T>
+    {
+      public MatchResult(T result, IReadStringContent reader)
+      {
+        Result = result;
+        Reader = reader;
+      }
+      public T Result { get; }
+      public IReadStringContent Reader { get; }
+    }
+
+    /// <summary>
+    /// This non-generic static class is just to expose a helper method that takes advantage
+    /// of C#'s type inference to allow you to say "MatchResult.New(value, reader)" rather than
+    /// having to write out the type of the value in "new MatchResult<string>(value, reader)"
+    /// </summary>
+    public static class MatchResult
+    {
+      public static MatchResult<T> New<T>(T value, IReadStringContent reader)
+        => return new MatchResult<T>(value, reader);
+    }
+    
+This result type is just used to say "here is the value that you asked for and here is a reader that picks up after that content". Neither the "Result" nor "Reader" properties have comments saying "This will never be null" because their properties are not wrapped in **Optional** types and so it is assumed that they never will be null. 
+    
+The "MatchAnythingUntil" function returns a value of type **Optional&lt;MatchResult&lt;string&gt;&gt;**. This means that it is expected that this function *may* return a null value. Previously, I might have named this function "TryToMatchAnythingUntil" - to try to suggest through a naming convention that it may return null if it is unable to perform a match. I think that having this expressed through the type system is a big improvement.
+
+Right.. now, let's try and make some more direct steps towards actually parsing something! I want to read that "name" value into a class called **IdentifierDetails**:
+
+    public sealed class IdentifierDetails
+    {
+      public static ImmutableList<char> DisallowedCharacters { get; }
+        = Enumerable.Range(0, char.MaxValue)
+          .Select(c => (char)c)
+          .Where(c => !char.IsLetterOrDigit(c) && (c != '$') && (c != '_'))
+          .ToImmutableList();
+
+      public IdentifierDetails(string value, SourceRangeDetails sourceRange)
+      {
+        if (value == "")
+          throw new ArgumentException("may not be blank", nameof(value));
+
+        var firstInvalidCharacter = value
+          .Select((c, i) => new { Index = i, Character = c })
+          .FirstOrDefault(c => DisallowedCharacters.Contains(c.Character));
+        if (firstInvalidCharacter != null)
+        {
+          throw new ArgumentException(
+            string.Format(
+              "Contains invalid character at index {0}: '{1}'",
+              firstInvalidCharacter.Index,
+              firstInvalidCharacter.Character
+            ),
+            nameof(value)
+          );
+        }
+
+        Value = value;
+        SourceRange = sourceRange;
+      }
+
+      public string Value { get; }
+      public SourceRangeDetails SourceRange { get; }
+      
+      public override string ToString() => $"{Value}";
+    }
+    
+    public sealed class SourceRangeDetails
+    {
+      public SourceRangeDetails(uint startIndex, uint length)
+      {
+        if (length == 0)
+          throw new ArgumentOutOfRangeException(nameof(length), "must not be zero");
+
+        StartIndex = startIndex;
+        Length = length;
+      }
+
+      public uint StartIndex { get; }
+
+      /// <summary>This will always be greater than zero</summary>
+      public uint Length { get; }
+
+      public override string ToString() => $"{StartIndex}, {Length}";
+    }    
+
+*These classes illustrates more of the new C# 6 features - property initialisers, expression-bodied members and string interpolation. I think these are all fairly small tweaks that add up to large improvements overall. If you're not already familiar with these and want to know more then I highly recommend this Visual Studio extension: [C# Essentials](https://visualstudiogallery.msdn.microsoft.com/a4445ad0-f97c-41f9-a148-eae225dcc8a5). It makes nice suggestions about how you could use the new features and has the facility to automatically apply the changes to your code; awesome! :)*
+
+Ok.. so now we can start tying this all together. Say we have an **IReadStringContent** implementation which is pointing at the "name: string;" content. We could write another function that tries to parse the property's details, starting with something like -
+
+    public static Optional<MatchResult<PropertyDetails>> GetProperty(IReadStringContent reader)
+    {
+      var identifierMatch = MatchAnythingUntil(reader, IdentifierDetails.DisallowedCharacters);
+      if (!identifierMatch.IsDefined)
+        return null;
+
+      var readerAfterIdentifier = identifierMatch.Value.Reader;
+      var identifier = new IdentifierDetails(
+        identifierMatch.Value.Result,
+        new SourceRangeDetails(reader.Index, readerAfterIdentifier.Index - reader.Index)
+      );
+      
+      // .. more code (to check for the ":" separator and to get the type of the property)..
+
+This function will either return the details of the property or it will return null, meaning that it failed to do so (it is immediately obvious from the method signature that a null return value is possible since its return type is an **Optional**).
+
+Before I go into details on the ".. more code.." section above, we could do with some more helper functions to parse the content after the "name" value - eg.
+
+    public static Optional<MatchResult<char>> MatchCharacter(
+      IReadStringContent reader,
+      char character)
+    {
+      return (reader.Current == character)
+        ? MatchResult.New(character, reader.GetNext())
+        : null;
+    }
+
+    public static Optional<MatchResult<string>> MatchWhitespace(IReadStringContent reader)
+    {
+      var content = new StringBuilder();
+      while ((reader.Current != null) && char.IsWhiteSpace(reader.Current.Value))
+      {
+        content.Append(reader.Current.Value);
+        reader = reader.GetNext();
+      }
+      return (content.Length > 0) ? MatchResult.New(content.ToString(), reader) : null;
+    }
+ 
+While we're doing this, let's put the try-to-match-Identifier logic into its own function. It's going to be used in other places (the **IdentifierDetails** will be used for type names, variable names, interface names, class names, property names, etc..) so having it in a reusable method makes sense:
+
+    public static Optional<MatchResult<IdentifierDetails>> GetIdentifier(
+      IReadStringContent reader)
+    {
+      var identifierMatch = MatchAnythingUntil(reader, IdentifierDetails.DisallowedCharacters);
+      if (!identifierMatch.IsDefined)
+        return null;
+
+      var readerAfterIdentifier = identifierMatch.Value.Reader;
+      return MatchResult.New(
+        new IdentifierDetails(
+          identifierMatch.Value.Result,
+          new SourceRangeDetails(reader.Index, readerAfterIdentifier.Index - reader.Index)
+        ),
+        readerAfterIdentifier
+      );
+    }
+    
+Now, the work-in-progress GetProperty function looks like this:
+
+    public static Optional<MatchResult<PropertyDetails>> GetProperty(IReadStringContent reader)
+    {
+      IdentifierDetails identifier;
+      var identifierMatch = GetIdentifier(reader);
+      if (identifierMatch.IsDefined)
+      {
+        identifier = identifierMatch.Value.Result;
+        reader = identifierMatch.Value.Reader;
+      }
+      else
+        return null;
+
+      var colonMatch = MatchCharacter(reader, ':');
+      if (colonMatch.IsDefined)
+        reader = colonMatch.Value.Reader;
+      else
+        return null;
+
+      var whitespaceMatch = MatchWhitespace(reader);
+      if (colonMatch.IsDefined)
+        reader = whitespaceMatch.Value.Reader;
+
+      // .. more code..
+    
+Hmm.. that's actually quite a lot of code. And there are already three patterns emerging which are only apparent if you look closely and pay attention to what's going on -
+
+1. The "identifier" reference is required and the retrieved value is stored (then the "reader" reference is updated to point at the content immediately after the identifier)
+2. The colon separator is required, but the "Value" of the **MatchResult** is not important - we just want to know that the character is present (and to move the "reader" reference along to the content after it)
+3. The white space matching is optional - there doesn't *need* to be whitespace after the colon and before the type name (and if there is such whitespace then we don't store its value, it's of no interest to us, we just want to be able to get a "reader" reference that skips over any whitespace)
+
+This feels like it's going to get repetitive very quickly and that silly mistakes could easily slip in. I don't like the continued re-assignment of the "reader" reference, I can see myself making a stupid mistake in code like that quite easily.
+
+On top of this, the code above misses a valid case - where there is whitespace *before* the colon as well as after it (eg. "name : string;").
+
+We can do better.
+    
+### Let's get functional
+
+What I'd like to do is chain the content-matching methods together. My first thought was how jQuery chains functions one after another, but LINQ might have been just as appropriate an inspiration.
+
+The way that both of these libraries work is that they have standard input / output types. In LINQ, you can get a lot of processing done based just on **IEnumerable&lt;T&gt;** references. With jQuery, you're commonly working with sets of DOM elements (it has methods like "[map](http://api.jquery.com/jquery.map/)", though, so nothing forces you to operate *only* on sets of elements).
+
+So what I need to do is to encourage my parsing functions into a standard form. Well.. that's not quite true. I like my parsing functions as they are! They're clear and succinct and their type signatures are informative ("GetIdentifier" takes a non-null reader reference and returns either a result-plus-reader-after-the-result or a no-match response; similarly MatchCharacter has a very simple but descriptive signature).
+
+What I *really* want to do is to create something generic that will wrap these parser functions and let me chain them together.
+
+Before I do this, I'm going to try to create a definition for the parser signatures that I want to wrap. (I know, I know - I've *just* said that I'm happy with my little matching functions just the way they are! But this will only be a way to guide them all together into a happy family). So this is what I've come up with:
+
+    public delegate Optional<MatchResult<T>> Parser<T>(
+      IReadStringContent reader
+    );
+
+The "GetIdentifier" method already matches this delegate perfectly. As does "MatchWhitespace". The "MatchCharacter" function doesn't, however, due to its argument that specifies *what* character it is to look for.
+
+What I'm going to do, then, is change "MatchCharacter" into a function that *creates* a **Parser** delegate. We go from:
+
+    public static Optional<MatchResult<char>> MatchCharacter(
+      IReadStringContent reader,
+      char character)
+    {
+      return (reader.Current == character)
+        ? MatchResult.New(character, reader.GetNext())
+        : null;
+    }
+
+
+to
+
+    public static Parser<char> MatchCharacter(char character)
+    {
+      return reader =>
+      {
+        return (reader.Current == character)
+          ? MatchResult.New(character, reader.GetNext())
+          : null;
+      };
+    }
+
+That was pretty painless, yes?
+
+But now that our parser functions take a consistent form, we can wrap them up in some sort of structure that allows them to be chained together. I'm going to create an extension method -
+
+    public static Optional<IReadStringContent> Then<T>(
+      this Optional<IReadStringContent> reader,
+      Parser<T> parser,
+      Action<T> report)
+    {
+      if (!reader.IsDefined)
+        return null;
+
+      var result = parser(reader.Value);
+      if (!result.IsDefined)
+        return null;
+
+      report(result.Value.Result);
+      return Optional.For(result.Value.Reader);
+    }
+
+This is an extension for **Optional&lt;IReadStringContent&gt;** that also *returns* an **Optional&lt;IReadStringContent&gt;**. So multiple calls to this extension method could be chained together. It takes a **Parser&lt;T&gt;** which dicates what sort of parsing it's going to attempt. If it succeeds then it passes the matched value out through an **Action&lt;T&gt;** and then returns a reader for the position in the content immediately after that match. If the parser fails to match the content then it returns a "Missing" optional reader.
+
+Any time that "Then" is called, if it is given a "Missing" reader then it returns a "Missing" response immediately. That means that we could string these together and when one of them fails to match, any subsequent "Then" calls will effectively be skipped over and the "Missing" value will pop out the bottom.
+
+Before I show some demonstration code, I want to introduce two variations. For values such as the property name (going back to the "name: string;" example), the name of that property is vitally important - it's a key part of the content. However, with the colon separator, we only want to know that it's present, we don't really care about it's value. So the first variation of "Then" doesn't bother with the I've-matched-this-content callback:
+
+    public static Optional<IReadStringContent> Then<T>(
+      this Optional<IReadStringContent> reader,
+      Parser<T> parser)
+    {
+      return Then(reader, parser, value => { });
+    }
+
+The second variation relates to whitespace-matching. The thing with whitespace around symbols is that, not only do we not care about the "value" of that whitespace, we don't care whether it's there or not! The space in "name: string;" is not significant. Enter "ThenOptionally":
+
+    public static Optional<IReadStringContent> ThenOptionally<T>(
+      this Optional<IReadStringContent> reader,
+      Parser<T> parser)
+    {
+      if (!reader.IsDefined)
+        return null;
+
+      return Optional.For(
+        Then(reader, parser).GetValueOrDefault(reader.Value)
+      );
+    }
+
+This will try to apply a parser to the current content (if there is any). If the parser matches content, that's great! We'll return a reader that points to the content immediately after the match. However, if the parser *doesn't* match any content, then we'll just return the same reader that we were given in the first place.
+
+This becomes less abstract if we refactor the "GetProperty" function to take advantage of these new functions -
+
+    public static Optional<MatchResult<PropertyDetails>> GetProperty(IReadStringContent reader)
+    {
+      IdentifierDetails name = null;
+      ITypeDetails type = null;
+      var readerAfterProperty = Optional.For(reader)
+        .Then(GetIdentifier, value => name = value)
+        .ThenOptionally(MatchWhitespace)
+        .Then(MatchCharacter(':'))
+        .ThenOptionally(MatchWhitespace)
+        .Then(GetTypeScriptType, value => type = value)
+        .ThenOptionally(MatchWhitespace)
+        .Then(MatchCharacter(';'));
+        
+      if (!readerAfterProperty.IsDefined)
+        return null;
+
+      return MatchResult.New(
+        new PropertyDetails(name, type),
+        readerAfterProperty.Value
+      );
+    }
+    
+Well, isn't that much nicer!
+
+Before, it looked like this method was going to run away with itself. And I said that I didn't like the fact that there seemed be a lot of "noise" required to describe the patterns "if this is matched then record the value and move on" / "if this is matched, I don't care about its value, just move the reader on" / "I don't care if this is matched or not, but if it *is* then move the reader past it".
+
+This is a lovely example of C#'s type inference - each call to "Then" or "ThenOptionally" has a generic type, but those types did not need to be explicitly specified in the code above. When "Then" is provided "GetIdentifier" as an argument, it knows that the "T" in "Then&lt;T&gt;" is an **IdentifierDetails** because the return type of "GetIdentifier" is an **Optional&lt;MatchResult&lt;IdentifierDetails&gt;&gt;**.
+
+It's also an example of.. if I've got this right.. the Monad Pattern. That concept that seems impossibly theoretical in 99% of articles you read (or maybe that's just me). Even this highly-upvoted answer on Stack Overflow by the ever-readable Eric Lipperts starts off sounding very dense and full of abstract terms: [Monad in plain English](http://stackoverflow.com/a/2704795).
+
+I don't want to get too hung up on all that, though, I just thought it was interesting to highlight the concept in use in some practical code. Plus, if I try to make myself out as some functional programming guru then someone might pick on me for writing "Then" in such a way that it requires a side effect to report the value it matches - side effects are so commonly (and fairly, imho) seen as an evil that must be minimised that it seems strange to write a function that will be used in many places that *relies* upon them. However, with C#, I think it would be complicated to come up with a structure that is passed through the "Then" calls, along with the **Optional&lt;IReadStringContent&gt;**, and since the side effects are so localised here, it's not something I'm going to lose sleep over. Maybe it will be easier if "[record types](https://github.com/dotnet/roslyn/issues/206)" get implemented in C# 7, or maybe it's just an exercise for the reader to come up with an elegant solution and let me know! :)
+
+Speaking of exercises for the reader, you might have noticed that I haven't included the source code for the **ITypeDetails** interface or the "GetTypeScriptType" function. That's because I haven't finished writing them yet! To be honest, I've been having a bit of an attention span problem so I thought I'd switch from writing code to writing a blog post for a little while. Hopefully, at some point, I'll release the source in case it's of any use to anyone else - but for now it's such work-in-progress that it's not even much use to *me* yet!
+
+### Refinements
+
+After wrapping the "GetIdentifier", "MatchCharacter", etc.. functions in "Then" calls, I felt like renaming them. In general, I prefer to have variables and properties named as nouns and functions named as verbs. However, when functions are being passed around as arguments for other functions, it blurs the borders! So, since "GetIdentifier" and "MatchWhitespace" are only ever passed into "Then" as arguments, I've switched them from being verbs into being nouns (simply "Identifer" and "Whitespace").
+
+I've also shortened the "MatchCharacter" function to just "Match". It's still a verb, but that's because it will be passed a character to match - and the **Parser** that the "Match" function returns is passed to "Then". (To make things worse, "Match" can be either a verb *or* a noun, but in this case I'm taking it to be a verb!).
+
+Now "GetPropertyDetails" looks like this:
+
+    public static Optional<MatchResult<PropertyDetails>> GetProperty(IReadStringContent reader)
+    {
+      IdentifierDetails name = null;
+      ITypeDetails type = null;
+      var readerAfterProperty = Optional.For(reader)
+        .Then(Identifier, value => name = value)
+        .ThenOptionally(Whitespace)
+        .Then(Match(':'))
+        .ThenOptionally(Whitespace)
+        .Then(TypeScriptType, value => type = value)
+        .ThenOptionally(Whitespace)
+        .Then(Match(';'));
+        
+      if (!readerAfterProperty.IsDefined)
+        return null;
+
+      return MatchResult.New(
+        new PropertyDetails(name, type),
+        readerAfterProperty.Value
+      );
+    }
+
+They're only little changes, but now the code is closer to directly expressing the intent ("match an Identifier then optionally match whitespace then match the colon separator then optionally whitespace then the type, etc..").
+
+To take another example from the work I've started - this is how I parse a TypeScript interface header:
+
+    IdentifierDetails interfaceName = null;
+    ImmutableList<GenericTypeParameterDetails> genericTypeParameters = null;
+    ImmutableList<NamedTypeDetails> baseTypes = null;
+    var readerAfterInterfaceHeader = Optional.For(reader)
+      .Then(Match("interface"))
+      .Then(Whitespace)
+      .Then(Identifier, value => interfaceName = value)
+      .ThenOptionally(Whitespace)
+      .If(Match('<')).Then(GenericTypeParameters, value => genericTypeParameters = value)
+      .ThenOptionally(Whitespace)
+      .ThenOptionally(InheritanceChain, value => baseTypes = value)
+      .ThenOptionally(Whitespace)
+      .Then(Match('{'));
+
+There are a couple of functions I haven't included the source for here ("GenericTypeParameters" and "InheritanceChain") because I really wanted this example to be used to show how easy it is to extend functionality like "Then" and "Match" for different cases. I introduced a "Match" method signature that takes a string instead of a single character -
+
+    public static Parser<string> Match(string value)
+    {
+      if (value == "")
+        throw new ArgumentException("may not be blank", nameof(value));
+
+      return reader =>
+      {
+        // Enumerate the characters in the "value" string and ensure that the reader
+        // has characters that match, moving the reader along one character each
+        // time until either every character in the string is tested or until
+        // a non-matching character is encountered from the reader
+        var numberOfMatchedCharacters = value
+          .TakeWhile(c =>
+          {
+            if (reader.Current != c)
+              return false;
+            reader = reader.GetNext();
+            return true;
+          })
+          .Count();
+        if (numberOfMatchedCharacters < value.Length)
+          return null;
+
+        return MatchResult.New(value, reader);
+      };
+    }
+
+And I introduced an "If" function, which basically says "if this Parser is found to be a match, then move past it and use this other Parser on the subsequent content - but if that first Parser did *not* match, then ignore the second one". This makes it easy to parse either of the following interface headers:
+
+    // This interface has no generic type parameters..
+    interface ISomething {
+    
+    // .. but this one does
+    interface ISomethingElse<TKey, TValue> {
+
+The "If" function allows us to say "if this interface has a pointy bracket that indicates some generic type params then parse them, otherwise don't bother trying". And it *could* be implemented thusly:
+
+    public static Optional<IReadStringContent> If<TCondition, TResult>(
+      this Optional<IReadStringContent> reader,
+      Parser<TCondition> condition,
+      Parser<TResult> parser,
+      Action<TResult> report)
+    {
+      if (!reader.IsDefined)
+        return null;
+
+      var readerAfterCondition = condition(reader.Value);
+      if (!readerAfterCondition.IsDefined)
+        return reader;
+
+      return Then(Optional.For(readerAfterCondition.Value.Reader), parser, report);
+    }
+    
+However, that function takes three arguments in one continous list: 1. the condition, 2. the parser-if-condition-is-met, 3. callback-if-condition-is-met-and-then-subsequent-parser-matches-content. So it would be called like:
+    
+    .If(Match('<'), GenericTypeParameters, value => genericTypeParameters = value)
+
+which isn't terrible.. but I think it's even better to have "If" return an interim type (a "**ConditionalParser&lt;T&gt;**") that has its own "Then" function that is only called if the condition parser matches content - ie.
+
+    // Using C# 6 "expression-bodied member" syntax..
+    public static ConditionalParser<T> If<T>(
+      this Optional<IReadStringContent> reader,
+      Parser<T> parser) => new ConditionalParser<T>(reader, parser);
+
+    public sealed class ConditionalParser<TCondition>
+    {
+      private readonly Optional<IReadStringContent> _reader;
+      private readonly Parser<TCondition> _condition;
+      public ConditionalParser(
+        Optional<IReadStringContent> reader,
+        Parser<TCondition> condition)
+      {
+        _reader = reader;
+        _condition = condition;
+      }
+
+      public Optional<IReadStringContent> Then<T>(Parser<T> parser, Action<T> report)
+      {
+        if (!_reader.IsDefined || !_reader.Then(_condition).IsDefined)
+          return _reader;
+
+        return _reader.Then(parser, report);
+      } 
+    }
+
+That way, the resulting code is just a little closer to the original intent. Instead of
+
+    .If(Match('<'), GenericTypeParameters, value => genericTypeParameters = value)
+
+we can use
+
+    .If(Match('<')).Then(GenericTypeParameters, value => genericTypeParameters = value)
+
+And because the **ConditionalParser**'s "Then" function returns an **Optional&lt;IReadStringContent&gt;** we can go back to chaining more "Then" calls right on to it (as I do in the "InterfaceHeader" example above).
+
+### In conclusion..
+
+I really like how the techniques I've talked about work together and how combining these small functions enables complex forms to be described while still keeping things manageable. Having the complexity grow at a nice linear rate, rather than multiplying out every time something new needs to be considered, is very gratifying. Not to mention that having these small and simple functions also makes automated testing a lot easier.
+
+All of the functions shown are pure (although some technically have side effects, these effects are only 
+actioned through lambdas that are passed to the functions as arguments) and nothing shares state, which makes the code very easy to reason about.
+
+And it's nice to be able to see my own coding style evolving over time. It's an often-heard cliché that you'll hate your own code from six months ago, but lately I feel like I'm looking back to code from a couple of years ago and being largely content with it.. there's always things I find that I'd do slightly differently now, but rarely anything too egregious (I had to fix up some code I wrote more than five years ago recently, now *that* was an unpleasant surprise!) so it's gratifying to observe myself changing (in positive ways, I hope!).
+
+Maybe now's a good time to give F# another proper go..
