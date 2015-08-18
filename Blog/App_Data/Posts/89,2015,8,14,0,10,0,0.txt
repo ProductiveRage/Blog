@@ -1,0 +1,433 @@
+## Hassle-free immutable type updates in C#
+
+Earlier this week, I was talking about parsing TypeScript definitions in an inspired-by-function-programming manner. Like this:
+
+    public static Optional<MatchResult<PropertyDetails>> Property(IReadStringContent reader)
+    {
+      IdentifierDetails name = null;
+      ITypeDetails type = null;
+      var readerAfterProperty = Optional.For(reader)
+        .Then(Identifier, value => name = value)
+        .ThenOptionally(Whitespace)
+        .Then(Match(':'))
+        .ThenOptionally(Whitespace)
+        .Then(TypeScriptType, value => type = value)
+        .ThenOptionally(Whitespace)
+        .Then(Match(';'));
+        
+      if (!readerAfterProperty.IsDefined)
+        return null;
+
+      return MatchResult.New(
+        new PropertyDetails(name, type),
+        readerAfterProperty.Value
+      );
+    }
+
+"Identifier", "Whitespace" and "TypeScriptType" are functions that match the following delegate:
+
+    public delegate Optional<MatchResult<T>> Parser<T>(
+      IReadStringContent reader
+    );
+
+.. while "Match" is a function that returns a **Parser&lt;char&gt;**.
+
+The **MatchResult** class looks like this:
+
+    public sealed class MatchResult<T>
+    {
+      public MatchResult(T result, IReadStringContent reader)
+      {
+        Result = result;
+        Reader = reader;
+      }
+      public T Result { get; }
+      public IReadStringContent Reader { get; }
+    }
+
+    /// <summary>
+    /// This non-generic static class is just to expose a helper method that takes advantage
+    /// of C#'s type inference to allow you to say "MatchResult.New(value, reader)" rather than
+    /// having to write out the type of the value in "new MatchResult<string>(value, reader)"
+    /// </summary>
+    public static class MatchResult
+    {
+      /// <summary>
+      /// Convenience method to utilise C# type inherence 
+      /// </summary>
+      public static MatchResult<T> New<T>(T value, IReadStringContent reader)
+      {
+        if (value == null)
+          throw new ArgumentNullException(nameof(value));
+        if (reader == null)
+          throw new ArgumentNullException(nameof(reader));
+
+        return new MatchResult<T>(value, reader);
+      }
+    }
+
+.. and **Optional** is basically a way to identify a type as being maybe-null (the convention then being that any non-**Optional** type should never be null).
+
+Feel free to fresh your memory at [Parsing TypeScript definitions](Post88)!
+
+One thing that I thought was very un-functional-like (a very precise term! :) was the way that the "name" and "type" values were updated via callbacks from the "Then" methods. This mechanism felt wrong for two reasons; the repeat assignment to the references (setting them to null and then setting them again to something else) and the fact that the assignments were effectively done as side effects of the work of the "Then" function.
+
+So I thought I'd have a look into some alternatives and see if I could whip up something better.
+
+### The verbose approach
+
+The current approach chains together functions that take and return **Optional&lt;IReadStringContent&gt;** instances. If content is encountered that does not match the specified **Parser** then a "Missing" value will be returned from the "Then" call. If a "Then" call receives a "Missing" value then it passes that straight out. So, any time that a match is missed, all subsequent calls pass the "Missing" value straight throught.
+
+This is why the side effect callbacks are required to pass out the values, because each "Then" call only returns the next position for the reader (or "Missing" if content did not meet requirements).
+
+To change this, the "Then" function will need to return additional information. Conveniently, there is already a structure to do this - the **MatchResult&lt;T&gt;**. As long as we had one result type that we wanted to thread through the "Then" calls then we could write an alternate version of "Then" -
+
+    public static Optional<MatchResult<TResult>> Then<TResult, TValue>(
+      this Optional<MatchResult<TResult>> resultSoFar,
+      Parser<TValue> parser,
+      Func<TResult, TValue, TResult> updater)
+    {
+      if (!resultSoFar.IsDefined)
+        return null;
+
+      var result = parser(resultSoFar.Value.Reader);
+      if (!result.IsDefined)
+        return null;
+
+      return MatchResult.New(
+        updater(resultSoFar.Value.Result, result.Value.Result),
+        result.Value.Reader
+      );
+    }
+
+This takes an **Optional&lt;MatchResult&lt;T&gt;&gt;** and tries to match content in the reader inside that **MatchResult** using a **Parser** (just like before) - if it successfully matches the content then it uses an "updater" which takes the previous values from the **MatchResult** and the matched value from the reader, and returns a new result that combines the two. It then returns a **MatchResult** that combines this new value with the reader in a position after the matched content. (Assuming the content met the **Parser** requirements.. otherwise it would return null).
+
+This all sounds very abstract, so let's make it concrete. Continuing with the parsing-a-TypeScript-property (such as "name: string;") example, let's declare an interim type -
+
+    public sealed class PartialPropertyDetails
+    {
+      public PartialPropertyDetails(
+        Optional<IdentifierDetails> name,
+        Optional<ITypeDetails> type)
+      {
+        Name = name;
+        Type = type;
+      }
+      public Optional<IdentifierDetails> Name { get; }
+      public Optional<ITypeDetails> Type { get; }
+    }
+
+This has **Optional** values because we are going to start with them being null (since we don't have any real values until we've done the parsing). This is the reason that I've introduced this interm type, rather than using the final **PropertyDetails** type - that type is very similar but it has non-**Optional** properties because it doesn't make sense for a correctly-parsed TypeScript property to be absent either a name or a type.
+
+Now, the parsing method could be rewritten into this:
+
+    public static Optional<MatchResult<PropertyDetails>> Property(IReadStringContent reader)
+    {
+      var result = Optional.For(MatchResult.New(
+          new PartialPropertyDetails(null, null),
+          reader
+        ))
+        .Then(Identifier, (value, name) => new PartialPropertyDetails(name, value.Type))
+        .ThenOptionally(Whitespace)
+        .Then(Match(':'))
+        .ThenOptionally(Whitespace)
+        .Then(TypeScriptType, (value, type) => new PartialPropertyDetails(value.Name, type))
+        .ThenOptionally(Whitespace)
+        .Then(Match(';'));
+
+      if (!result.IsDefined)
+        return null;
+
+      return MatchResult.New(
+        new PropertyDetails(result.Value.Result.Name, result.Value.Result.Type),
+        result.Value.Reader
+      );
+    }
+
+Ta-da! No reassignments or reliance upon side effects!
+
+And we could make this a bit cleaner by tweaking **PartialPropertyDetails** -
+
+    public sealed class PartialPropertyDetails
+    {
+      public static PartialPropertyDetails Empty { get; }
+        = new PartialPropertyDetails(null, null);
+        
+      private PartialPropertyDetails(
+        Optional<IdentifierDetails> name,
+        Optional<ITypeDetails> type)
+      {
+        Name = name;
+        Type = type;
+      }
+      
+      public Optional<IdentifierDetails> Name { get; }
+      public Optional<ITypeDetails> Type { get; }
+      
+      public PartialPropertyDetails WithName(IdentifierDetails value)
+        => new PartialPropertyDetails(value, Type);
+      public PartialPropertyDetails WithType(ITypeDetails value)
+        => new PartialPropertyDetails(Name, value);
+    }
+
+and then changing the parsing code into this:
+
+    public static Optional<MatchResult<PropertyDetails>> Property(IReadStringContent reader)
+    {
+      var result = Optional.For(MatchResult.New(
+          PartialPropertyDetails.Empty,
+          reader
+        ))
+        .Then(Identifier, (value, name) => value.WithName(name))
+        .ThenOptionally(Whitespace)
+        .Then(Match(':'))
+        .ThenOptionally(Whitespace)
+        .Then(TypeScriptType, (value, type) => value.WithType(name))
+        .ThenOptionally(Whitespace)
+        .Then(Match(';'));
+
+      if (!result.IsDefined)
+        return null;
+
+      return MatchResult.New(
+        new PropertyDetails(result.Value.Result.Name, result.Value.Result.Type),
+        result.Value.Reader
+      );
+    }
+
+This makes the parsing code look nicer, at the cost of having to write more boilerplate code for the interim type.
+
+What if we could use anonymous types and some sort of magic for performing the copy-and-update actions..
+
+### One way to write less code
+
+The problem with the **PartialPropertyDetails** is not only that it's quite a lot of code to write out (and that was only for two properties, it will quickly get bigger for more complicated structures) but also the fact that it's only useful in the context of the "Property" function. So this non-neligible chunk of code is not reusable and it clutters up the scope of whatever class or namespace has to contain it.
+
+Anonymous types sound ideal, because they would just let us start writing objects to populate - eg.
+
+    var result = Optional.For(MatchResult.New(
+        new
+        {
+          Name = (IdentifierDetails)null,
+          Type = (ITypeDetails)null,
+        },
+        reader
+      ))
+      .Then(Identifier, (value, name) => new { Name = name, Type = value.Type })
+      .ThenOptionally(Whitespace)
+      .Then(Match(':'))
+      .ThenOptionally(Whitespace)
+      .Then(TypeScriptType, (value, type) => new { Name = value.Name, Type = type })
+      .ThenOptionally(Whitespace)
+      .Then(Match(';'));
+
+They're immutable types (so nothing is edited in-place, which is just as bad as editing via side effects) and, despite looking like they're being defined dynamically, the C# compiler defines real classes for them behind the scenes, so the "Name" property will always be of type **IdentifierDetails** and "Type" will always be an **ITypeDetails**.
+
+The compiler creates new classes for every distinct combination of properties (considering both property name and property type). This means that if you declare two anonymous objects that have the same properties then they will be represented by the same class. This is what allows the above code to declare "updater" implementations such as
+
+    (value, name) => new { Name = name, Type = value.Type }
+    
+The "value" in the lambda will be an instance of an anonymous type and the returned value will be an instance of that same anonymous class because it specifies the exact same property names and types. This is key, because the "updater" is a delegate with the signature
+
+    Func<TResult, TValue, TResult> updater
+    
+(and so the returned value must be of the same type as the first value that it was passed).
+
+This is not actually a bad solution, I don't think. There was no need to create a **PartialPropertyDetails** class and we have full type safety through those anonymous types. The only (admittedly minor) thing is that if the data becomes more complex then there will be more and more properties and so every instantiation of the anonymous types will get longer and longer. It's a pity that there's no way to create "With{Whatever}" functions for the anonymous types.
+
+### A minor side-track
+
+Before I go any further, there's another extension method I want to introduce. I just think that the way that these parser chains are initiated feels a bit clumsy -
+
+    var result = Optional.For(MatchResult.New(
+        new
+        {
+          Name = (IdentifierDetails)null,
+          Type = (ITypeDetails)null,
+        },
+        reader
+      ))
+      .Then(Identifier, (value, name) => new { Name = name, Type = value.Type })
+      // .. the rest of the parsing code continues here..
+      
+This could be neatened right up with an extension method such as this:
+
+    public static Optional<MatchResult<T>> StartMatching<T>(
+      this IReadStringContent reader,
+      T value)
+    {
+      return MatchResult.New(value, reader);
+    }
+  
+This uses C#'s type inference to ensure that you don't have to declare the type of **T** (which is handy if we're using an anonymous type because we have no idea what its type name might be!) and it relies on the fact that the **Optional** struct has an implicit operator that allows a value **T** to be returned as an **Optional&lt;T&gt;**; it will wrap the value up automatically. (For more details on the **Optional** type, read what I wrote [last time](Post88)).
+
+Now, the parsing code that we have look like this:
+
+    var resultWithAnonymousType = reader
+      .StartMatching(new
+      {
+        Name = (IdentifierDetails)null,
+        Type = (ITypeDetails)null
+      })
+      .Then(Identifier, (value, name) => new { Name = name, Type = value.Type })
+      .ThenOptionally(Whitespace)
+      .Then(Match(':'))
+      .ThenOptionally(Whitespace)
+      .Then(TypeScriptType, (value, type) => new { Name = value.Name, Type = type })
+      .ThenOptionally(Whitespace)
+      .Then(Match(';'));
+
+Only a minor improvement but another step towards making the code match the intent (which was one of the themes in my last post).
+
+### A cleverer (but less safe) alternative
+
+Let's try turning the volume up to "silly" for a bit. (Fair warning: "clever" here refers more to "clever for the sake of it" than "intelligent).
+
+A convenient property of the anonymous type classes is that they each have a constructor whose arguments directly match the properties on it - this is an artifact of the way that they're translated into regular classes by the compiler. You don't see this in code anywhere since the names of these mysterious classes is kept secret and you can't directly call a constructor without knowing the name of the class to call. But they are there, nonetheless. And there is one way to call them.. REFLECTION!
+
+We could use reflection to create something like the "With{Whatever}" methods - that way, we could go back to only having to specify a single property-to-update in each "Then" call. The most obvious way that this could be achieved would be by specifying the name of the property-to-update as a string. But this is particularly dirty and prone to breaking if any refactoring is done (such as a change to a property name in the anonymous type). There is one way to mitigate this, though.. MORE REFLECTION!
+
+Let me code-first, explain-later:
+
+    public static Optional<MatchResult<TResult>> Then<TResult, TValue>(
+      this Optional<MatchResult<TResult>> resultSoFar,
+      Parser<TValue> parser,
+      Expression<Func<TResult, TValue>> propertyRetriever)
+    {
+      if (!resultSoFar.IsDefined)
+        return null;
+
+      var result = parser(resultSoFar.Value.Reader);
+      if (!result.IsDefined)
+        return null;
+
+      var memberAccessExpression = propertyRetriever.Body as MemberExpression;
+      if (memberAccessExpression == null)
+      {
+        throw new ArgumentException(
+          "must be a MemberAccess",
+          nameof(propertyRetriever)
+        );
+      }
+
+      var property = memberAccessExpression.Member as PropertyInfo;
+      if ((property == null)
+      || !property.CanRead
+      || property.GetIndexParameters().Any())
+      {
+        throw new ArgumentException(
+          "must be a MemberAccess that targets a readable, non-indexed property",
+          nameof(propertyRetriever)
+        );
+      }
+
+      foreach (var constructor in typeof(TResult).GetConstructors())
+      {
+        var valuesForConstructor = new List<object>();
+        var encounteredProblemWithConstructor = false;
+        foreach (var argument in constructor.GetParameters())
+        {
+          if (argument.Name == property.Name)
+          {
+            if (!argument.ParameterType.IsAssignableFrom(property.PropertyType))
+            {
+              encounteredProblemWithConstructor = false;
+              break;
+            }
+            valuesForConstructor.Add(result.Value.Result);
+            continue;
+          }
+          var propertyForConstructorArgument = typeof(TResult)
+            .GetProperties()
+            .FirstOrDefault(p =>
+              (p.Name == argument.Name) &&
+              p.CanRead && !property.GetIndexParameters().Any()
+            );
+          if (propertyForConstructorArgument == null)
+          {
+            encounteredProblemWithConstructor = false;
+            break;
+          }
+          var propertyGetter = propertyForConstructorArgument.GetGetMethod();
+          valuesForConstructor.Add(
+            propertyGetter.Invoke(
+              propertyGetter.IsStatic ? default(TResult) : resultSoFar.Value.Result,
+              new object[0]
+            )
+          );
+        }
+        if (encounteredProblemWithConstructor)
+          continue;
+
+        return MatchResult.New(
+          (TResult)constructor.Invoke(valuesForConstructor.ToArray()),
+          result.Value.Reader
+        );
+      }
+      throw new ArgumentException(
+        $"Unable to locate a constructor that can be used to update {property.Name}"
+      );
+    }
+
+This allows the parsing code to be rewritten (again!) into:
+
+    var result = reader
+      .StartMatching(new
+      {
+        Name = (IdentifierDetails)null,
+        Type = (ITypeDetails)null
+      })
+      .Then(Identifier, x => x.Name)
+      .ThenOptionally(Whitespace)
+      .Then(Match(':'))
+      .ThenOptionally(Whitespace)
+      .Then(TypeScriptType, x => x.Type)
+      .ThenOptionally(Whitespace)
+      .Then(Match(';'));
+
+Well now. Isn't that easy on the eye! Ok.. maybe beauty is in the eye of the beholder, so let me hedge my bets and say: Well now. Isn't that succint!
+
+Those lambdas ("x => x.Name" and "x => x.Type") satisfy the form:
+
+    Expression<Func<TResult, TValue>>
+    
+This means that they are expressions which must take a **TResult** and return a **TValue**. So in the call
+
+    .Then(Identifier, x => x.Name)
+    
+.. the Expression describes how to take the anonymous type that we're threading through the "Then" calls and extract an **IdentifierDetails** instance from it (the type of this is dictated by the **TValue** type parameter on the "Then" method, which is inferred from the "Identifier" call - which returns an **Optional&lt;IdentifierDetails&gt;**).
+
+This is the difference between an **Expression** and a **Func** - the **Func** is executable and tells us how to do something (such as "take the 'Name' property from the 'x' reference") while the **Expression** tells us how the **Func** is constructed.
+
+This information allows the new version of "Then" to not only retrieve the specified property *but also to be aware of the name of that property*. And this is what allows the code to say "I've got a new value for one property now, I'm going to try to find a constructor that I can call which has an argument matching this property name (so I can satisfy that argument with this new value) and which has other arguments that can all be satisfied by other properties on the type".
+
+Anonymous types boil down to simple classes, a little bit like this:
+
+    private sealed CRAZY_AUTO_GEN_NAME<T1, T2>
+    {
+      public CRAZY_AUTO_GEN_NAME(T1 Name, T2 Type)
+      {
+        this.Name = Name;
+        this.Type = Type;
+      }
+      public T1 Name { get; }
+      public T2 Type { get; }
+    }
+    
+Note: I said earlier that the compiler generates distinct classes for anonymous types that have unique combinations of property names and types. That's a bit of a lie, it only has to vary them based upon the property names since it can use generic type parameters for the types of those properties. I confirmed this by using [ildasm](https://msdn.microsoft.com/en-us/library/aa309387(v=vs.71).aspx) on my binaries, which also showed that the name of the auto-generated class was **&lt;&gt;f\_AnonymousType1**.. it's not *really* called "CRAZY\_AUTO\_GEN\_NAME" :)
+
+So we can take the Expression "x => x.Name" and extract the fact the the "Name" property is being targeted. This allows us to match the constructor that takes a "Name" argument and a "Type" argument and to call that constructor - passing the new value into the "Name" argument and passing the existing "Type" property value into the "Type" argument.
+
+This has the benefit that everything would still work if one of the properties was renamed in a refactor (since if the "Name" property was renamed to "SomethingElse" then Visual Studio would update the lambda "x => x.Name" to "x => x.SomethingElse", just as it would for any other reference to that "Name" property).
+
+The major downside is that the "Then" function requires that the Expression relate to a simple property retrieval, failing at runtime if this is not the case.\* Since an Expression could be almost anything then this could be a problem. For example, the following is valid code and would compile -
+
+    .Then(Identifier, x => null)
+
+.. but it would fail at runtime. This is what I mean by it not being safe.
+
+But I've got to admit, this approach has a certain charm about it! Maybe it's not an appropriate mechanism for critical life-or-death production code, but for building a little parser for a personal project.. maybe I could convince myself it's worth it!
+
+(Credit where it's due, I think I first saw this specify-a-property-with-an-Expression technique some years ago in [AutoMapper](http://automapper.org/), which is an example of code that *is* often used in production despite not offering compile-time guarantees about mappings - but has such convenience that the need to write tests around the mappings is outweighed by the benefits).
+
+\* *(Other people might also point out that reflection is expensive and that* that *is a major downside - however, the code that is used here is fairly easy to wrap up in LINQ Expressions that are dynamically compiled so that repeated executions of hot paths are as fast as hand-written code.. and if the paths aren't hot and executed many times, what's the problem with the reflection being slower??)*
