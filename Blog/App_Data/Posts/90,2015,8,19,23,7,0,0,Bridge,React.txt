@@ -1,0 +1,378 @@
+## Strongly-typed React (with Bridge.net)
+
+A few weeks ago, I wrote about using [React with Bridge.net](Post87). I described that I'd only written the bare minimum of bindings required to get my samples working - so, while I had a function for React.DOM.div -
+
+    [Name("div")]
+    public extern static ReactElement Div(
+      HTMLAttributes properties,
+      params ReactElementOrText[] children
+    );
+
+The **HTMLAttributes** class I had written really was the *bare* minimum:
+
+    [Ignore]
+    [ObjectLiteral]
+    public class HTMLAttributes
+    {
+      public string className;
+    }
+
+It's time to revisit this and build up my bindings library!
+
+### A starting point
+
+An obvious resource to work from initially is the "[DefinitelyTyped](https://github.com/borisyankov/DefinitelyTyped/blob/master/react/react.d.ts)" bindings that allow you to use React from TypeScript. But I'd identified a pattern that I didn't like with them in my earlier post - the type system isn't being used to as full effect as it could be. For example, in the declaration of "input" elements. Let me explain (and please bear with me, I need to go through a few steps to get to the point)..
+
+The TypeScript bindings describe a function for creating input elements:
+
+    React.DOM.input(props: HTMLAttributes, ...children: ReactNode[]): DOMElement
+
+For any non-TypeScripters, this is a function that takes an argument named "props" that is of type **HTMLAttributes**, and then 0, 1, .. n arguments of type **ReactNode** that are wrapped up into an array (the same principle as "params" arguments in C#). It returns a **DOMElement** instance.
+
+**HTMLAttributes** has 115 of its own properties (such as "className", "disabled" and "itemScope" - to take three at random) and extends **DOMAttributes**, which has 34 more properties (such as "onChange" and "onDragStart").
+
+The "onChange" property is a **FormEventHandler**, which is derived from **EventHandler&lt;FormEvent&gt;**, where **EventHandler&lt;E&gt;** is a delegate which has a single "event" argument of type "E" which returns no value. It's a callback, in other words.
+
+This looks promising and is, on the whole, a good use of TypeScript's generics system.
+
+However, I don't think it uses this system *enough*. The **FormEvent** (that the "onChange" property passes in the callback) is a specialisation of a **SyntheticEvent** type:
+
+    interface FormEvent extends SyntheticEvent { }
+
+    interface SyntheticEvent {
+      bubbles: boolean;
+      cancelable: boolean;
+      currentTarget: EventTarget;
+      defaultPrevented: boolean;
+      eventPhase: number;
+      isTrusted: boolean;
+      nativeEvent: Event;
+      preventDefault(): void;
+      stopPropagation(): void;
+      target: EventTarget;
+      timeStamp: Date;
+      type: string;
+    }
+
+*(The **EventTarget**, which is what the "target" property is an instance of, is a DOM concept and is not a type defined by the React bindings, it just means that it is one of the DOM elements that are able to raise events).*
+
+The problem I have is that if we write code such as
+
+    React.DOM.input({
+      value: "hi"
+      onChange: e => { alert(e.target.value); }
+    })
+      
+Then we'll get a TypeScript compile error because "e.target" is only known to be of type **EventTarget**, it is *not* known to be an input element and so it is *not* known to have a "value" property. But we're specifying this "onChange" property *while declaring an input element*.. the type system *should* know that the "e.target" reference will be an input!
+
+In fact, in TypeScript, we actually have to skirt around the type system to make it work:
+
+    // "<any>" means cast the "e.target" reference to the magic type "any", which
+    // is like "dynamic" in C# - you can specify any property or method and the
+    // compiler will assume you know what you're doing and allow it (resulting
+    // in a runtime exception if you get it wrong)
+    React.DOM.input({
+      value: "hi"
+      onChange: e => { alert((<any>e.target).value); }
+    })
+
+In my React bindings for [Bridge](http://bridge.net/) I improved this by defining an **InputAttributes** type:
+
+    [Ignore]
+    [ObjectLiteral]
+    public class InputAttributes : HTMLAttributes
+    {
+      public Action<FormEvent<InputEventTarget>> onChange;
+      public string value;
+    }
+
+And having a generic **FormEvent&lt;T&gt;** which inherits from **FormEvent** -
+
+    [Ignore]
+    public class FormEvent<T> : FormEvent where T : EventTarget
+    {
+      public new T target;
+    }
+
+This means that the "target" property can be typed more specifically. And so, when you're writing this sort of code in C# with Bridge.net, you *can* write things like:
+
+    // No nasty casts required! The type system knows that "e.target" is an
+    // "InputEventTarget" and therefore knows that it has a "value" property
+    // that is a string.
+    DOM.Input(new InputAttributes
+    {
+      value = "hi",
+      onChange = e => Global.Alert(e.target.value)
+    })
+
+This is great stuff! And I'm not changing how React works in any way, I'm just changing how we interpret the data that React is communicating; the event reference in the input's "onChange" callback has always had a "target" which had a "value" property, it's just that the TypeScript bindings don't tell us this through the type system.
+
+So that's all good.. but it did require me to write more code for the bindings. The **InputEventTarget** class, for example, is one I had to define:
+
+    [Ignore]
+    public class InputEventTarget : EventTarget
+    {
+      public string value;
+    }
+
+And I've already mentioned having to define the **FormEvent&lt;T&gt;** and **InputAttributes** classes..
+
+What I'm saying is that these improvements do not come for free, they required some analysis and some further effort putting into the bindings (which is not to take anything away from DefinitelyTyped, by the way - I'm a big fan of the work in that repository and I'm very glad that it's available, both for TypeScript / React work I've done in the past *and* to use as a starting point for Bridge bindings).
+
+Seeing how these more focussed / specific classes can improve things, I come to my second problem with the TypeScript bindings..
+
+### Why must the HTMLAttributes have almost 150 properties??
+
+The place that I wanted to start in extending my (very minimal) bindings was in fleshing out the **HTMLAttributes** class. Considering that it had only a single property ("className") so far, and that it would be used by so many element types, that seemed like a reasonable plan. But looking at the TypeScript binding, I felt like I was drowning in properties.. I realised that I wasn't familiar with *everything* that appeared in html5, but I was astonished by how many options there were - and convinced that they couldn't *all* be applicable to *all* elements types. So I picked one at random, of those that stood out as being completely unfamiliar to me: "download".
+
+w3schools has this to say about the [HTML &lt;a&gt; download Attribute](http://www.w3schools.com/tags/att_a_download.asp):
+
+> The download attribute is new for the &lt;a&gt; tag in HTML5.
+
+and
+
+> The download attribute specifies that the target will be downloaded when a user clicks on the hyperlink.
+> This attribute is only used if the href attribute is set.
+> The value of the attribute will be the name of the downloaded file. There are no restrictions on allowed values, and the browser will automatically detect the correct file extension and add it to the file (.img, .pdf, .txt, .html, etc.).
+
+So it appears that this attribute is only applicable to anchor tags. Therefore, it would make more sense to *not* have a "React.DOM.a" function such as:
+
+    [Name("a")]
+    public extern static ReactElement A(
+      HTMLAttributes properties,
+      params ReactElementOrText[] children
+    );
+
+and, like the "input" function, to be more specific and create a new "attributes" type. So the function would be better as:
+
+    [Name("a")]
+    public extern static ReactElement A(
+      AnchorAttributes properties,
+      params ReactElementOrText[] children
+    );
+
+and the new type would be something like:
+
+    [Ignore]
+    [ObjectLiteral]
+    public class AnchorAttributes : HTMLAttributes
+    {
+      public string download;
+    }
+
+This would allow the "download" property to be pulled out of **HTMLAttributes** (so that it couldn't be a applied to a "div", for example, where it has no meaning).
+
+So one down! Many, many more to go..
+
+Some properties are applicable to multiple element types, but these elements may not have anything else in common. As such, I think it would be more sensible to duplicate some properties in multiple attributes classes, rather than trying to come up with a complicated inheritance tree that tries to avoid any repeating of properties, at the cost of the complexities that inheritance can bring. For example, "href" is a valid attribute for both "a" and "link" tags, but these elements do not otherwise have much in common - so it might be better to have completely distinct classes
+
+    [Ignore]
+    [ObjectLiteral]
+    public class AnchorAttributes : HTMLAttributes
+    {
+      public string href;
+      public string download;
+      // .. and other attributes specified to anchor tags
+    }
+
+    [Ignore]
+    [ObjectLiteral]
+    public class LinkAttributes : HTMLAttributes
+    {
+      public string href;
+      // .. and other attributes specified to link tags
+    }
+
+than to try to create a base class
+
+    [Ignore]
+    [ObjectLiteral]
+    public abstract class HasHrefAttribute : HTMLAttributes
+    {
+      public string href;
+    }
+
+which **AnchorAttributes** and **LinkAttributes** could be derived from. While it might *appear* initially to make sense, I imagine that it will all come unstuck quite quickly and you'll end up finding yourself wanting to inherit from multiple base classes and all sorts of things that C# doesn't like. I think this is a KISS over DRY scenario (I'd rather repeat "public string href;" in a few distinct places than try to tie the classes together in some convoluted manner).
+
+### More type shenanigans
+
+So, with more thought and planning, I think a reduced **HTMLAttributes** class could be written *and* a range of attribute classes produced that make the type system work for us. I should probably admit that I haven't actually *done* any of that further thought or planning yet! I feel like I've spent this month coming up with grandiose schemes and then writing about doing them rather than actually getting them done! :D
+
+Anyway, enough about my shortcomings, there's *another* issue I found while looking into this "download" attribute. Thankfully, it's a minor problem that can easily be solved with the way that bindings may be written for Bridge..
+
+There was an issue on React's GitHub repo: "[Improve handling of download attribute](https://github.com/facebook/react/issues/1337)" which says the following:
+
+> Currently, the "download" attribute is handled as a normal attribute. It would be nice if it could be treated as a boolean value attribute when its value is a boolean. ... For example,
+>
+> a({href: 'thing', download: true}, 'clickme'); // =&gt; &lt;a href="thing" download&gt;clickme&lt;/a&gt;
+>
+> a({href: 'thing', download: 'File.pdf'}, 'clickme'); // =&gt; &lt;a href="thing" download="File.pdf"&gt;
+
+This indicates that 
+
+    [Ignore]
+    [ObjectLiteral]
+    public class AnchorAttributes : HTMLAttributes
+    {
+      public string href;
+      public string download;
+      // .. and other attributes specified to anchor tags
+    }
+    
+is not good enough and that "download" needs to be allowed to be a string *or* a boolean.
+
+This can be worked around by introducing a new class
+    
+    [Ignore]
+    public sealed class StringOrBoolean
+    {
+      private StringOrBoolean() { }
+      
+      public static implicit operator StringOrBoolean(float value)
+        => new StringOrBoolean();
+      
+      public static implicit operator StringOrBoolean(string value)
+        => new StringOrBoolean();
+    }
+
+This looks a bit strange at first glance. But it is *only* be used to describe a way to pass information in a binding, that's why it's got the "Ignore" attribute on it - that means that this class will *not* be translated into any JavaScript by Bridge, it exists *solely* to tell the type system how one thing talks to another (my [React with Bridge.net](Post87) post talked a little bit about this attribute, and others similar to it, that are used in creating Bridge bindings - so if you want to know more, that's a good place to start).
+
+This explains why the "value" argument used in either of the implicit operators is thrown away - it's because it's never used by the binding code! It is *only* so that we can use this type in the attribute class:
+
+    [Ignore]
+    [ObjectLiteral]
+    public class AnchorAttributes : HTMLAttributes
+    {
+      public string href;
+      public StringOrBoolean download;
+      // .. and other attributes specified to anchor tags
+    }
+    
+And this allows to then write code like
+
+    DOM.a(new AnchorAttributes
+    {
+      href: "/instructions.pdf",
+      download: "My Site's Instructions.pdf"
+    })
+    
+*or*
+
+    DOM.a(new AnchorAttributes
+    {
+      href: "/instructions.pdf",
+      download: true
+    })
+    
+We *only* require this class to exist so that we can tell the type system that React is cool with us giving a string value for "download" or a boolean value.
+
+The "ObjectLiteral" attribute on these classes means that the code
+
+    DOM.a(new AnchorAttributes
+    {
+      href: "/instructions.pdf",
+      download: true
+    })
+
+is not even translated into an instantiation of a class called "**AnchorAttributes**", it is instead translated into a simple object literal -
+
+    // It is NOT translated into this
+    React.DOM.a(
+      Bridge.merge(
+        new Bridge.React.AnchorAttributes(),
+        { name: "/instructions.pdf", download: true }
+      )
+    )
+    
+    // It IS just translated into this
+    React.DOM.a({ name: "/instructions.pdf", download: true })
+    
+Again, this illustrates why the "value" argument was thrown away in the **StringOrBoolean** implicit operator calls - because those calls do not exist in the translated JavaScript.
+    
+### A nice bonus
+
+Another thing that I like about the "ObjectLiteral" attribute that I've used on these **{Whatever}Attributes** classes is that the translated code only includes the properties that have been explicitly set.
+
+This means that, unlike in the TypeScript definitions, we don't have to declare all value types as nullable. If, for example, we have an attributes class for table cells - like:
+
+    [Ignore]
+    [ObjectLiteral]
+    public class TableCell : HTMLAttributes
+    {
+      public int colSpan;
+      public int rowSpan;
+    }
+
+and we have C# code like this:
+
+    DOM.td(new TableCellAttributes { colSpan = 2 }, "Hello!")
+    
+Then the resulting JavaScript is simply:
+
+    React.DOM.td({ colSpan = 2 }, "Hello!")
+
+Note that the unspecified "rowSpan" property does *not* appear in the JavaScript.
+
+If we *want* it to appear, then we can specify a value in the C# code -
+
+    DOM.td(new TableCellAttributes { colSpan = 2, rowSpan = 1 }, "Hello!")
+
+That will be translated as you would expect:
+
+    React.DOM.td({ colSpan = 2, rowSpan = 1 }, "Hello!")
+    
+This has *two* benefits, actually, because not only do we not have to mark all of the properties as nullable (while that wouldn't be the end of the world, it's nicer - I think - to have the attribute classes have properties that match the html values as closely as possible and using simple value types does so) but it also keeps the generatedd JavaScript succint. Imagine the alternative, where *every* property was included in the JavaScript.. every time a div element was declared it would have 150 properties listed along with it. The JavaScript code would get huge, very quickly!*
+
+\* *(Ok, ok, it shouldn't be 150 properties for every div since half the point of this post is that it will be much better to create attribute classes that are as specific as possible - but there would still be a lot of properties that appear in element initialisations in the JavaScript which were not present in the C# code, it's much better only having the explicitly-specified values wind up in the translated output).*
+    
+#### A change in Bridge 1.8
+
+I was part way through writing about how pleased I was that unspecified properties in an [ObjectLiteral]-decorated class do not appear in the generated JavaScript when I decided to upgrade to Bridge 1.8 (which was just released two days ago).. and things stopped doing what I wanted.
+
+With version 1.8, it seems like if you have an [ObjectLiteral] class then all of the properties *will* be included in the JavaScript - with default values if you did not specify them explicitly. So the example above:
+
+    DOM.td(new TableCellAttributes { colSpan = 2 }, "Hello!")
+
+would result in something like:
+
+    React.DOM.td({
+        colSpan = 2,
+        rowSpan = 0,
+        id = null,
+        className = null,
+        // .. every other HTMLAttribute value here with a default value
+      },
+      "Hello!"
+    )
+
+Which is a real pity.
+
+The good news is that it appears to be as easy as *also* including an [Ignore] attribute on the type - doing so re-enables the behaviour that only includes explicitly-specifed properties in the JavaScript. However, I have been unable to find authoritative information on how [ObjectLiteral] *should* behave and how it should behave with or without [Ignore]. I had a quick flick through the 1.8 release notes and couldn't see any mention of this being an explicit change from 1.7 to 1.8 (but, I will admit, I wasn't *super* thorough in that investigation).
+
+I only came across the idea of combining [Ignore] with [ObjectLiteral] when I was looking through their source code on [GitHub](https://github.com/bridgedotnet/) (open source software, ftw!) and found a few places where there are checks for one of those attributes or *both* of them in some places.
+
+*(I've updated the code samples in this post to illustrate what I mean - now anywhere that has [ObjectLiteral] also has [Ignore]).*
+
+I'm a little bit concerned that this may change again in the future or that I'm not using these options correctly, but I've raised a bug in their forums and they've been very good at responding to these in the past - [ObjectLiteral classes generate values for all properties in 1.8 (changed from 1.7)](http://forums.bridge.net/forum/bridge-net-pro/bugs/495-objectliteral-classes-generate-values-for-all-properties-in-1-8-changed-from-1-7).
+
+### What's next
+
+So.. how am I intending to progress this? Or am I going to just leave it as an interesting initial investigation, something that I've looked briefly into and then blogged about??
+
+Well, no. Because I *am* actually planning to do some useful work on this! :) I'm a big fan of both React and Bridge and hope to be doing work with both of them, so moving this along is going to be a necessity as much as a nice idea to play around with. It's just a case of *how* to proceed - as the I-have-never-heard-of-this-new-download-attribute story goes to show, I'm not intimately familiar with every single tag and every single attribute, particular in regards to some of the less well-known html5 combinations.
+
+Having done some research while writing this post, I think the best resource that I've found has been [MDN](https://developer.mozilla.org/en-US/) (the Mozilla Developer Network). It seems like you can look up any tag - eg.
+
+[https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a)
+
+And then find details of every attribute that it has, along with compatibility information. For example, the "td" table cell documentation..
+
+[https://developer.mozilla.org/en-US/docs/Web/HTML/Element/td](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/td)
+
+.. mentions "colSpan" and "rowSpan", with no particular mentions of compatibility (these have existed from day one, surely, and I don't think they're going to disappear any time soon) but also mentions attributes such as "align" and "valign" and highlights them as deprecated in html 4.01 and obsolete in html 5.
+
+I'm strongly considering scraping these MDN pages and trying to parse out the attribute names and compatibility information (probably only supporting html5, since what's the point in supporting anything older when Bridge and React are new and and so I will be using them for writing new code and taking advantage of current standards). It doesn't provide type information (like "colSpan" is numeric or "download" may be a string or a boolean), but the [DefinitelyTyped](https://github.com/borisyankov/DefinitelyTyped/blob/master/react/react.d.ts) definitions will go some way in helping out with that. And MDN says that its [wiki documents are available under the creative commons license](https://developer.mozilla.org/en-US/docs/MDN/About#Copyrights_and_licenses), so I believe that this would acceptable use of the data, so long as they are given the appropriate credit in the bindings code that I will eventually generate (which only seems fair!).
+
+So I think that that is what will come next - trying to glean all of the information I need about the attributes specific to particular tags and then using this to produce bindings that take as much advantage of the C# type system as possible! 
+
+Unless I'm missing something and someone else can think of a better way? Anyone??
