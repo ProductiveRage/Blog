@@ -217,7 +217,7 @@ Anonymous types sound ideal, because they would just let us start writing object
       .ThenOptionally(Whitespace)
       .Then(Match(':'))
       .ThenOptionally(Whitespace)
-      .Then(TypeScriptType, (value, type) => new { Name = value.Name, Type = type })
+      .Then(TypeScriptType, (value, type) => new { Name = value.Name, Type = Type })
       .ThenOptionally(Whitespace)
       .Then(Match(';'));
 
@@ -273,7 +273,7 @@ Now, the parsing code that we have look like this:
       .ThenOptionally(Whitespace)
       .Then(Match(':'))
       .ThenOptionally(Whitespace)
-      .Then(TypeScriptType, (value, type) => new { Name = value.Name, Type = type })
+      .Then(TypeScriptType, (value, type) => new { Name = value.Name, Type = Type })
       .ThenOptionally(Whitespace)
       .Then(Match(';'));
 
