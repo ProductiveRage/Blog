@@ -228,7 +228,7 @@ This can be worked around by introducing a new class
     {
       private StringOrBoolean() { }
       
-      public static implicit operator StringOrBoolean(float value)
+      public static implicit operator StringOrBoolean(bool value)
         => new StringOrBoolean();
       
       public static implicit operator StringOrBoolean(string value)
@@ -297,7 +297,7 @@ This means that, unlike in the TypeScript definitions, we don't have to declare 
 
     [Ignore]
     [ObjectLiteral]
-    public class TableCell : HTMLAttributes
+    public class TableCellAttributes : HTMLAttributes
     {
       public int colSpan;
       public int rowSpan;
@@ -321,7 +321,7 @@ That will be translated as you would expect:
 
     React.DOM.td({ colSpan = 2, rowSpan = 1 }, "Hello!")
     
-This has *two* benefits, actually, because not only do we not have to mark all of the properties as nullable (while that wouldn't be the end of the world, it's nicer - I think - to have the attribute classes have properties that match the html values as closely as possible and using simple value types does so) but it also keeps the generatedd JavaScript succint. Imagine the alternative, where *every* property was included in the JavaScript.. every time a div element was declared it would have 150 properties listed along with it. The JavaScript code would get huge, very quickly!*
+This has *two* benefits, actually, because not only do we not have to mark all of the properties as nullable (while that wouldn't be the end of the world, it's nicer - I think - to have the attribute classes have properties that match the html values as closely as possible and using simple value types does so) but it also keeps the generated JavaScript succint. Imagine the alternative, where *every* property was included in the JavaScript.. every time a div element was declared it would have 150 properties listed along with it. The JavaScript code would get huge, very quickly!*
 
 \* *(Ok, ok, it shouldn't be 150 properties for every div since half the point of this post is that it will be much better to create attribute classes that are as specific as possible - but there would still be a lot of properties that appear in element initialisations in the JavaScript which were not present in the C# code, it's much better only having the explicitly-specified values wind up in the translated output).*
     
