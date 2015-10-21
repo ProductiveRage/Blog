@@ -376,3 +376,5 @@ I'm strongly considering scraping these MDN pages and trying to parse out the at
 So I think that that is what will come next - trying to glean all of the information I need about the attributes specific to particular tags and then using this to produce bindings that take as much advantage of the C# type system as possible! 
 
 Unless I'm missing something and someone else can think of a better way? Anyone??
+
+**Update (8th October 2015):** I've had some suggestions from a member of the Bridge.net Team on how to reuse some of their work on html5 element definitions to make this a *lot* easier - so hopefully I'll have an update before too long based upon this. Before I can do so, the Bridge Team are looking into some improvements, such as allowing the "CurrentTarget" property of elements to be more strongly-typed (see [http://forums.bridge.net/forum/general/feature-requests/630-open-461-generic-html5-element-and-event-classes](http://forums.bridge.net/forum/general/feature-requests/630-open-461-generic-html5-element-and-event-classes)), but hopefully we'll all have an update before too long!
