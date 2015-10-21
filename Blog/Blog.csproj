@@ -252,6 +252,7 @@
     <Content Include="App_Data\Posts\Redirects.txt" />
     <Content Include="App_Data\Posts\RelatedPosts.txt" />
     <Content Include="Content\Content.less" />
+    <Content Include="Content\Images\AssignReturnValueAnalyserScreenshot.png" />
     <Content Include="Content\Images\Posts\FluidLayouts.png" />
     <Content Include="Content\Images\Posts\FluidLayoutsGallery.png" />
     <Content Include="Content\Images\Posts\FluxDiagram.png" />
