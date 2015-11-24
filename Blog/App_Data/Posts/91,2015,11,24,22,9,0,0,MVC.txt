@@ -1,0 +1,67 @@
+## Handing off to another ASP.net MVC Controller Action without redirecting
+
+Just a quick one today, more as a reminder to myself in the future than anything. I've had reason before now to have an Action within the current Controller to give up and pass control off to another Action in *another* Controller. In this particular case, I had a "DefaultController" that handled 95% of page requests and returned an appropriate 404 page where required - if the current configuration included custom 404 content then it would show that, otherwise rendering some default markup.
+
+I then had a "DownloadController" that handled delivery of "protected downloads" (only allow the download if the user is logged in; redirecting to the login page and back if not). I wanted this second Controller to be able to reuse the 404-handling from the first.
+
+Now, one argument might be that the 404-handling logic should be extracted out so that both Controllers could use it. Which is a fair comment, but I'm only using this real-world setup as an example - so let's not worry about picking apart my approach at this point.
+
+The first thought that came to mind was - quite naively - to do the following within the DownloadController's processing function:
+
+    var defaultController = new DefaultController();
+	return defaultController.Return404();
+	
+But this wouldn't work because the Return404 Action requires a Server reference so that it can call MapPath to look for custom a "404.html" file in the site root.
+
+So I next tried to write
+
+    var defaultController = new DefaultController();
+	defaultController.Server = Server;
+	return defaultController.Return404();
+
+But, unfortunately, the Server property of a Controller is read-only.
+
+So then I turned to Google (which is practically the same thing as saying "turned to Stack Overflow", in cases like these).
+
+Searching for "asp.net mvc return result from another controller" returned a lot of matches where many of the results indicated that I should call "RedirectToAction" - eg.
+
+    return RedirectToAction("Force404", "Default");
+	
+This didn't really sound like what I wanted because I didn't want to *redirect*, I just wanted to return the result from "Force404" as the result of the current Action. But I tried it anyway..
+
+And it didn't work! It failed with runtime error:
+
+> No route in the route table matches the supplied values.
+
+It turns out that you can't use RedirectToAction unless you have a route configured to handle it - eg.
+
+	routes.MapRoute(
+		"404-just-in-case",
+		"should-never-get-here-through-a-real-url",
+		new { controller = "Default", action = "Force404" }
+	);
+
+Even if I don't want any URL to match to this Controller / Action, I still need a route to be specified. Although the "RedirectToAction" function takes arguments for "actionName" and "controllerName", just specifying these is not enough - that route must exist. And the order in which the routes are specified is still important here - if there is a catch-all route before this route is specified then this route will not be hit. Maybe there's a good reason for all this, but I really can't see it. If there's a function called "RedirectToAction" and I give it an unambigous name of a Controller and an Action, then I expect it to redirect.. to.. that.. action.
+
+### Transferring control the correct way
+
+Eventually I read enough answers that I came to the correct information (after reading a *lot* more unhelpful suggestions about "RedirectToAction"). The credit goes to this answer: [stackoverflow.com/a/16453648](http://stackoverflow.com/a/16453648), but I'll take its information to complete my original example -
+
+    var defaultController = new DefaultController();
+	defaultController.ControlContext = new ControllerContext(
+		this.ControllerContext.RequestContext,
+		defaultController
+	);
+	return defaultController.Return404();
+
+And that's it!
+
+I must admit that I don't do much that's complicated with MVC and so, to those more experienced with the framework, it might be -
+
+1. Obvious that this is the correct way to do it
+1. Obvious that, actually, it's not the correct way to do it because it's new'ing up a DefaultController and you're not making use of a Controller factory or other IOC integration
+3. Obvious why RedirectToAction is as it is
+
+But maybe, perhaps, possibly.. this will be of use to someone in the future in my boat who wanted to borrow one Controller's Action to finish off another Controller's Action part-way through.
+
+.. though the more I think about it, the more I think I *should* have just extracted that 404-handling logic into a shared location and called it from any Controller that required it!
