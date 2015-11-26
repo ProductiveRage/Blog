@@ -1,0 +1,360 @@
+## React (and Flux) with Bridge.net - Redux
+
+Earlier in the year I wrote about using [Bridge.net](http://bridge.net) to write browser-based applications using [React](https://facebook.github.io/react/). Well, now, I'd like to present an update to that. I've changed how the base **Component** class ties into the React library (this is a class that may be derived from in order to create custom React components) - it now supports "SetState" - and I've added an alternative base class; the **StatelessComponent**, which will allow the writing of component classes that will operate as [stateless components](https://facebook.github.io/react/blog/2015/09/10/react-v0.14-rc1.html#stateless-function-components), as introduced by React 0.14. I've also improved how the components appear when viewed in the React Dev Tools browser extension and I've tied it into the latest, just-released version of Bridge (1.10) that has fixed a lot of bugs.
+
+If you're the sort of person who likes to jump straight to the end of a book to see how it ends, then you can find the code on in my [GitHub "Bridge.React" repo](https://github.com/ProductiveRage/Bridge.React) or you can add it to a Bridge project through NuGet ([Bridge.React](https://www.nuget.org/packages/Bridge.React)). But if you want to find out more of the details then keep reading! I'm not going to presume any prior knowledge from my previous post - so if you've read that, then I'm afraid I'm going to re-tread some of the same ground - however, I imagine that I don't have *that* many dedicated followers, so figure it makes more sense to make this entry nicely self-contained :)
+
+### As simple as could be
+
+In the past, I've also written about writing [bindings for TypeScript](Post81) (which is a language I liked.. but not as much as C#) and [bindings for DuoCode](Post85) (which is a project that seemed to have promise until they spent so longer thinking about their pricing model that I gave up on them) as well as a couple of posts about Bridge - and, often, I've got quite technical about how the bindings work under the hood. Today, though, I'm just going to deal with how to *use* the bindings. I'm happy that they're finally fully-populated and I've tried to make an effort to make them easy to consume, so let's just stick to getting Bridge apps talking to React and not worry about the magic behind the scenes!
+
+I'm going to assume that you're familiar with React - though I won't be going into too much depth on it, so if you're not an expert then it shouldn't be any problem. I'm *not* going to assume that you have tried out Bridge yet, because it's so easy to presume that you haven't that it won't take us long to start from scratch!
+
+### Hello world
+
+So, let's *really* start from the basics. You need to create a new solution in Visual Studio - choose a C# Class Library. Now go to References / Manage NuGet Packages, search for "Bridge.React" online and install the package. This will automatically pull in the Bridge package as a dependency, and this sets up a "demo.html" file under the "Bridge/www" folder to make getting started as frictionless as possible. That file has the following content:
+
+	<!DOCTYPE html>
+
+	<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<meta charset="utf-8" />
+		<title>Bridge BridgeReactBlogPost</title>
+		<script src="../output/bridge.js"></script>
+		<script src="../output/BridgeReactBlogPost.js"></script>
+	</head>
+	<body>
+		<!-- 
+			Right-Click on this file 
+			and select "View in Browser"
+		--> 
+	</body>
+	</html>
+
+Note that the title and the JavaScript filename are taken from the project name. So the file above mentions "BridgeReactBlogPost" because that's the name of the project that I'm creating myself alongside writing this post (just to ensure that I don't miss any steps or present any dodgy demonstration code!).
+
+We need to add a few more items now - the React library JavaScript, the Bridge.React JavaScript and an element for React to render inside. So change demo.html to something like the following:
+
+	<!DOCTYPE html>
+
+	<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<meta charset="utf-8" />
+		<title>Bridge BridgeReactBlogPost</title>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/react/0.14.3/react.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/react/0.14.3/react-dom.js"></script>
+		<script src="../output/bridge.js"></script>
+		<script src="../output/bridge.react.js"></script>
+		<script src="../output/BridgeReactBlogPost.js"></script>
+	</head>
+	<body>
+		<div id="main" />
+	</body>
+	</html>
+
+*(Aside: If you want to, then you can add the line*
+
+> "combineScripts": true 
+
+*to your bridge.json file, which will cause ALL of the project JavaScript files to be built into a single file - including "bridge.js" and "bridge.react.js" - so, if you used this option, you would only need to include a single JavaScript file. In this example, it would be just "../output/BridgeReactBlogPost.js").*
+
+Now change the "Class1.cs" file (that was created automatically when you requested the new "Class Library" project) thusly:
+
+    using Bridge.Html5;
+    using Bridge.React;
+
+    namespace BridgeReactBlogPost
+    {
+      public class Class1
+      {
+        [Ready]
+        public void Main()
+        {
+          React.Render(
+            DOM.Div(
+              new Attributes { ClassName = "wrapper" },
+              "Hiya!"
+            ),
+            Document.GetElementById("main")
+          );
+        }
+      }
+    }
+
+.. and then right-click on demo.html, click "View in Browser" and you should be greeted by some React-rendered content. Good start!
+
+Let's be slightly more ambitious -
+
+	[Ready]
+	public void Main()
+	{
+	  React.Render(
+	    DOM.Div(new Attributes { ClassName = "wrapper" },
+	      DOM.Input(new InputAttributes
+	      {
+	        OnChange = e => Window.Alert(e.CurrentTarget.Value),
+			MaxLength = 3
+	      })
+	    ),
+	    Document.GetElementById("main")
+	  );
+	}
+
+Re-build then use "View in Browser" again. Now each change to the input box is thrown back in your face in an alert. The type of "e.CurrentTarget" is "InputElement" and so there is a string "Value" property available. And the "InputAttributes" class allows the setting of all of the properties that are specific to an InputElement, such as "MaxLength". This is one of the great things about using a type system to document your API - you use types (such as requiring an InputAttributes instance when DOM.Input is called) to inform the user of the API; what can and can't be done. And, while I've got a lot of respect for the people maintaining the [DefinitelyTyped](https://github.com/DefinitelyTyped/DefinitelyTyped) TypeScript type definitions, you don't get as much detail in their React bindings as are available here!
+
+In fairness, I should really give credit where it's due here - the "InputElement" type comes from the Bridge.Html5 namespace, so I haven't had to write all of those definitions myself. And the "InputAttributes" class was based upon the InputElement's source code; I only had to remove read-only properties (for example, the html "input" element has a "valueAsNumber" property - only applicable to input elements with type "number" - that is read-only and so it would not make sense for this to be settable as a React attribute). I also had to remove some unsupported functionality (for example, checkbox input elements support an "[indeterminate](https://css-tricks.com/indeterminate-checkboxes/)" flag in browsers but [this is not supported by React](https://github.com/facebook/react/issues/1798)).
+
+All of the element factory methods in React ("div", "span", "input", etc..) have corresponding methods in the bindings, with types that express any additional properties that should be available - eg. we have
+
+    ReactElement TD(
+	  TableCellAttributes properties,
+	  params ReactElementOrText[] children
+    );
+	
+where the "TableCellAttributes" introduces additional properties such as "int ColSpan" and "int RowSpan" (note that the bindings all use pascal-cased function and type names since this is what is more commonly seen in C# code - where the functions are translated into JavaScript they will automatically use the camel-cased JavaScript names, so "Div" becomes "div", for example).
+
+### Creating your own components
+
+But this is the boring stuff - as soon as you start using React, you want to create your own components!
+
+React 0.14 introduced a concept, the "[Stateless Component](https://facebook.github.io/react/blog/2015/10/07/react-v0.14.html#stateless-functional-components)". In native JavaScript, this is just a function that takes a props reference and returns a React element. But to make it feel more natural in C#, the bindings have a base class which can effectively become a Stateless Component - eg.
+
+    public class MyLabel : StatelessComponent<MyLabel.Props>
+    {
+      public MyLabel(Props props) : base(props) { }
+
+      public override ReactElement Render()
+      {
+        return DOM.Label(
+          new LabelAttributes { ClassName = props.ClassName },
+          props.Value
+        );
+      }
+
+      public class Props
+      {
+        public string Value;
+        public string ClassName;
+      }
+    }
+
+The "**StatelessComponent**" base class takes a generic type parameter that describe the "props" reference type. Then, when "Render" is called, the "props" reference will be populated and ready to use *within* Render. If any other functions are declared within the class, they may be called from Render as you might expect (see further down). So we are able to write very simple custom components that React will treat as these special Stateless Components - about which, Facebook say:
+
+> In the future, we’ll also be able to make performance optimizations specific to these components
+
+Creating one of these components is as easy as:
+
+	React.Render(
+	  new MyLabel(new MyLabel.Props { ClassName = "wrapper", Value = "Hi!" }),
+	  Document.GetElementById("main")
+	);
+
+It is important to note, however, that - due to the way that React creates components - the constructor of these classes must always be a no-op (it won't actually be called when React prepares the component) and the *only* data that the class can have passed in must be described in the props data. If you tried to do something like the following then it won't work -
+
+    public class MyLabel : StatelessComponent<MyLabel.Props>
+    {
+	  private readonly int _index;
+      public MyLabel(Props props, int index) : base(props)
+	  {
+	    // THIS WON'T WORK - the constructor is not processed
+	    _index = index;
+	  }
+
+      public override ReactElement Render()
+      {
+        return DOM.Label(
+          new LabelAttributes { ClassName = props.ClassName },
+          props.Value + " (index: " + _index + ")"
+        );
+      }
+
+      public class Props
+      {
+        public string Value;
+        public string ClassName;
+      }
+    }
+
+You *can* use instance members if you want to, you just can't rely on them being set in the constructor because the constructor is never called. *Side note: I'm thinking about trying to write a [C# Analyser](https://msdn.microsoft.com/en-us/magazine/dn879356.aspx) to accompany these bindings so that any rules like this can be pointed out by the compiler, rather than you just having to remember them.*
+
+    public class MyLabel : StatelessComponent<MyLabel.Props>
+    {
+	  private int _index;
+      public MyLabel(Props props) : base(props) { }
+
+      public override ReactElement Render()
+      {
+	    // Accessing instance fields and methods is fine, so long as it
+		// isn't done in the constructor
+	    SetIndex();
+        return DOM.Label(
+          new LabelAttributes { ClassName = props.ClassName },
+          props.Value + " (index: " + _index + ")"
+        );
+      }
+	  
+	  private void SetIndex()
+      {
+	  	_index = MagicStaticIndexGenerator.GetNext();
+      }
+
+      public class Props
+      {
+        public string Value;
+        public string ClassName;
+      }
+    }
+	
+You can also create custom components that have child elements. Just like "DOM.Div" takes an attributes reference (its "Props", essentially) and then an array of child elements, the **StatelessComponent** class takes a params array after that first "props" argument.
+
+This array has elements of type "**ReactElementOrText**", which means that it can be the result of a React factory method (such as "Div") or it can be a string, so that text elements can be easily rendered. Or it can be any class that derives from **StatelessComponent** as **StatelessComponent** has an implicit cast operator to **ReactElement**.
+
+So, we could create a simple "wrapper" component that renders a Div with a class and some children -
+
+    public class MyWrapper : StatelessComponent<MyWrapper.Props>
+    {
+      public MyWrapper(Props props, params ReactElementOrText[] children)
+	    : base(props, children) { }
+
+      public override ReactElement Render()
+      {
+        return DOM.Div(
+          new Attributes { ClassName = props.ClassName },
+          Children
+        );
+      }
+
+      public class Props
+      {
+        public string ClassName;
+      }
+    }
+	
+And render it like this:
+
+    React.Render(
+      new MyWrapper(new MyWrapper.Props { ClassName = "wrapper" },
+        DOM.Span(null, "Child1"),
+        DOM.Span(null, "Child2"),
+        DOM.Span(null, "Child3")
+      ),
+      Document.GetElementById("main")
+    );
+	
+or even just like:
+
+    React.Render(
+      new MyWrapper(new MyWrapper.Props { ClassName = "wrapper" },
+        "Child1",
+        "Child2",
+        "Child3"
+      ),
+      Document.GetElementById("main")
+    );
+
+The "Children" property accessed within **MyWrapper** is exposed through **StatelessComponent** and will echo back the child elements passed into the constructor when the component instance was declared. If there were no children specified then it will be an empty array.
+
+This brings us on to the next topic - Keys for dynamic children. To aid React's reconciliation process in cases where dynamic children elements are specified, you should specify Key values for each item. Each Key should be consistent and unique within the parent component (for more details, read the "[Keys / Reconciliation](https://facebook.github.io/react/docs/reconciliation.html#keys)" section from the Facebook docs).
+
+If you were declaring React components in vanilla JavaScript, then this would be as easy as including a "key" value in the props object. Using these Bridge bindings, it's *almost* as simple - if your component needs to support an optional "Key" property then its Props class should include a "Key" property. And that's all that's required! You don't need to *set* anything to that Key inside your component, you merely need to allow it to be set on the props. React will accept numeric or string keys, so I would recommend that you declare the "Key" property as either an **int** or a **string** or as an **Any&lt;int, string&gt;**, which is built-in Bridge class that allows *either* of the value types to be used. To illustrate:
+
+    public class MyListItem : StatelessComponent<MyListItem.Props>
+    {
+      public MyListItem(Props props) : base(props) { }
+
+      public override ReactElement Render()
+      {
+        return DOM.Li(null, props.Value);
+      }
+
+      public class Props
+      {
+        public Any<int, string> Key;
+        public string Value;
+      }
+    }
+
+*Note: In the earlier examples, the "Child{x}" elements were fixed at compile time and so didn't need Key properties to be set, but if you were displaying a list of search results that were based on data from an api call, for example, then these elements would NOT be fixed at compile time and so you should specify unique Key values for them*.
+
+### "Full" Components
+
+So far, I've only talked about stateless components, which are like a slimmed-down version of full React components. But sometimes you need a state*ful* component, or one that supports the full React lifecycle.
+
+For these times, there is another base class - simply called **Component**. This has *two* generic type parameters, one for the "props" data and for "state". However, the constructor signature is the same as the **StatelessComponent**; it takes a props reference and then any children element that the component instance has. The state reference is controlled by the two React component lifecycle functions "GetInitialState" and "SetState". "GetInitialState" is called when the component is first created and "SetState" can be used to not only update the internal "state" reference but also request that the component re-render.
+
+The most basic example would be something like this:
+
+	// Note: I've not even declared a class fortthe State, I've just used
+	// "string" since the state in this class is just a string value. But
+	// that's because I'm lazy, the state was more complicated then it
+	// could be a separate class, just like Props.
+    public class StatefulControlledTextInput
+	  : Component<StatefulControlledTextInput.Props, string>
+    {
+      public StatefulControlledTextInput(Props props) : base(props) { }
+
+      protected override string GetInitialState() { return ""; }
+
+      public override ReactElement Render()
+      {
+        return DOM.Input(new InputAttributes
+        {
+          ClassName = props.ClassName,
+          Type = InputType.Text,
+          Value = state,
+          OnChange = ev => SetState(ev.CurrentTarget.Value)
+        });
+      }
+
+      public class Props
+      {
+        public string ClassName;
+      }
+    }
+	
+Each time the input's value is changed, the component calls its own SetState function so that it can re-render with the new value (there's a [good Facebook summary article](https://facebook.github.io/react/docs/forms.html) if you've forgotten the difference between "controlled" and "uncontrolled" components; the gist is the controlled components only raise events when the user requests that their values change, they *won't be redrawn* unless React cause them to redraw).
+
+This isn't *all* that the **Component** class allows, though, it has support for the other React component lifecycle methods - for example, sometimes the "OnChange" event of a text input is raised when the content hasn't *really* changed (if you put focus in a text input and [Ctrl]-[C] / copy whatever value is in it and then [Ctrl]-[V] / paste that value straight back in, the OnChange event will be raised even though the new value is exactly the same as the old value). You might consider this redraw to be unacceptable. In which case, you could take advantage of the "ShouldComponentUpdate" function like this:
+
+    public class StatefulControlledTextInput
+	  : Component<StatefulControlledTextInput.Props, string>
+    {
+      public StatefulControlledTextInput(Props props) : base(props) { }
+
+      protected override string GetInitialState() { return ""; }
+	  
+      protected override bool ShouldComponentUpdate(
+	    StatefulControlledTextInput.Props nextProps,
+		string nextState)
+      {
+        return (props != nextProps) || (state != nextState);
+      }
+
+      public override ReactElement Render()
+      {
+        return DOM.Input(new InputAttributes
+        {
+          ClassName = props.ClassName,
+          Type = InputType.Text,
+          Value = state,
+          OnChange = ev => SetState(ev.CurrentTarget.Value)
+        });
+      }
+
+      public class Props
+      {
+        public string ClassName;
+      }
+    }
+
+Now, in the cases where the input's value doesn't *really* change, the component's "update" will be bypassed.
+
+Clearly, this is a trival example, but it demonstrates how you could do something more complicated along these lines. All of the other functions "ComponentDidMount", "ComponentDidUpdate", "ComponentWillMount", "ComponentWillReceiveProps", "ComponentWillUnmount" and "ComponentWillUpdate" are also supported.
+
+And, of course, the **Component** base class has the same "Children" integration that **StatelessComponent** has and the same support for specifying a "Key" props value.
+
+There is *one* little oddity to be aware of, though: In React, "setState" has (in my opinion) a slightly odd behaviour in that it will accept a "partial state value" that it will then merge with the current state reference. So if you had a **MyComponentState** class with properties "Value1" and "Value2" then you could, in vanilla JavaScript React, call setState({ Value1: whatever }) and it would take that "Value1" and overwrite the current "Value1" in the current state reference, leaving any existing "Value2" untouched. In these bindings, you must specify an entire State reference and this merging does not occur - the old State reference is replaced entirely by the new. This is largely because the "SetState" function in the bindings takes a full "State" class reference (C# doesn't really have a concept of a part-of-this-class representation) but it's also because I think that it's clearer this way; I think that you should be explicit about what you're setting State to and having it be a-bit-of-what-was-there-before and a-bit-of-something-new is not as clear (if you ask me) as a complete here-is-the-new-state reference.
+
+### More to come
+
+In React, it is strongly recommended that props and state be considered to be immutable references. In the examples here I've used immutability-by-convention; the "props" classes have not actually been immutable types. I'm intending to write a follow-up article or two because there is more that I want to explore, such as how to use these bindings to write React apps in a "Flux"-like manner and how to take more advantage of genuinely immutable types. But, hopefully, this has been a nice enough introduction into the bindings and got you thinking about trying to use C# to write some React apps! Because, if you're aiming to write a web application in a "Single Page Application" style, if your application is of any serious complexity then you're going to end up with quite a lot of code - and, while I have a real soft spot for JavaScript, if it comes to maintaining a large app that's written in JavaScript or that's written in C# then I know which way *I* would lean! Thank goodness [Bridge.net](http://bridge.net) has come along and let us combine JavaScript frameworks *with* C# :)
