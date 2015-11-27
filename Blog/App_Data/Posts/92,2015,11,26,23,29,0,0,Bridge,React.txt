@@ -108,7 +108,7 @@ All of the element factory methods in React ("div", "span", "input", etc..) have
 
     ReactElement TD(
 	  TableCellAttributes properties,
-	  params ReactElementOrText[] children
+	  params Any<ReactElement, string>[] children
     );
 	
 where the "TableCellAttributes" introduces additional properties such as "int ColSpan" and "int RowSpan" (note that the bindings all use pascal-cased function and type names since this is what is more commonly seen in C# code - where the functions are translated into JavaScript they will automatically use the camel-cased JavaScript names, so "Div" becomes "div", for example).
@@ -207,13 +207,15 @@ You *can* use instance members if you want to, you just can't rely on them being
 	
 You can also create custom components that have child elements. Just like "DOM.Div" takes an attributes reference (its "Props", essentially) and then an array of child elements, the **StatelessComponent** class takes a params array after that first "props" argument.
 
-This array has elements of type "**ReactElementOrText**", which means that it can be the result of a React factory method (such as "Div") or it can be a string, so that text elements can be easily rendered. Or it can be any class that derives from **StatelessComponent** as **StatelessComponent** has an implicit cast operator to **ReactElement**.
+This array has elements of type "**Any&lt;ReactElement, string&gt;**", which means that it can be the result of a React factory method (such as "Div") or it can be a string, so that text elements can be easily rendered. Or it can be any class that derives from **StatelessComponent** as **StatelessComponent** has an implicit cast operator to **ReactElement**.
+
+*(Note: There used to be a **ReactElementOrText** class mentioned here but it didn't offer any benefit over Bridge's generic **Any&lt;,&gt;** class, so I've changed the NuGet package - as of 1.3.0 / 27th September 2015 - and have updated this post accordingly).*
 
 So, we could create a simple "wrapper" component that renders a Div with a class and some children -
 
     public class MyWrapper : StatelessComponent<MyWrapper.Props>
     {
-      public MyWrapper(Props props, params ReactElementOrText[] children)
+      public MyWrapper(Props props, params Any<ReactElement, string>[] children)
 	    : base(props, children) { }
 
       public override ReactElement Render()
