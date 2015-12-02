@@ -68,7 +68,7 @@ Now change the "Class1.cs" file (that was created automatically when you request
       public class Class1
       {
         [Ready]
-        public void Main()
+        public static void Main()
         {
           React.Render(
             DOM.Div(
@@ -83,10 +83,12 @@ Now change the "Class1.cs" file (that was created automatically when you request
 
 .. and then right-click on demo.html, click "View in Browser" and you should be greeted by some React-rendered content. Good start!
 
-Let's be slightly more ambitious -
+***Update (2nd December 2015):** I originally showed a non-static method above with a [Ready] attribute on it - this worked in earlier versions of Bridge but does not work any longer. In the examples in this post, using an instance method with the [Ready] attribute will result in the method NOT being called at DOM ready (it will appear to fail silently by doing no work but showing no warnings). Don't make my mistake, make [Ready] methods static!*
+
+Now, let's be slightly more ambitious -
 
 	[Ready]
-	public void Main()
+	public static void Main()
 	{
 	  React.Render(
 	    DOM.Div(new Attributes { ClassName = "wrapper" },
