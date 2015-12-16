@@ -1,0 +1,487 @@
+## Friction-less immutable objects in Bridge (C# / JavaScript) applications 
+
+One of the posts that I've written that got the most "audience participation*" was one from last year "[Implementing F#-inspired 'with' updates for immutable classes in C#](Post74)", where I spoke about trying to ease the burden in C# or representing data with immutable classes by reducing the repetitive typing involved.
+
+\* *(I'd mis-remembered receiving more criticism about this than I actually did - now that I looking back at the comments left on the [post](Post74) and on [reddit](https://www.reddit.com/r/programming/comments/2gqx9u/implementing_finspired_with_updates_for_immutable/), the conversations and observations are pretty interesting and largely constructive!)*
+
+The gist was that if I wanted to have a class that represented, for the sake of a convoluted example, an employee that had a name, a start-of-employment date and some notes (which are optional and so may not be populated) then we might have something like the following:
+
+	public class EmployeeDetails
+	{
+	  public EmployeeDetails(string name, DateTime startDate, string notesIfAny)
+	  {
+		if (string.IsNullOrWhiteSpace(name))
+		  throw new ArgumentException("name");
+
+		Name = name.Trim();
+		StartDate = startDate;
+		NotesIfAny = (notesIfAny == null) ? null : notesIfAny.Trim();
+	  }
+
+	  /// <summary>
+	  /// This will never be null or blank, it will not have any leading or trailing whitespace
+	  /// </summary>
+	  public string Name { get; private set; }
+
+	  public DateTime StartDate { get; private set; }
+
+	  /// <summary>
+	  /// This will be null if it has not value, otherwise it will be a non-blank string with no
+	  /// leading or trailing whitespace
+	  /// </summary>
+	  public string NotesIfAny { get; private set; }
+	}
+	
+If we wanted to update a record with some notes where previously it had none then we'd need to create a new instance, something like:
+
+    var updatedEmployee = new EmployeeDetails(
+	  employee.Name,
+	  employee.StartDate,
+	  "Awesome attitude!"
+    );
+	
+This sort of thing (calling the constructor explicitly) gets old quickly, particularly if the class gets extended in the future since then anywhere that did something like this would have to add more arguements to the constructor call.
+
+So an alternative is to include "With" functions in the class -
+	
+	public class EmployeeDetails
+	{
+	  public EmployeeDetails(string name, DateTime startDate, string notesIfAny)
+	  {
+		if (string.IsNullOrWhiteSpace(name))
+		  throw new ArgumentException("name");
+
+		Name = name.Trim();
+		StartDate = startDate;
+		NotesIfAny = (notesIfAny == null) ? null : notesIfAny.Trim();
+	  }
+
+	  /// <summary>
+	  /// This will never be null or blank, it will not have any leading or trailing whitespace
+	  /// </summary>
+	  public string Name { get; private set; }
+
+	  public DateTime StartDate { get; private set; }
+
+	  /// <summary>
+	  /// This will be null if it has not value, otherwise it will be a non-blank string with no
+	  /// leading or trailing whitespace
+	  /// </summary>
+	  public string NotesIfAny { get; private set; }
+	  
+	  public EmployeeDetails WithName(string value)
+	  {
+	  	return (value == Name) ? this : new EmployeeDetails(value, StartDate, NotesIfAny);
+	  }
+	  public EmployeeDetails WithStartDate(DateTime value)
+	  {
+	  	return (value == StartDate) ? this : new EmployeeDetails(Name, value, NotesIfAny);
+	  }
+	  public EmployeeDetails WithNotesIfAny(string value)
+	  {
+	  	return (value == NotesIfAny) ? this : new EmployeeDetails(Name, StartDate, value);
+	  }
+	}
+
+Now the update code is more succinct -
+
+    var updatedEmployee = employee.WithNotesIfAny("Awesome attitude!");
+
+Another benefit of this approach is that the With functions can include a quick check to ensure that the new value is not the same as the current value - if it is then there's no need to generate a new instance, the current instance can be returned straight back out. This saves generating a new object reference and it makes it easier to rely upon simple reference equality tests when determining whether data has changed - eg.
+
+    var updatedEmployee = employee.WithNotesIfAny("Awesome attitude!");
+	var didEmployeeAlreadyHaveAwesomeAttitude = (updatedEmployee == employee);
+	
+[Last year's post](Post74) went off on a few wild tangents but basically was about allowing something like the following to be written:
+	
+	public class EmployeeDetails
+	{
+	  public EmployeeDetails(string name, DateTime startDate, string notesIfAny)
+	  {
+		if (string.IsNullOrWhiteSpace(name))
+		  throw new ArgumentException("name");
+
+		Name = name.Trim();
+		StartDate = startDate;
+		NotesIfAny = (notesIfAny == null) ? null : notesIfAny.Trim();
+	  }
+
+	  /// <summary>
+	  /// This will never be null or blank, it will not have any leading or trailing whitespace
+	  /// </summary>
+	  public string Name { get; private set; }
+
+	  public DateTime StartDate { get; private set; }
+
+	  /// <summary>
+	  /// This will be null if it has not value, otherwise it will be a non-blank string with no
+	  /// leading or trailing whitespace
+	  /// </summary>
+	  public string NotesIfAny { get; private set; }
+	  
+	  public EmployeeDetails With(
+	    Optional<string> name = new Optional<string>(),
+	    Optional<DateTime> startDate = new Optional<DateTime>(),
+	    Optional<Optional<string>> notesIfAny = new Optional<Optional<string>>())
+	  {
+	    return DefaultUpdateWithHelper.GetGenerator<EmployeeDetails>()(
+		  this, name, startDate, notesIfAny
+		);
+	  }	  
+	}	
+	
+It allowed you to include a single "With" function that could change one or more of the properties in a single call like this:
+
+    var updatedEmployee = employee.With(name: "Jimbo", notesIfAny: "So lazy!");
+
+*And* it would do it with magic, so you wouldn't have to write all of the "return-same-instance-if-no-values-changed" logic and it would.. erm.. well, to be honest, I've forgotten some of the finer details! But I remember that it was fun messing around with, getting my hands dirty with reflection, compiled LINQ expressions, stack-trace-sniffing (and some required JIT-method-inlining-disabling).
+
+A couple of weeks later I wrote a follow-up, taking on board some of the feedback and criticisms in the comments and doing some performance testing. One of the ways I came up with to create the "magic With method" was only twice as slow as writing it by hand.. which, now, doesn't sound all that *awesome* - *twice* as slow is often a bad thing, but I was quite proud of it at the time!
+
+### Immutable Classes in 2015
+
+Recently, I've been making [Bridge.NET](http://bridge.net/) applications and I've been favouring writing immutable types for the messages passed around the system. And, again, I've gotten a bit bored of writing the same lines of code over and over -
+
+	if (value == null)
+	  throw new ArgumentNullException("value");
+
+and
+
+	/// <summary>
+    /// This will never be null
+    /// </summary>
+
+and
+
+	/// <summary>
+    /// This will never be null, nor blank, nor have any leading or trailing whitespace
+    /// </summary>
+
+*Never mind* contemplating writing all of those "WithName", "WithStartDate" methods (checking in them that the values have actually changed and returning the same instance back out if not). I love the benefits of having these immutable types (reducing places where it's possible for state to change makes reasoning about code soooooooo much easier) but I'm getting tired of banging out the same constructs and sentences! follows a 
+
+So I've started on a new tack. I want to find those places where repetition is getting me down and I want to reduce it as much as possible. *But* I don't want to sacrifice my validation checks or the guarantess of immutability. And, again, to put this into context - I'm going to be concentrating on the classes that I write in C# but that Bridge.NET then translates into JavaScript, so there are different considerations to take into account. First of which being that Bridge doesn't support reflection and so none of the crazy stuff I was doing in "pure" C# will be possible! Not in the same way that I wrote it last time, at least..
+
+Before I get into any silly stuff, though, I want to talk about a couple of techniques that hopefully aren't *too* controversial and that I think have improved my code as well as requiring me to type less.
+
+First off is a variation of the "**Optional**" struct that I used in my C# library last time. Previously, as illustrated in the code at the top of this post, I was relying on argument names and comments to indicate when values may and may not be null. The "Name" property has a comment saying that it will not be null while the "NotesIfAny" property has a comment saying that it *might* be null - and it follows a convention of having an "IfAny" suffix, which suggests that it *might not* always have a value.
+
+Instead, I want to move to assuming that all references are non-null and that values that *may* be null have their type wrapped in an **Optional** struct.
+
+This would change the **EmployeeDetails** example to look like this:
+
+	public class EmployeeDetails
+	{
+	  public EmployeeDetails(string name, DateTime startDate, Optional<string> notes)
+	  {
+		if (string.IsNullOrWhiteSpace(name))
+		  throw new ArgumentException("name");
+		Name = name.Trim();
+		StartDate = startDate;
+		Notes = !notes.IsDefined || (notes.Value.Trim() == "") ? null : notes.Value.Trim();
+	  }
+	  public string Name { get; private set; }
+	  public DateTime StartDate { get; private set; }
+	  public Optional<string> Notes { get; private set; }
+	}
+
+The "IfAny" suffix is gone, along with all of the comments about null / non-null. Now the type system indicates whether a value may be null (in which case it will be wrapped in an Optional) or not.
+
+*(Note: I'll talk more about **Optional** later in this post - there's nothing too revolutionary or surprising in there, but it will distract from what I'm trying to build up to here).*
+
+We have lost something, though, because in the earlier code the Name and Notes fields had comments that stated that the values (if non-null, in the case of Notes) would *not* be blank and would *not* have any leading or trailing whitespace. This information is no longer included in comments, because I want to lose the comments. But, if I've solved the null / non-null problem by leveraging the type system, why not do the same with the non-blank-trimmed strings?
+
+Introducing..
+
+    public class NonBlankTrimmedString
+    {
+      public NonBlankTrimmedString(string value)
+      {
+        if (string.IsNullOrWhiteSpace(value))
+          throw new ArgumentException("Must be non-null and have some non-whitespace content");
+        Value = value.Trim();
+      }
+
+      /// <summary>
+      /// This will never have any leading or trailing whitespace, it will never be blank
+      /// </summary>
+      public string Value { get; private set; }
+	  
+	  public static implicit operator NonBlankTrimmedString(string value)
+	  {
+		return new NonBlankTrimmedString(value);
+	  }
+      public static implicit operator string(NonBlankTrimmedString value)
+      {
+        return value.Value;
+      }
+	}
+
+Ok, so it looks like the comments are back.. but the idea is that the "will never have any leading or trailing whitespace, it will never be blank" need only appear *once* (in this class) and *not* for every property that should be non-null and non-blank and not-have-any-leading-or-trailing-whitespace.
+
+Now the **EmployeeDetails** class can become:
+
+	public class EmployeeDetails
+	{
+	  public EmployeeDetails(
+	  	NonBlankTrimmedString name,
+		DateTime startDate,
+		Optional<NonBlankTrimmedString> notes)
+	  {
+		if (name == null)
+		  throw new ArgumentNullException("name");
+		Name = name;
+		StartDate = startDate;
+		Notes = notes;
+	  }
+	  public NonBlankTrimmedString Name { get; private set; }
+	  public DateTime StartDate { get; private set; }
+	  public Optional<NonBlankTrimmedString> Notes { get; private set; }
+	}
+
+This looks a lot better. Not only is there less to read, there was less repetitive code (and comments) to write but the same information is still available for someone reading / using the code. In fact, I think that it's better on that front now because the constructor signature and the property types themselves communicate this information - which makes it harder to ignore than a comment does. And the type system is the primary reason that I want to write my front-end applications in C# rather than JavaScript!
+
+However, there are *still* a couple of things that I'm not happy with. Firstly, in an ideal world, the constructors would magically have if-null-then-throw conditions injected for every argument - there are *no* arguments that should be null now; **Optional** is a struct and so can never be null, while any references that *could* be null should be wrapped in an **Optional**. One way to achieve that this in regular C# is with [IL rewriting](http://haacked.com/archive/2013/01/05/mitigate-the-billion-dollar-mistake-with-aspects.aspx/) but I'm not a huge fan of that because I have suspicions about PostSharp (that I should probably revisit one day because I'm no longer completely sure what grounds they're based on). But, aside from that, it would be use when writing C# for Bridge, since IL doesn't come into the process - C# source code is translated into JavaScript and IL isn't involved!
+
+Secondly, I need to tackle the "With" function(s) and I'd like to make that as painless as possible, really. Writing them all by hand is tedious.
+
+### Get to the point, already!
+
+So.. I've been playing around and I've written a Bridge.NET library that allows me to write something like this:
+
+    public class EmployeeDetails : IAmImmutable
+    {
+      public EmployeeDetails(
+        NonBlankTrimmedString name,
+        DateTime startDate,
+        Optional<NonBlankTrimmedString> notes)
+      {
+        this.CtorSet(_ => _.Name, name);
+        this.CtorSet(_ => _.StartDate, startDate);
+        this.CtorSet(_ => _.Notes, notes);
+      }
+      public NonBlankTrimmedString Name { get; private set; }
+      public DateTime StartDate { get; private set; }
+      public Optional<NonBlankTrimmedString> Notes { get; private set; }
+    }
+
+Which is not too bad! Unfortunately, yes, there is *some* duplication still - there are *three* places that each of the properties are mentioned; in the constructor argument list, in the constructor body and as public properties. However, I think that this is the bare minimum number of times that they *could* be repeated without sacrificing any type guarantees. The constructor has to accept a typed argument list and it has to somehow map them onto properties. The properties have to repeat the types so that any one accessing those property values know what they're getting.
+
+But let's talk about the positive things, rather than the negative (such as the fact that while the format shown above is fairly minimal, it's *still* marginally more complicated in appearance than a simple mutable type). Actually.. maybe we should first talk about the *weird* things - like what is this "CtorSet" method?
+
+"CtorSet" is an extension method that sets a specified property on the target instance to a particular value. It has the following signature:
+
+    public static void CtorSet<T, TPropertyValue>(
+	  this T source,
+	  Func<T, TPropertyValue> propertyIdentifier,
+	  TPropertyValue value)
+	    with T : IAmImmutable
+
+It doesn't *just* set it, though, it ensures that the value is not null first and throws an **ArgumentNullException** if it is. This allows me to avoid the repetitive and boring if-null-then-throw statements. I don't need to worry about cases where I *do* want to allow nulls, though, because I would use an **Optional** type in that case, which is a struct and so never can be null!
+
+The method signature ensures that the type of the value is consistent with the type of the target property. If not, then the code won't compile. I *always* favour static type checking where possible, it means that there's no chance that a mistake you make will only reveal itself when a particular set of condition are met (ie. when a particular code path is executed) at runtime - instead the error is right in your face in the IDE, not even letting you *try* to run it!
+
+Which makes the next part somewhat unfortunate. The "propertyIdentifier" must be:
+
+1. A simple lambda expression..
+1. .. that identifies a property getter which has a corresponding setter (though it's fine for that setter to be private)..
+1. .. where neither the getter nor setter have a Bridge [Name] / [Template] / [Ignore] / etc.. attribute on it..
+
+If any of these conditions are not met then the "CtorSet" method will throw an exception. But you might not find out until runtime because C#'s type system is not strong enough to describe all of these requirements.
+
+The good news, though, is that while the C# type system itself isn't powerful enough, with Visual Studio 2015 it's possible to write a [Roslyn Analyser](https://msdn.microsoft.com/en-us/magazine/dn879356.aspx) that *can* pick up any invalid propertRetriever before run time, so that errors *will* be thrown right in your face without you ever executing the code. The even better news is that such an analyser is included in the NuGet package! But let's not get ahead of ourselves, let me finish describing what this new method actually does first..
+
+If it's not apparent from looking at the example code above, "CtorSet" is doing some magic. It's doing some basic sort of reflection in JavaScript to work out *how* to identify and set the target property. Bridge won't support reflection until v2 but my code does an approximation where it sniffs about in the JavaScript representation of the "propertyIdentifier" and gets a hold of the setter. Once it has done the work to identify the setter for a given "T" and "propertyIdentifier" combination, it saves it away in an internal cache - while we can't control and performance-tune JavaScript in quite the same way that we can with the CLR, it doesn't mean that we should do the same potentially-complicated work over and over again if we don't need to!
+
+Another thing to note, if you haven't already spotted it: "CtorSet" will call *private* setters. This has the potential to be disastrous, if it could be called without restrictions, since it could change the data on types that *should* be able to give the appearance of immutability (ie. classes that set their state in their constructor and have private-only setters.. the pedantic may wish to argue that classes with private setters should not be considered strictly immutable because private functions *could* change those property values, but it's entirely possible to have classes that have the attribute of being [Observational Immutability](https://blogs.msdn.microsoft.com/ericlippert/2007/11/13/immutability-in-c-part-one-kinds-of-immutability/) in this manner, and that's all I'm really interested in).
+
+So there are two fail-safes built in. Firstly, the type constraint on "CtorSet" means that the target must implement the **IAmImmutable** interface. This is completely empty and so there is no burden on the class that implements it, it merely exists as an identifier that the current type should be allowed to work with "CtorSet".
+
+The second protection is that once "CtorSet" has been called for a particular target instance and a particular property, that property's value is "locked" - meaning that a subsequent call to "CtorSet" for the same instance and property will result in an exception being thrown. This prevents the situation from occurring where an **EmployeeDetails** is initialised using "CtorSet" in its constructor but then gets manipulated externally via further calls to "CtorSet". Since the **EmployeeDetails** properties are all set in its constructor using "CtorSet", no-one can change them later with another call to "CtorSet". (This is actually something else that is picked up by the analyser - "CtorSet" may *only* be called from within constructor - so if you're using this library within Visual Studio 2015 then you wouldn't have to worry about "CtorSet" being called from elsewhere, but if you're *not* using VS 2015 then this extra runtime protection may be reassuring).
+
+Now that "CtorSet" is explained, I can get to the next good bit. I have *another* extension method:
+
+	public T With<T, TPropertyValue>(
+	  this T source,
+	  Func<T, TPropertyValue> propertyIdentifier,
+	  TPropertyValue value)
+	    with T : IAmImmutable
+	  
+This works in a similar manner to "CtorSet" but, instead of setting a property value on the current instance, it will clone the target instance then update the property on *that* instance and then return that instance. Unless the new property value is the same as the current one, in which case this work will be bypassed and the current instance will be returned unaltered. As with "CtorSet", null values are not allowed and will return in an **ArgumentNullException** being thrown.
+
+With this method, having specific "With" methods on classes is not required. Continuing with the **EmployeeDetails** class from the example above, if we have:
+
+    var employee = new EmployeeDetails(
+	  "John Smith",
+	  new DateTime(2014, 9, 3),
+	  null
+    );
+	
+.. and we then discover that his start date was recorded incorrectly, then this instance of the record could be replaced by calling:
+
+    employee = employee.With(_ => _.StartDate, new DateTime(2014, 9, 2));
+
+And, just to illustrate that if-value-is-the-same-return-instance-immediately logic, if we *then* did the following:
+
+    var employeeUpdatedAgain= employee.With(_ => _.StartDate, new DateTime(2014, 9, 2));
+	
+.. then we could use referential equality to determine whether any change was made -	
+	
+	// This will be false because the "With" call specified a StartDate value that was
+	// the same as the StartDate value that the employee reference already had
+	var wasAnyChangeMade = (employeeUpdatedAgain != employee);
+
+### Bonus features
+
+So, in this library, there are the "CtorSet" and "With" extensions methods and there is an **Optional** type -
+
+    public struct Optional<T> : IEquatable<Optional<T>>
+    {
+      public static Optional<T> Missing { get; }
+
+      public bool IsDefined { get; }
+      public T Value { get { return this.value; } }
+      public T GetValueOrDefault(T defaultValue);
+
+      public static implicit operator Optional<T>(T value);
+    }
+	
+This has a convenience static function -
+
+    public static class Optional
+    {
+      public static Optional<T> For<T>(T value)
+	  {
+	    return value;
+	  }
+    }
+	
+.. which makes it easier any time that you explicitly need to create an **Optional&lt;&gt;** wrapper for a value. It lets you take advantage of C#'s type inference to save yourself from having to write out the type name yourself. For example, instead of writing something like
+
+    DoSomething(new Optional<string>("Hello!"));
+	
+.. you could just write
+
+    DoSomething(Optional.For("Hello!"));
+	
+.. and type inference will know that the **Optional**'s type is a string.
+
+However, this is often unnecessary due to **Optional**'s implicit operator from "**T**" to **Optional&lt;T&gt;**. If you have a function
+
+	public void DoSomething(Optional<string> value)
+	{
+	  // Do.. SOMETHING
+	  
+.. then you can call it with *any* of the following:
+
+	// The really-explicit way
+	DoSomething(new Optional<string>("Hello!"));
+	
+	// The rely-on-type-inference way
+	DoSomething(Optional.For("Hello!"));
+	
+	// The rely-on-Optional's-implicit-operator way
+	DoSomething("Hello!");
+	
+There is also an immutable collection type; the **Set&lt;T&gt;**. This has a very basic interface -
+
+    public sealed class Set<T> : IEnumerable<T>
+    {
+	  public static Set<T> Empty { get; }
+
+      public int Count { get; }
+      public T this[int index] { get; }
+      public Set<T> SetValue(int index, T value);
+      public Set<T> Insert(T item);
+    }
+	
+.. and it comes with a similar convenience static function -
+
+    public static class Set
+    {
+        public static Set<T> Of<T>(params T[] values);
+    }
+
+The reason for this type is that it's so common to need collections of values but there is nothing immediately available in Bridge that allows me to do this while maintaining guarantees about non-null values and immutability.
+
+I thought about using the [Facebook Immutable-Js](https://facebook.github.io/immutable-js/) library but..
+
+1. It's a further dependency
+1. I *really* wanted to continue the do-not-allow-null philosophy that I use with "CtorSet" and "With"
+
+I actually considered calling the "**Set**" type the "**NonNullImmutableList**" but "NonNull" felt redundant when I was trying to encourage non-null-by-default and "Immutable" felt redundant since immutability is what this library is for. So that left my with **List&lt;T&gt;** and that's already used! So I went with simply **Set&lt;T&gt;**.
+
+Immutable lists like this are commonly written using linked lists since, if the nodes are immutable, then sections of the list can often be shared between multiple lists - so, if you have a list with three items in it and you call "Insert" to create a new list with four items that has the new item as the new first first item in the linked list then the following three items will be the same three node instances that existed in the original list. This reuse of data is a way to make immutable types more efficient than the naive copy-the-entire-list-and-then-manipulate-the-new-version approach would be. I'm 99% sure that this is what the Facebook library uses for the simple list type and it's something I wrote about doing in C# a few years ago if you want to read more (see "[Persistent Immutable Lists](Post38)").
+
+The reason that I mention this is to try to explain why the **Set** interface is so minimal - there are no Add, InsertAt, etc.. functions. The cheapest operations to do to this structure are to add a new item at the start of the list and to iterate through the items from the start, so I started off with only those facilities initially. Then I added a getter (which is an O(n) operation, rather than the O(1) that you get with a standard array) and a setter (which is similarly O(n) in cost, compared to O(1) for an array) because they are useful in many situations. In the future I might expand this class to include more List-like functions, but I haven't for now.
+
+Just to make this point clear one more time: **Set&lt;T&gt;** functions will throw exceptions if null values are ever specified - all values should be non-null and the type of "T" should be an **Optional** if null values *are* required (in which case none of the actual elements of the set will be null since they will all be **Optional** instances and **Optional** is a struct).
+
+To make it easier to work with properties that are collections of items, there is another "With" method signature:
+
+	public T With<T, TPropertyElement>(
+	  this T source,
+	  Func<T, Set<TPropertyElement>> propertyIdentifier,
+	  int index,
+	  TPropertyElement value)
+
+So, if you had a class like this -
+
+    public class Something : IAmImmutable
+    {
+      public Something(int id, Set<string> items)
+      {
+        this.CtorSet(_ => _.Id, id);
+        this.CtorSet(_ => _.Items, items);
+      }
+      public int Id { get; private set; }
+      public Set<string> Items { get; private set; }
+    }
+	
+.. and an instance of one created with:
+
+    var s = new Something(1, Set.Of("ZERO", "One"));
+
+.. and you then wanted to change the casing of that second item, then you could do so with:
+
+    s = s.With(_ => _.Items, 1, "ONE");
+	
+If you specified an invalid index then it would fail at runtime, as it would if you tried to pass a null value. If you tried to specify a value that was of an incompatible type then you would get a compile error as the method signature ensures that the specified value matches the **Set&lt;T&gt;**'s item type.
+
+### Getting hold of the library
+
+If this has piqued your interest then you can get the library from NuGet - it's called "[ProductiveRage.Immutable](https://www.nuget.org/packages/ProductiveRage.Immutable)". It should work fine with Visual Studio 2013 but I would recommend that you use 2015, since then the analysers that are part of the NuGet package will be installed and enabled as well. The analysers confirm that every "property retriever" argument is *always* a simple lambda, such as
+
+	_ => _.Name
+	
+.. and ensures that "Name" is a property that both "CtorSet" and "With" are able to use in their manipulations*. If this is not the case, then you will get a descriptive error message explaining why.
+
+\* *(For example, properties may not be used whose getter or setter has a Bridge [Name], [Template] or [Ignore] attribute attached to it).*
+
+One think to be aware of with using Visual Studio 2015 with Bridge.Net, though, is that Bridge does not yet support C# 6 syntax. So don't get carried away with the wonderful new capabilities (like my beloved [nameof](https://msdn.microsoft.com/en-us/library/dn986596.aspx)). Support for this new syntax is, I believe, coming in Bridge v2..
+
+If you want to look at the actual code then feel free to check it out at [github.com/ProductiveRage/Bridge.Immutable](https://github.com/ProductiveRage/Bridge.Immutable). That's got the library code itself as well as the analysers and the unit tests *for* the analysers. It's the first time that I've tried to produce a full, polished analyser and I had fun! As well as a few speed bumps.. (possibly a topic for another day).
+
+While the library, as delivered through the NuGet package, should work fine for both VS 2013 and VS 2015, building the solution yourself requires VS 2015 *Update 1*.
+
+### Is this proven and battle-hardened?
+
+No.
+
+At this point in time, this is mostly still a concept that I wanted to try out. I think that what I've got is reliable and quite nicely rounded - I've *tried* to break it and haven't been able to yet. And I intend to use it in some projects that I'm working on. However, at this moment in time, you might want to consider it somewhat experimental. Or you could just be brave and starting using it all over the place to see if it fits in with your world view regarding how you should write C# :)
+
+### Is "IAmImmutable" really necessary?
+
+If you've *really* been paying attention to all this, you might have noticed that I said earlier that the **IAmImmutable** interface is used to identify types that have been designed to work with "CtorSet", to ensure that you can't call "CtorSet" on references that weren't expecting it and whose should-be-private internals you could then meddle with. Well, it would be a reasonable question to ask:
+
+> Since there is an analyser to ensure that "CtorSet" is only called from within a constructor, surely **IAmImmutable** is unnecessary because it would not be possible to call "CtorSet" from places where it shouldn't be?
+
+I have given this some thought and have decided (for now, at least) to stick with the **IAmImmutable** marker interface for two reasons:
+
+1. If you're writing code where the analyser is not being used (such as in Visual Studio versions before 2015) then it makes it harder to write code that could change private state where it should not be possible 
+1. It avoids polluting the auto-complete matches by only allowing "CtorSet" and "With" to be called against *any* type, even where it's not applicable (such as on the **string** class, for example)
+
+The first point refers to the fallback defense mechanism that will not allow properties to have their value set more than once using "CtorSet", attempting to do so will result in a runtime error. If a class has all of its properties set using "CtorSet" within its constructor then any external, subsequent "CtorSet" call will fail. Having to implement the **IAmImmutable** interface when writing immutable types hopefully acts as a reminder to do this. Without this extra protection (and without the analyser), your code could contain "CtorSet" calls that manipulate private state in classes that have no idea what's hit them!
+
+Meanwhile, the second just *feels* like a good practice so that "CtorSet" and "With" don't crop up over and over again on types that you would not want to use them with.
+
+If anyone really wanted the **IAmImmutable**-requirement to be relaxed (which would allow the immutable types to be written in an even more succinct manner, since they wouldn't need to implement that interface) then I would definitely be up for a debate.
