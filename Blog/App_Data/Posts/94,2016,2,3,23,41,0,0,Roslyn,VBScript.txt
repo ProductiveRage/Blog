@@ -1,0 +1,535 @@
+## Using Roslyn to identify unused and undeclared variables in VBScript WSC components
+
+*(**Note:** I had intended to keep this aside for April Fools since it's intended to be a bit tongue-in-cheek and really just an excuse to play with technology for technology's sake.. but I haven't got many other posts that I'm working on at the moment so I'm going to just unleash this now, rather than waiting!)*
+
+Imagine that you maintain a project which was migrated over time from an old and fragile platform to a new and improved (C#) code base. But there are various complicated external components that have been left untouched since they were (mostly) working and the new code could continue to use them - allowing the valuable rewriting time to be spent elsewhere, on less compartmentalised areas of code.
+
+For some projects, these could be C++ COM components - I'm no expert on C++, but since people are still writing a lot of code in it and there are powerful IDEs to support this (such as Visual Studio), I presume that maintaining these sorts of components is possibly a little annoying (because COM) but not the worst thing in the world. For other projects, though, these could be "[Windows Scripting Components](https://msdn.microsoft.com/en-us/library/ms524594(v=vs.90).aspx)" - these are basically COM components that are written in scripting languages, such as VBScript. They look something like the following:
+
+    <?xml version="1.0" ?>
+    <?component error="false" debug="false" ?>
+    <package>
+      <component id="ExampleComponent">
+        <registration progid="ExampleComponent" description="Example Component" version="1" />
+        <public>
+          <method name="DoSomething" />
+        </public>
+        <script language="VBScript">
+        <![CDATA[
+		
+          Function DoSomething(ByVal objOutput)
+		    Dim intIndex: For intIndex = 1 To 5
+			  objOutput.WriteLine "Entry " & iIndex
+			Next
+          End Function
+		  
+        ]]>
+        </script>
+      </component>
+    </package>
+
+Creating "Classic ASP" web projects using these components had the advantage that interfaces between components could be limited and documented, enabling a semblance of organisation to be brought to bear on large solutions.. but "Classic ASP" and VBScript are technologies that, by this point, should have long since been put to bed. They do *not* have good IDE support or debugging tools (nor do they perform well, nor is it easy to hire good people to work on your solutions that contain code in this language).
+
+If you have components that work and that will never be needed to change, then maybe that's no big deal. Or maybe there is something in the migration plan that says that legacy components that work (and do not require adapting or extending) will be left as-is and any components that need work will be rewritten.
+
+If this is the case, then it's easy enough to use these working components from C# -
+
+    var filename = "ExampleComponent.wsc";
+    dynamic component = Microsoft.VisualBasic.Interaction.GetObject(
+	  "script:" + new FileInfo(filename).FullName,
+	  null
+	);
+	component.DoSomething(new ConsoleWriter());
+	
+*Note: In order for the above code to run with the WSC presented further up, the C# code needs to provide a ComVisible "objOutput" reference which has a "WriteLine" method that takes a single (string) argument. The snippet above uses a **ConsoleWriter** class, which could be implemented as follows:*
+
+    [ComVisible(true)]
+    public class ConsoleWriter
+    {
+      public void WriteLine(string value)
+      {
+        Console.WriteLine(value);
+      }
+    }
+	
+But what if there *isn't* an agreement to rewrite any WSCs that need work and what if there are some that need bug-fixing or new functionality? Well, good luck! Error messages from these components tend to be vague and - just to really add a little extra joy to your life - they don't include line numbers. Oh, "Object expected"? Great.. will you tell me where? No. Oh, good.
+
+If you were so intrigued by what I've written here so far that you've actually been playing along and have saved the WSC content from the top of this post into a file and executed it using the C# above, you might have noticed another problem when you ran it. Below is what is output to the console:
+
+> Entry
+
+> Entry
+
+> Entry
+
+> Entry
+
+> Entry
+
+But, since the VBScript is performing a simple loop and writing a message that includes that loop variable in it, shouldn't it be this instead??
+
+> Entry 1
+
+> Entry 2
+
+> Entry 3
+
+> Entry 4
+
+> Entry 5
+
+### Identifying unused and undeclared variables with the VBScriptTranslator and Roslyn
+
+Well, I do have a glimmer of hope for the problem above and, potentially, for other VBScript-writing pitfalls.
+
+What we could do is process WSC files to -
+
+1. Extract VBScript section(s) from them
+2. Run the VBScript content through the [VBScriptTranslator](Post83) to generate C#
+3. Parse and build the resulting C# using [Roslyn](https://github.com/dotnet/roslyn/wiki/Roslyn%20Overview)
+4. Use information gleaned from steps 2 and 3 to identify errors that might otherwise not be apparent before runtime
+
+The packages we want are available through NuGet -
+
+* [https://www.nuget.org/packages/VBScriptTranslator](https://www.nuget.org/packages/VBScriptTranslator)
+* [https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp)
+
+Before I go through these steps, let me just explain briefly what the problem was in the VBScript sample code shown further up - just in case you're not familiar with VBScript or didn't spot it.
+
+The loop variable in the code
+
+    Dim intIndex: For intIndex = 1 To 5
+	  objOutput.WriteLine "Entry " & iIndex
+	Next
+	
+is named "intIndex" but the line that writes out the text refers to "iIndex", which is an undeclared variable.
+
+In C#, if we tried to do something similar then the compiler would bring it immediately to our attention - eg.
+
+    for (var i = 1; i <= 5; i++)
+	  Console.WriteLine("Entry " + j);
+	  
+Presuming that "j" was not defined elsewhere within the scope of the above code, we would be informed that
+
+> The name 'j' does not exist in the current context
+
+But VBScript doesn't care about this, declaring variables (such as with the use of "Dim intIndex") is generally optional. The "iIndex" value in the code above is never defined, which means it gets the special VBScript "Empty" value, which is treated as an empty string when introduced into a string concatenation operation.
+
+VBScript does support a mode that requires that variables be declared before they are referenced; "Option Explicit". If we changed the code to the following:
+
+    Option Explicit
+
+    Dim intIndex: For intIndex = 1 To 5
+	  objOutput.WriteLine "Entry " & iIndex
+	Next
+	
+then we would get an error at runtime:
+
+> Variable is undefined: 'iIndex'
+
+Which seems much better, but there's one big gotcha to "Option Explicit" - it is *not* enforced when the VBScript code is parsed, it is only enforced as the code is executed. This means that enabling Option Explicit and having a script run successfully does *not* mean that it contains no undeclared variables, it only means that the code path that just ran contained no undeclared variables.
+
+To illustrate, the following script will run successfully *except on Saturdays* -
+
+    Option Explicit
+
+    Dim intIndex: For intIndex = 1 To 5
+	  If IsSaturday() Then
+	    objOutput.WriteLine "Entry " & iIndex
+	  Else
+	    objOutput.WriteLine "Entry " & intIndex
+	  End If
+	Next
+	
+    Function IsSaturday()
+      IsSaturday = WeekDay(Now()) = 7
+    End Function
+
+This is a pity. I think that it would have been much better for Option Explicit to have been enforced when the script was loaded. But that ship has *loooooong* since sailed.
+
+So, instead of crying about spilt milk, let's look at something positive. We've got a four step plan to crack on with!
+
+#### 1. Extracting VBScript content from a WSC
+
+This is the most boring step and so I'll try not to get bogged down too much here. A WSC file is xml content and we want to identify CDATA content sections within "script" tags that have a "language" attribute with the value "VBScript".
+
+The below is some rough-and-ready code, taken from a project that I wrote years ago, dusted off to reuse here -
+
+    private static IEnumerable<Tuple<string, int>> GetVBScriptSections(string wscContent)
+    {
+      var document = new XPathDocument(new StringReader(wscContent));
+      var nav = document.CreateNavigator();
+      if (nav.HasChildren && nav.MoveToFirstChild())
+      {
+        while (true)
+        {
+          foreach (var scriptSection in TryToGetVBScriptContentFromNode(nav))
+            yield return scriptSection;
+          if (!nav.MoveToNext())
+            break;
+        }
+      }
+    }
+
+    private static IEnumerable<Tuple<string, int>> TryToGetVBScriptContentFromNode(XPathNavigator nav)
+    {
+      if (nav.NodeType == XPathNodeType.Text)
+      {
+        var navParent = nav.Clone();
+        navParent.MoveToParent();
+        if (navParent.Name.Equals("script", StringComparison.OrdinalIgnoreCase)
+        && DoesNodeHaveVBScriptLanguageAttribute(navParent))
+          yield return Tuple.Create(nav.Value, ((IXmlLineInfo)nav).LineNumber - 1);
+      }
+      if (nav.HasChildren)
+      {
+        var navChildren = nav.Clone();
+        if (navChildren.MoveToFirstChild())
+        {
+          while (true)
+          {
+            foreach (var scriptSection in TryToGetVBScriptContentFromNode(navChildren))
+              yield return scriptSection;
+            if (!navChildren.MoveToNext())
+              break;
+          }
+        }
+      }
+    }
+
+    private static bool DoesNodeHaveVBScriptLanguageAttribute(XPathNavigator node)
+    {
+      node = node.Clone();
+      if (!node.HasAttributes || !node.MoveToFirstAttribute())
+        return false;
+
+      while (true)
+      {
+        if (node.Name.Equals("language", StringComparison.OrdinalIgnoreCase)
+        && node.Value.Equals("VBScript", StringComparison.OrdinalIgnoreCase))
+          return true;
+        if (!node.MoveToNextAttribute())
+          return false;
+      }
+    }
+
+The "GetVBScriptSections" function will return a set of Tuples - pairs of values where the first value is the VBScript content and the second value is the line index that the content starts at in the WSC. It returns a set, rather than a single Tuple, since it is valid for WSC files to contain multiple script tags.
+
+The source line index will be important for identifying where in the WSC that any warnings we generate later originate.
+
+#### 2. Translate the VBScript sections
+
+Now that we've got VBScript content, let's translate it into C#!
+
+After the [VBScriptTranslator](https://www.nuget.org/packages/VBScriptTranslator/) NuGet package is installed, the following code may be written -
+
+    foreach (var vbscriptCodeSection in GetVBScriptSections(wscContent))
+    {
+      // When translating the VBScript, add in new lines before the content so
+	  // that the lines indexes in the only-VBScript content match the line
+	  // indexes in the WSC
+      var lineIndexInSourceFile = vbscriptCodeSection.Item2;
+	  var blankLinesToInject = string.Join(
+	    "",
+		Enumerable.Repeat(Environment.NewLine, lineIndexInSourceFile)
+	  );
+	  
+      var vbscriptContent = vbscriptCodeSection.Item1;
+      var translatedStatements = DefaultTranslator.Translate(
+        blankLinesToInject + vbscriptContent,
+        externalDependencies: new string[0],
+        warningLogger: message =>
+        {
+          if (message.StartsWith("Undeclared variable:"))
+            Console.WriteLine(message);
+        }
+      );
+
+This actually goes a long way to identifying my original problem - in order for the [VBScriptTranslator](https://bitbucket.org/DanRoberts/vbscripttranslator) to do its thing, it needs to identify any undeclared variables (because it will have to create explicitly declared variables in the resulting C# code). When it encounters an undeclared variable, it will log a warning message - the code above writes to the console any warnings about undeclared variables.
+
+Running the above against the content at the top of this post results in the following being written out:
+
+> Undeclared variable: "iIndex" (line 14)
+
+Success! Line 14 is, indeed, the line where an undeclared variable "iIndex" was accessed.
+
+Now that we have a C# interpretation of the source code, though, it seems like we should be able to do more by bringing the impressive array of C# analysis tools that are now available to bear (ie. Roslyn aka "Microsoft.CodeAnalysis").
+
+Imagine if the original VBScript content was something more like this -
+
+    Function DoSomething(ByVal objOutput)
+	  Dim intIndex, strName
+	  
+	  ' .. loads of code
+	  
+	  For intIndex = 1 To 5
+	    objOutput.Write "Entry " & iIndex
+	  Next
+	  
+	  ' .. loads more code
+	  
+    End Function
+
+Those legacy VBScript writers sure did love their huge functions with 100s of lines of code! So the "loads of code" sections above really could be *loads* of code.
+
+One day, someone has to change this long, long function a little bit and thinks that they've removed the only use of the "strName" variable from the function. But it's hard to be sure since the function is so long and it's got conditions nested so deeply that it's headache-inducing. The [Boy Scout Rule](http://programmer.97things.oreilly.com/wiki/index.php/The_Boy_Scout_Rule) makes it seem attractive to remove the "strName" declaration if it's no longer used.. the problem is that this someone is not utterly, 100% confident that it's safe to remove. And it's not like they could just remove the variable declaration then re-run and rely on Option Explicit to inform them if the variable *is* still used somewhere (for the reason outlined earlier).
+
+One way to obtain confidence as to whether a variable is used or not is to continue to the next step..
+
+#### 3. Build the generated C# using Roslyn
+
+Adding the [Microsoft.CodeAnalysis.CSharp](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp) NuGet package allows us to write:
+
+    private static IEnumerable<Tuple<string, int>> GetUnusedVariables(string translatedContent)
+    {
+      // Inspired by code from www.tugberkugurlu.com (see http://goo.gl/HYT8eo)
+      var syntaxTree = CSharpSyntaxTree.ParseText(translatedContent);
+      var compilation = CSharpCompilation.Create(
+        assemblyName: "VBScriptTranslatedContent",
+        syntaxTrees: new[] { syntaxTree },
+        references:
+          new[]
+          {
+            // VBScriptTranslator content requires System, System.Collections, System.Runtime
+            // and one of its own libraries to run. To identify these assemblies, one type
+            // from each is identified, then its Assembly location is used to create the
+            // MetadataReferences that we need here
+            typeof(object),
+            typeof(List<string>),
+            typeof(ComVisibleAttribute),
+            typeof(DefaultRuntimeSupportClassFactory),
+          }
+          .Select(type => MetadataReference.CreateFromFile(type.Assembly.Location)),
+        options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+      );
+      EmitResult result;
+      using (var ms = new MemoryStream())
+      {
+        result = compilation.Emit(ms);
+      }
+      if (!result.Success)
+      {
+        var errorMessages = result.Diagnostics
+          .Where(diagnostic =>
+		    diagnostic.IsWarningAsError || (diagnostic.Severity == DiagnosticSeverity.Error)
+		  )
+          .Select(diagnostic => $"{diagnostic.Id}: {diagnostic.GetMessage()}");
+        throw new Exception(
+		  "Compilation of generated C# code failed: " + string.Join(", ", errorMessages)
+		);
+      }
+      return result.Diagnostics
+        .Where(diagnostic => diagnostic.Id == "CS0219")
+        .Select(diagnostic => Tuple.Create(
+          diagnostic.GetMessage(),
+          diagnostic.Location.GetLineSpan().StartLinePosition.Line
+        ));
+    }
+
+This will take the VBScriptTranslator-generated C# code and return information about any unused variables; a set of Tuples where each pair of values is a message about an unused variable and the line index of this variable's declaration.
+
+We'll use this information in the final step..
+
+#### 4. Use information gleaned from steps 2 and 3 to identify errors that might otherwise not be apparent before runtime
+
+In the VBScriptTranslator-calling code from step 2, we got a list of translated statements. Each of these represents a single line of C# code and has the properties "Content", "IndentationDepth" and "LineIndexOfStatementStartInSource". If we so desired, we could use the "Content" and "IndentationDepth" properties to print to the console the generated C# in a nicely-indented format.
+
+But that's not important right now, what we really want are two things; a single string for the entirety of the generated C# content (to compile with Roslyn) and we want mappings for line index values in the C# back to line index values in the source VBScript. The C# code may have more or less lines than the VBScript (the translation process is not a simple line-to-line process), which is why these line index mappings will be important.
+
+	// Each "translatedStatements" item has a Content string and a
+	// LineIndexOfStatementStartInSource value (these are used to
+	// create a single string of C# code and to map each line in
+	// the C# back to a line in the VBScript)
+	var translatedContent = string.Join(
+	  Environment.NewLine,
+	  translatedStatements.Select(c => c.Content)
+	);
+	var lineIndexMappings = translatedStatements
+	  .Select((line, index) => new { Line = line, Index = index })
+	  .ToDictionary(
+		entry => entry.Index,
+		entry => entry.Line.LineIndexOfStatementStartInSource
+	  );
+	  
+Now it's a simple case of bringing things together -
+
+	foreach (var unusedVariableWarning in GetUnusedVariables(translatedContent))
+	{
+	  var unusedVariableWarningMessage = unusedVariableWarning.Item1;
+	  var lineIndexInTranslatedContent = unusedVariableWarning.Item2;
+	  var lineIndexInSourceContent = lineIndexMappings[lineIndexInTranslatedContent];
+	  
+	  // Line index values are zero-based but warnings messages that refer to
+	  // a line generally refer to a line NUMBER, which is one-based (hence
+	  // the +1 operation)
+	  Console.WriteLine(
+	    $"{unusedVariableWarningMessage} (line {lineIndexInSourceContent + 1})"
+	  );
+	}
+
+If this was run against our second WSC sample, then we would get a new warning reported:
+
+  > The variable 'strname' is assigned but its value is never used (line 13)
+
+Which is precisely what we wanted to find out - the "strName" variable is declared but never used, so it's safe for our Boy Scout Developer to remove it!
+
+### Ooooooo, I'm excited! What else could I do??
+
+I must admit, I haven't thought too much about what other possibilities are available when some static analysis is available for VBScript code, I was just intending to mess about with Roslyn a bit. But, thinking about it, a few ideas come to mind.
+
+As an example of the frankly terrible errors that you get when working with VBScript WSCs, if you took the WSC example from earlier and decided to refactor the FUNCTION into a SUB (in VBScript, a SUB is basically a FUNCTION that can not return a value) and you made the silly mistake of changing the function "header" but not its "terminator" - eg.
+
+	Sub DoSomething(ByVal objOutput)
+	  Dim intIndex: For intIndex = 1 To 5
+	    objOutput.Write "Entry " & iIndex
+	  Next
+	End Function
+
+Then you would get a particularly unhelpful error when trying to load the WSC into the .net runtime -
+
+> Cannot create ActiveX component.
+
+The problem is that the "END FUNCTION" should have been changed "END SUB", since the first VBScript line has had the keyword "FUNCTION" changed to "SUB". It would seem that the VBScript interpreter would have plenty of information available to it that would allow it to raise a more descriptive error. However, it chooses not to.
+
+If this WSC content was run through the VBScriptTranslator, though, then an exception with the following error message would be raised:
+
+> Encountered must-handle keyword in statement content, this should have been handled by a previous AbstractBlockHandler: "End", line 16 (this often indicates a mismatched block terminator, such as an END SUB when an END FUNCTION was expected)
+
+Ok.. I'll admit that this is not the friendliest error message ever formed. What exactly is a "must-handle keyword"? What is an "AbstractBlockHandler"?? But the good thing is that a line number is included along with a reference to an "END" token - and this hopefully is enough to point you at where the problem is.
+
+Another idea that springs to mind is to try to identify functions that have inconsistent return types, in terms of whether they are value types or object references. In VBScript, you must be aware of this distinction at all times - if calling a function that you expect to return an object, then you need to write the function call using the "SET" keyword - eg.
+
+    Set objPrice = GetPriceDetails(order)
+	
+But if you expect it to return a value type, then you would write it as
+    
+	sngPrice = GetPriceDetails(order)
+
+VBScript has a special kind of null that represents an object with no value; "Nothing". This allows you to write functions that will always return an object reference, but that may return a reference that means "no result" - eg.
+
+	Function GetPriceDetails(ByVal x)
+	  If IsObject(x) Then
+	    Set GetPriceDetails = x.PriceDetails
+	    Exit Function
+	  End If
+	  Set GetPriceDetails = Nothing
+	End Function
+
+However, I've seen code that forgets this and returns a value type "Null" instead - eg.
+
+	Function GetPriceDetails(ByVal x)
+	  If IsObject(x) Then
+	    Set GetPriceDetails = x.PriceDetails
+	    Exit Function
+	  End If
+	  GetPriceDetails = Null
+	End Function
+
+Now, when calling GetPriceDetails, you will get an object reference sometimes and a value type other times. How do you know whether to use "SET" when calling it if you don't know whether you are expecting an object reference or a value type back? Answer: You don't. Most likely whoever wrote the code used "SET" because they tested the "happy case" (which returns an object reference) and forgot to test the less-happy case, which returned a "Null" value type (and that would fail at runtime if called with use of "SET").
+
+Well, this is something else that the VBScriptTranslator can help with. Instead of using the **DefaultTranslator**'s "Translate" method, we can use its "Parse" method. This will return a syntax tree describing the source code. By examining this data, we can identify cases, like the one above, which are almost certainly mistakes.
+
+Below is a complete example. I won't go too deeply into the details, since that would send me even further off track than I am now!
+
+    static void Main(string[] args)
+    {
+      var scriptContent = @"
+        Function GetPriceDetails(ByVal x)
+          If IsObject(x) Then
+            Set GetPriceDetails = x.Price
+            Exit Function
+          End If
+          GetPriceDetails = Null
+        End Function";
+
+      // Note: An "AbstractFunctionBlock" is a Function, a Sub, or a Property - they are
+	  // all variations on a theme
+      var codeBlocks = DefaultTranslator.Parse(scriptContent);
+      foreach (var function in GetAllCodeBlocks(codeBlocks).OfType<AbstractFunctionBlock>())
+      {
+        var returnValueSetters = GetAllCodeBlocks(function.Statements)
+          .OfType<ValueSettingStatement>()
+          .Where(ValueSetterTargetIs(function.Name));
+        var valueTypeReturnValueSetterLineNumbers = returnValueSetters
+          .Where(v => v.ValueSetType == ValueSettingStatement.ValueSetTypeOptions.Let)
+          .Select(v => v.ValueToSet.Tokens.First().LineIndex + 1)
+          .Distinct();
+        var objectReturnValueSetterLineNumbers = returnValueSetters
+          .Where(v => v.ValueSetType == ValueSettingStatement.ValueSetTypeOptions.Set)
+          .Select(v => v.ValueToSet.Tokens.First().LineIndex + 1)
+          .Distinct();
+        if (valueTypeReturnValueSetterLineNumbers.Any()
+		&& objectReturnValueSetterLineNumbers.Any())
+        {
+          Console.WriteLine(
+            "{0} \"{1}\" has both LET (lines {2}) and SET (lines {3}) return values",
+            function.GetType().Name,
+            function.Name.Content,
+            string.Join(", ", valueTypeReturnValueSetterLineNumbers),
+            string.Join(", ", objectReturnValueSetterLineNumbers)
+          );
+        }
+      }
+      Console.ReadLine();
+    }
+
+    private static IEnumerable<ICodeBlock> GetAllCodeBlocks(IEnumerable<ICodeBlock> blocks)
+    {
+      foreach (var block in blocks)
+      {
+        yield return block;
+
+        var parentBlock = codeBlock as IHaveNestedContent;
+        if (parentBlock != null)
+        {
+          foreach (var nestedBlock in GetAllCodeBlocks(parentBlock.AllExecutableBlocks))
+            yield return nestedBlock;
+        }
+      }
+    }
+
+    private static Func<ValueSettingStatement, bool> ValueSetterTargetIs(NameToken target)
+    {
+      return valueSetter =>
+      {
+        if (valueSetter.ValueToSet.Tokens.Count() > 1)
+          return false;
+        var valueSetterTarget = valueSetter.ValueToSet.Tokens.Single();
+        return
+          (valueSetterTarget is NameToken) &&
+          valueSetterTarget.Content.Equals(target.Content, StringComparison.OrdinalIgnoreCase);
+      };
+    }
+	
+This will write out the warning
+
+> FunctionBlock "GetPriceDetails" has both LET (lines 7) and SET (lines 4) return value setters
+
+Hurrah! Very helpful! No more waiting for run time execution to find out that some code paths return object references and some return value types!	
+
+Static analysis is very valuable. It's one of the reasons why I like C# so much because there is a lot of power in static analysis - and I'm always looking out for ways to leverage it further, such as more strongly-typed classes (should a phone number really be a string or should it be a "PhoneNumber" class?) and technologies such as code contracts (which I've been meaning to look back into for about a year now.. must stop making excuses).
+
+But there's one other thing that could be done with VBScript WSCs and the VBScriptTranslator - instead of just translating the code to analyse it, it could be translated into C# and then *executed* as C#! This way the (very expensive) COM boundary would be removed between the .net hosting environment and the old legacy component. *And* the translated code will execute more quickly than VBScript. Double-win!
+
+The output from a "DefaultTranslator.Translate" call is content that may be saved into a file that will then define a class called "TranslatedProgram" (this string content is what we were earlier pushing through Roslyn for further analysis). This may be executed using a runtime library included in the [VBScriptTranslator](https://www.nuget.org/packages/VBScriptTranslator) NuGet package (or that is available on its own, in the [VBScriptTranslator.RuntimeSupport](VBScriptTranslator.RuntimeSupport/) NuGet package) with the following code -
+
+    // The "compatLayer" provides implementations of VBScript functions (like "CInt")
+	// to the translated code, along with functions such as "CALL", which enable late-
+	// bound method calls to be executed (which are then compiled into LINQ expressions
+	// and cached so that subsequent calls are close in performance to hand-written C#)
+    using (var compatLayer = DefaultRuntimeSupportClassFactory.Get())
+    {
+	  // The Runner's "Go" function returns a new instance of the translated
+	  // component. The "DoSomething" method from the component may then be
+	  // called. Translated names are all lower-cased, it makes the mismatch
+	  // between VBScript's case insensitivity and C#'s case SENSITIVITY
+	  // less important.
+      var component = new TranslatedProgram.Runner(compatLayer).Go();
+      component.dosomething(new ConsoleWriter());
+    }
+
+### So.. not actually *that* much Roslyn then?
+
+Sticklers for accuracy may note, at this point, that there hasn't actually been *that* much use of Roslyn in a post that features that word in its title. Well.. yes, that is fair enough.
+
+But, then, this entire post was only intended to be a slightly silly foray into "just because I can.." that included a detour through Roslyn. Let's not take things too seriously, though - I mean, *really*, who is still even using [VBScript in any serious production applications these days](https://www.youtube.com/watch?v=T55ArHjeR1c)??

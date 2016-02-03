@@ -250,6 +250,7 @@
     <Content Include="App_Data\Posts\76,2014,10,2,21,49,0,0,Immutability.txt" />
     <Content Include="App_Data\Posts\90,2015,8,19,23,7,0,0,Bridge,React.txt" />
     <Content Include="App_Data\Posts\91,2015,11,24,22,9,0,0,MVC.txt" />
+    <Content Include="App_Data\Posts\99,2016,4,1,8,45,0,0,Roslyn,VBScript.txt" />
     <Content Include="App_Data\Posts\93,2015,12,16,22,22,0,0,Bridge,Immutability.txt" />
     <Content Include="App_Data\Posts\92,2015,11,26,23,29,0,0,Bridge,React.txt" />
     <Content Include="App_Data\Posts\Redirects.txt" />
