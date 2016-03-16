@@ -250,6 +250,7 @@
     <Content Include="App_Data\Posts\76,2014,10,2,21,49,0,0,Immutability.txt" />
     <Content Include="App_Data\Posts\90,2015,8,19,23,7,0,0,Bridge,React.txt" />
     <Content Include="App_Data\Posts\91,2015,11,24,22,9,0,0,MVC.txt" />
+    <Content Include="App_Data\Posts\96,2016,3,15,23,55,0,0,Bridge,React.txt" />
     <Content Include="App_Data\Posts\95,2016,2,11,20,11,0,0,Bridge,React,Immutability.txt" />
     <Content Include="App_Data\Posts\94,2016,2,3,23,41,0,0,Roslyn,VBScript.txt" />
     <Content Include="App_Data\Posts\93,2015,12,16,22,22,0,0,Bridge,Immutability.txt" />
@@ -261,7 +262,9 @@
     <Content Include="Content\Images\Posts\FluidLayouts.png" />
     <Content Include="Content\Images\Posts\FluidLayoutsGallery.png" />
     <Content Include="Content\Images\Posts\FluxDiagram.png" />
+    <Content Include="Content\Images\Posts\FluxDiagramSimple.png" />
     <Content Include="Content\Images\Posts\ProfilingTheProcessor.png" />
+    <Content Include="Content\Images\Posts\ReactTutorial2.png" />
     <Content Include="Content\Images\Posts\StylesWithMarkerIds.png" />
     <Content Include="Content\Images\Posts\StylesWithoutMarkerIds.png" />
     <Content Include="Content\Images\Posts\TypeScriptComponentThisIsAny.png" />
@@ -270,6 +273,7 @@
     <Content Include="Content\Images\Posts\WinDbgASPError2.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError3.png" />
     <Content Include="Content\Images\Posts\WinDbgASPError4.png" />
+    <Content Include="Content\Images\Posts\ReactTutorial1.png" />
     <Content Include="Content\Images\RSSFeedIcon.png" />
     <Content Include="Content\Images\RSSFeedIconHover.png" />
     <Content Include="Content\RSS.xslt" />

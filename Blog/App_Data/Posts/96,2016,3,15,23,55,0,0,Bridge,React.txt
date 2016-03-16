@@ -1,0 +1,1093 @@
+## Writing React apps using Bridge.NET - The Dan Way (from first principles)
+
+I've had a request from someone to write about how I think that someone from a .net background should write a web-based application. The short answer is that I strongly believe that using Bridge.NET with React, using a Flux-like architecture is the way forward. I think that React changed the game by trying to introduce a way to write applications that addressed the big challenges, rather than what many of the other frameworks did, which was to try to make some aspects of development easier but without tackling the underlying problems. We're going to be using these technologies to create some big applications where I work and some resources as to how best to do this will be valuable. I'm going to try to roll this all together into a short series of posts about creating Bridge / React / Flux apps, where I'll try to start from the simplest approach at each point and only introduce something new when I can explain why it's valuable. So, initially, Flux will be nowhere to be seen - but, hopefully, when it *is* introduced, it will be clear why.
+
+(I'm not going to expel any effort on convincing you that writing C# in Visual Studio is incredibly powerful, and that it's fantastic to be able to do this while writing browser-based applications, nor am I going to try to sell you any more on React - if you're not on board with these ideas already then there's a *chance* that these posts will sell you on it, but that's not going to be my main focus).
+
+### From the very start
+
+I'm going to begin from a completely fresh project, so if you've got any experience with Bridge then these steps will be familiar. But I'll go through them quickly and then start building the application itself. It's going to be extremely simple but will illustrate how to work with React and how to deal with user input and Virtual DOM re-rendering, how and where to implement validation and how to make *all the things* asynchronous so that async is not only used for scary edge cases and can be seen as a valuable tool to decouple code (and, in doing so, async will become a not-at-all-scary thing).
+
+All that the application will do will be to allow the user to write a message, entering  Title and Content strings, and to save this message. There will be a "Message API", which will emulate reading and writing to a remote endpoint, for data persistence, but the implementation will all be kept in-memory / in the browser, just to make things simple. It will look something like this:
+
+<img alt="The proposed example app" src="/Content/Images/Posts/ReactTutorial1.png" class="NoBorder AlwaysFullWidth" />
+
+As more messages are written, more entries will appear in the "Message History". Seems simple.
+
+### React components
+
+Before getting into any React-with-Bridge specifics, I want to talk a little about React components; how to arrange them into a hierarchy and how they should and shouldn't talk to each other.
+
+Almost all of the time, components that you use will be "[controlled components](https://facebook.github.io/react/docs/forms.html#controlled-components)" -
+
+> A Controlled component does not maintain its own internal state; the component renders purely based on props.
+
+This means that when you render a text input, you give it a "value" property and an "onChange" property - when the user tries to change what's in the text box (whether by pressing a number or letter, or by pressing backspace or by pasting something in) then the "onChange" callback is executed. The text box is *not* updated automatically, all that happens is that a callback is made that indicates that the user has done something that means that the text input probably *should* be updated.
+
+This seems odd at the very start since you may be used to events being driven by html elements and the updates being broadcast elsewhere; with React, events arise from components that describe the desire for a change to be made, but the change does not happen automatically. This is what is meant in the quote above when it says that a controlled component "does not maintain its own internal state".
+
+This hints at one of the key aims of React - to make code explicit and easy to reason about. If a component *only* varies based upon its props, then it's very easy to reason about; given this props data, draw in this manner. (If user-entered changes to a text input were automatically reflected in the text box then the component would *not* solely vary by its props, it would vary according to its props and whatever else the user has done to it).
+
+The only way for a component to update / re-render itself (and any child components that it may have) is for it to changes its "state". This is a special concept in React - if "SetState" is called then the component will re-render, but now it may have to consider both its props *and* its new state. If we really wanted to have a text input that would automatically update its own value as well as raise a change event, we could write a component to do so -
+
+*(Note: if you're coming into this fresh, don't worry about how to compile this C# code into a React application, I'll be getting to that after I've finished giving my view on React components).*
+
+    public class TextInput : Component<TextInput.Props, TextInput.State>
+    {
+      public TextInput(Props props) : base(props) { }
+
+      public override ReactElement Render()
+      {
+        return DOM.Input(new InputAttributes
+        {
+          Type = InputType.Text,
+          Value = (state == null) ? props.InitialValue : state.Value,
+          OnChange = ev =>
+          {
+            var newValue = ev.CurrentTarget.Value;
+            SetState(new State { Value = newValue });
+            props.OnChange(newValue);
+          }
+        });
+      }
+
+      public class Props
+      {
+        public string InitialValue;
+        public Action<string> OnChange;
+      }
+
+      public class State
+      {
+        public string Value;
+      }
+    }
+
+The problem here is that now the component depends upon two things whenever it has to render - its props *and* its state. It can change its own state but it can't change its props (React demands that a components props be considered to be immutable).
+
+*This* means that the component becomes more difficult to reason about, it was much easier when it didn't have to worry about state. (Granted, there may have been some question as to who would receive that OnChange callback to get the component to re-render, but we're going to get to that shortly).
+
+Partly for this reason, it's strongly recommended that the vast majority of components be stateless - meaning that they render according to their props and nothing else.
+
+Another reason that it is strongly recommended that components not update themselves (meaning that they are stateless, since the only way for a component to update itself is to change its state) is that it makes the handling of events much clearer. In the example application that I'm going to refer to in this series, the "Title" value that is entered by the user is reflected in the fieldset legend -
+
+<img alt="Fieldset legend mirros the Title input value" src="/Content/Images/Posts/ReactTutorial2.png" class="NoBorder AlwaysFullWidth" />
+
+If the "Title" input box was to maintain its own state and update itself when its contents change, there still needs to be something listening for changes in order to update the fieldset legend text. If it was common for components to maintain their own state then things would quickly get out of hand as more and more components have to listen for (and react to) changes in other components. Just in the example here, there is a validation message that needs to be hidden if the "Title" input has a non-blank value, so that component would need to listen for the change event on the input. (Alternatively, the **TextInput** component could be provided with validation logic and *it* would be responsible for showing or hiding the validation message - which would complicate the **TextInput** class). On top of this, there is the "Save" button which should be disabled if either of the "Title" or "Content" input boxes have no value - so the Save button component would need to listen to change events from both text inputs and decide whether or not it should be enabled based upon their states. Maybe the input form itself wants to add an "invalid" class to itself for styling purposes if either of the inputs are invalid - now the form component has to listen to changes to the text inputs and add or remove this class. This way lies madness.
+
+In summary, most components should *not* try to update themselves and so do not need state. The React bindings make it easy to write components that don't use state (again, I'll talk about using these bindings more shortly, I just wanted to point out now that the distinction between stateful and stateless components is an important one and that the bindings reflect this) -
+
+    public class TextInput : StatelessComponent<TextInput.Props>
+    {
+      public TextInput(Props props) : base(props) { }
+
+      public override ReactElement Render()
+      {
+        return DOM.Input(new InputAttributes
+        {
+          Type = InputType.Text,
+          Value = props.Value,
+          OnChange = ev => props.OnChange(ev.CurrentTarget.Value)
+        });
+      }
+
+      public class Props
+      {
+        public string Value;
+        public Action<string> OnChange;
+      }
+    }
+
+The component code is much more succinct this way, as well as helping us avoid the nightmare scenario described above.
+
+It does leave one big question, though.. if these components don't update themselves, *then what does?*
+
+Answer: There should be a top-level "Container Component" that maintains state for the application. This should be the only stateful component, all components further down the hierarchy should be stateless.
+
+In the sample application here -
+
+<img alt="The proposed example app" src="/Content/Images/Posts/ReactTutorial1.png" class="NoBorder AlwaysFullWidth" />
+
+The component hierarchy will look something like this:
+
+    AppContainer
+      MessageEditor
+        Span ("Title")
+        ValidatedTextInput
+          Input
+        Span ("Content")
+        ValidatedTextInput
+          Input
+        Button
+      MessageHistory
+        Div
+          Span (Message Title)
+          Span (Message Content)
+        Div
+          Span (Message Title)
+          Span (Message Content)
+
+The **MessageHistory** will be a read-only component tree (it just shows saved messages) and so is very simple (there are no callbacks to handle). The **MessageEditor** will render Span labels ("Title" and "Content"), two **ValidatedTextInput** components and a "Save" button. The **ValidatedTextInput** has props for a current text input value, an on-change callback and an optional validation message.
+
+When an input component's on-change callback is executed, it is an action with a single argument; the html element. In the **TextInput** example class above, the new value is extracted from that element ("ev.CurrentTarget.Value") and then passed into the on-change callback of the **TextInput**, which is an action with a simple string argument. **ValidatedTextInput** will be very similar (it will wrap the **Action&lt;InputElement&gt;** callback that the input raises in a simpler **Action&lt;string&gt;**). The only difference between it and the **TextInput** example class earlier is that it  will also be responsible for rendering a validation message element if its props value has a non-blank validation message to show (and it may apply an "invalid" class name to its wrapper if there is a validation message to show).
+
+When the Title or Content **ValidatedTextInput** raise an on-change event, the **MessageEditor** will execute some code that translates this callback further. The **MessageEditor** will have an on-change props value whose single argument is a **MessageDetails** - this will have have values for the current "Title" and "Content". Just as an on-change from an input element resulted in an on-change being raised by a **ValidatedTextInput**, an on-change by a **ValidatedTextInput** will result in an on-change from the **MessageEditor**. Each on-change event changes the type of value that the on-change describes (from an input element to a string to a **MessageDetails**). The **MessageEditor**'s on-change will be received by the **AppContainer** Component, which is where the change will result in the component tree being re-rendered.
+
+The **AppContainer** component will re-render by calling "SetState" and creating a new state reference for itself that include the new **MessageDetails** reference (that was passed up in the on-change callback from the **MessageEditor**). The call to "SetState" will result in the component being re-rendered, which will result in it rendering a new version of the **MessageEditor**. When the **MessageEditor** is rendered, the current "Title" value will be used to populate the text input *and* to set the text in the legend of the fieldset that wraps the editor's input boxes. This is how the "nightmare scenario" described earlier is avoided - instead of having lots of components listen out to events from lots of *other* components, all components just pass their events up to the top and then the entire UI is re-rendered in React's Virtual DOM.
+
+I'm going to repeat that part about event-handling because it's important; events are passed *up* from where they occur, up to the top-level component. This will trigger a re-render, which works all the way *down* through the component tree, so that the requested change is then reflected in the UI.
+
+The Virtual DOM determines what (if anything) needs to change in the browser's DOM and applies those changes - this works well because the Virtual DOM is very fast (and so we can do these "full Virtual DOM re-renders" frequently) and it minimises changes to the browser DOM (which is much slower).
+
+*(The Facebook tutorial [Thinking in React](https://facebook.github.io/react/docs/thinking-in-react.html) talks about how to mentally break down a UI into components and talks about passing state up the tree, but I wanted to try to really drive home how components should be put together and how they should communicate before fobbing you off with a Facebook link)*.
+
+I have some more recommendations on how to decide what to put into props and what into state when creating stateful container components, but I'll cover that ground after some more practical work.
+
+### Let's start coding then!
+
+Open up Visual Studio (the version isn't too important, but if you're using 2015 then bear in mind that Bridge.NET doesn't yet support C# 6 syntax). Create a new "Class Library" project. Using NuGet, add the "Bridge.React" package. This will bring in bindings for React as well as pulling in Bridge itself - the Bridge package removes the usual System, System.Collections, etc.. references and replaces them with a single "Bridge" reference, which re-implements those framework methods in code that has JavaScript translations.
+
+The Bridge package also adds some README files and a bridge.json file (under the Bridge folder in the project), which instructs Bridge how to compile your C# code into JavaScript. Change bridge.json's content to:
+
+    {
+	  "output": "Bridge/output",
+	  "combineScripts":  true
+    }
+
+This will tell it create a single JavaScript file when translating, including the Bridge library content and the React bindings and JavaScript generated from code that you write. The name of the file that it generates is based upon the name of your project. I named mine "BridgeReactTutorial" and so the Bridge compiler will generate "BridgeReactTutorial.js" and "BridgeReactTutorial.min.js" files in the "Bridge/output" folder on each build of the project.
+
+Now change demo.html (which is another file that the Bridge NuGet package created, it will be in the Brige/www folder) to the following:
+
+    <!DOCTYPE html>
+    <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+      <meta charset="utf-8" />
+      <title>Bridge.React Tutorial</title>
+      <link rel="Stylesheet" type="text/css" href="styles.css" media="screen" />
+    </head>
+    <body>
+      <noscript>JavaScript is required</noscript>
+      <div id="main" class="loading">Loading..</div>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/react/0.14.7/react.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/react/0.14.7/react-dom.js"></script>
+      <script src="../output/BridgeReactTutorial.js"></script>
+    </body>
+    </html>
+
+*(If you called your project something other than "BridgeReactTutorial" then you might have to change the filename in that last script tag).*
+
+This file will load in the latest (0.14.7, as of March 2016) version of the React library along with the Bridge / React-bindings / your-code bundle. All we need to do now is write some "your-code" content.
+
+When you created the class library project, a Class1.cs file will have been added to the project. Change its contents -
+
+    using System.Linq;
+    using Bridge.Html5;
+    using Bridge.React;
+
+    namespace BridgeReactTutorial
+    {
+      public class Class1
+      {
+        [Ready]
+        public static void Main()
+        {
+          var container = Document.GetElementById("main");
+          container.ClassName = string.Join(
+		    " ",
+			container.ClassName.Split().Where(c => c != "loading")
+		  );
+          React.Render(
+            DOM.Div(new Attributes { ClassName = "welcome" }, "Hi!"),
+            container
+          );
+        }
+      }
+    }
+
+Build the solution and then right-click on the "demo.html" file in the project and click on "View in Browser". You should see a happy little "Hi!" welcome message, rendered using React by JavaScript that was translated from C# - an excellent start!
+
+There are some subtle touches here, such as the "JavaScript is required" message that is displayed if the browser has JavaScript disabled (just in case you ever turn it off and forget!) and a "loading" message that is displayed while the JavaScript sorts itself out (usually this will be a barely-perceptibe amount of time but if the CDN host that the React library is coming from is being slow then it may not be instantaneous). The "main" div initially has a "loading" class on it, which is removed when the code above executes. Note that the [Ready] attribute on the "Main" function is a Bridge attribute, indicating code that should be called when the page has loaded (similar in principle to on-DOM-ready, frequently used by jQuery code).
+
+To take advantage of the "loading" class' presence / absence, it would be a nice touch to have the "loading" text quite pale initially (it's reassuring to know that the app is, in fact, loading, but it doesn't need to be right in your face). To do so, add a file "styles.css" alongside the "demo.html" file. It's already referenced by the markup we've pasted into "demo.html", so it will be picked up when you refresh the page. Since we're creating a stylesheet, it makes sense to include some style resets (my go-to for this is by Eric Meyer) -
+
+	/* http://meyerweb.com/eric/tools/css/reset/ v2.0b1 | 201101 NOTE: WORK IN PROGRESS
+	 USE WITH CAUTION AND TEST WITH ABANDON */
+	html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote,
+	pre,a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s,
+	samp, small, strike, strong, sub, sup, tt, var,b, u, i, center, dl, dt, dd, ol, ul,
+	li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td,
+	article, aside, canvas, details, figcaption, figure, footer, header, hgroup, menu,
+	nav, section, summary, time, mark, audio, video
+	{
+	  margin: 0;
+	  padding: 0;
+	  border: 0;
+	  outline: 0;
+	  font-size: 100%;
+	  font: inherit;
+	  vertical-align: baseline;
+	}
+	/* HTML5 display-role reset for older browsers */
+	article, aside, details, figcaption, figure, footer, header, hgroup, menu, nav,
+	section { display: block; }
+	body { line-height: 1; }
+	ol, ul { list-style: none; }
+	blockquote, q { quotes: none; }
+	blockquote:before, blockquote:after, q:before, q:after { content: ''; content: none; }
+	/* remember to highlight inserts somehow! */ ins { text-decoration: none; }
+	del { text-decoration: line-through; }
+	table { border-collapse: collapse; border-spacing: 0; }
+
+	div#main.loading { color: #f1f1f1; }
+
+At this point, I also tend to remove the "App_Readme" folder that the Bridge package adds to my project - if I'm going to write some code and check it into source control somewhere then I don't think there's a lot of point in storing a copy of the Bridge README and LICENSE each time.
+
+### Creating the Message Editor
+
+That's the theory and the project scaffolding out of the way. Now to create a form that actually does something.
+
+We've already seen how a **TextInput** component is helpful for wrapping a text input and simplifying the "OnChange" callback. So create a "Components" folder with a "TextInput.cs" file and paste in the following content -
+
+	using System;
+	using Bridge.Html5;
+	using Bridge.React;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class TextInput : StatelessComponent<TextInput.Props>
+	  {
+		public TextInput(Props props) : base(props) { }
+
+		public override ReactElement Render()
+		{
+		  return DOM.Input(new InputAttributes
+		  {
+			Type = InputType.Text,
+			ClassName = props.ClassName,
+			Value = props.Content,
+			OnChange = e => props.OnChange(e.CurrentTarget.Value)
+		  });
+		}
+
+		public class Props
+		{
+		  public string ClassName;
+		  public string Content;
+		  public Action<string> OnChange;
+		}
+	  }
+	}
+
+*(Note: When adding a new ".cs" file to a project, sometimes "System" will sneak back into the list of references in the project - this can confuse Bridge, so ensure that you remove the reference again if it gets added).*
+
+Now create another folder in the root of the project called "ViewModels". Add a new file to it; "MessageDetails.cs" and paste in the following content -
+
+	namespace BridgeReactTutorial.ViewModels
+	{
+	  public class MessageDetails
+	  {
+        public string Title;
+        public string Content;
+	  }
+    }
+
+Now add another file to the "Components" folder; "MessageEditor.cs" and paste in this:
+
+	using System;
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
+	  {
+		public MessageEditor(Props props) : base(props) { }
+
+		public override ReactElement Render()
+		{
+		  return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
+			DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
+			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+			new TextInput(new TextInput.Props
+			{
+			  ClassName = "title",
+			  Content = props.Title,
+			  OnChange = newTitle => props.OnChange(new MessageDetails
+			  {
+				Title = newTitle,
+				Content = props.Content
+			  })
+			}),
+			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+			new TextInput(new TextInput.Props
+			{
+			  ClassName = "content",
+			  Content = props.Content,
+			  OnChange = newContent => props.OnChange(new MessageDetails
+			  {
+				Title = props.Title,
+				Content = newContent
+			  })
+			})
+		  );
+		}
+
+		public class Props
+		{
+		  public string ClassName;
+		  public string Title;
+		  public string Content;
+		  public Action<MessageDetails> OnChange;
+		}
+	  }
+	}
+
+Now things are getting interesting!
+
+This is still a stateless component and so what is rendered depends solely and reliably upon its props data. When it renders, the "Title" value from its props is used to populate both the legend of the fieldset that it renders (unless "Title" is null, blank or white-space-only, in which case the legend text will be "Untitled) and it's used to populate the "Title" **TextInput**. When either of its **TextInput**s raises an on-change event, the **MessageEditor** raises its on-change events with a new **MessageDetails** instance.
+
+Note that there's no validation yet. We'll get this rough version working first and then add that later.
+
+There are still a few more steps until we have an application, though. We need a container component to render the form in the first place and to deal with on-change events that bubble up. Create another class file within the "Components" folder named "AppContainer.cs" -
+
+	using Bridge.Html5;
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class AppContainer : Component<object, AppContainer.State>
+	  {
+		public AppContainer() : base(null) { }
+
+		protected override State GetInitialState()
+		{
+		  return new State
+		  {
+			Message = new MessageDetails { Title = "", Content = "" }
+		  };
+		}
+
+		public override ReactElement Render()
+		{
+		  return new MessageEditor(new MessageEditor.Props
+		  {
+			ClassName = "message",
+			Title = state.Message.Title,
+			Content = state.Message.Content,
+			OnChange = newMessage => SetState(new State { Message = newMessage })
+		  });
+		}
+
+		public class State
+		{
+		  public MessageDetails Message;
+		}
+	  }
+	}
+
+This is the *stateful* component that will trigger re-renders when required. It doesn't actually require any props data at this time, so the "TProps" type parameter specified on the **Component&lt;TProps, TState&gt;** base class is just "object".
+
+When the **MessageEditor** raises an on-change event, the **AppContainer** will call SetState to replace its current **MessageDetails** instance with the new one. This will trigger a re-render of the **MessageEditor**, which will be given the new **MessageDetails** instance as part of a new props value. It might seem a bit silly to have the **MessageEditor** pass up a new **MessageDetails** instance and then to just pass this back down into another **MessageEditor**, but the idea is to consider the first **MessageEditor** to be dead now and for the new **MessageEditor** (with the new **MessageDetails**) to exist in its place. And each time a stateless component is rendered, it renders simply from its props - there is no data shared between the new instance and the instance it replaces. This, again, makes the components very easy to reason about. And code that is easy to reason about is easy to write and easy to maintain.
+
+*Note: If you're au fait with React then you might know that components written as ES6 classes - which seems to be the way that is encouraged at the moment - don't support "GetInitialState" and, instead, specify initial state in the constructor. In the Bridge React bindings, "GetInitialState" should be used and the constructor should NOT be used - the way that the components are initialised by React means that constructors on component classes are not actually executed, so it is important that the constructor ONLY be used to pass the props and/or state to the base class.*
+
+The penultimate step is to change "Class1.cs" to render the **AppContainer** instead of just rendering a "Hi!" div. While we're editing it, let's give it a more official-sounding name. I like the starting point of my application to be called "App" -
+
+	using System.Linq;
+	using Bridge.Html5;
+	using Bridge.React;
+	using BridgeReactTutorial.Components;
+
+	namespace BridgeReactTutorial
+	{
+	  public class App
+	  {
+		[Ready]
+		public static void Go()
+		{
+		  var container = Document.GetElementById("main");
+          container.ClassName = string.Join(
+		    " ",
+			container.ClassName.Split().Where(c => c != "loading")
+		  );
+		  React.Render(new AppContainer(), container);
+		}
+	  }
+	}
+	
+All that's required now is to make it look a little nicer when you view "demo.html", so add the following to "styles.css" -
+
+	body
+	{
+	  font-family: 'Segoe UI';
+	  padding: 8px;
+	}
+
+	fieldset
+	{
+	  padding: 8px;
+	  border: 1px solid #f1f1f1;
+	  border-radius: 4px;
+	}
+	fieldset legend
+	{
+	  color: blue;
+	  padding: 0 8px;
+	}
+	fieldset.message span.label { padding: 0 8px; }
+
+That's the first major milestone reached! A very basic framework for constructing component hierarchies has been demonstrated, along with a way to handle events and re-render as required. There's nothing very radical, it's just what was described earlier; but it's good to see the theory executed in practice.
+
+I'm far from finished for today, though - I want to add a way to persist messages, a message history component and some validation. Best get cracking!
+
+### Message persistence
+
+While I want to simulate a server-based API, where read / write requests aren't instantaneous and we need to think about how to deal with async calls, I don't want the overhead of needing an endpoint to be configured somewhere. So we'll go with a simple interface that will be implemented in an entirely client-side class, that introduces artifical delays to mimic server-calling time.
+
+Create a new folder in the project root called "API" and add a new .cs file "IReadAndWriteMessages.cs", the contents of which should be:
+
+	using System.Threading.Tasks;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public interface IReadAndWriteMessages
+	  {
+		Task SaveMessage(MessageDetails message);
+	  }
+	}
+
+We'll be using dependency injection to provide the **AppContainer** with an API implementation. In order to enable unit testing (which will come later) we need to be able to work against an interface. For now, the interface only has a "SaveMessage" method, we'll work on reading message history data later.
+
+Add another file into the "API" folder, "MessageApi.cs" -
+
+	using System;
+	using System.Threading.Tasks;
+	using Bridge.Html5;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public class MessageApi : IReadAndWriteMessages
+	  {
+		public Task SaveMessage(MessageDetails message)
+		{
+		  if (message == null)
+			throw new ArgumentNullException("message");
+		  if (string.IsNullOrWhiteSpace(message.Title))
+			throw new ArgumentException("A title value must be provided");
+		  if (string.IsNullOrWhiteSpace(message.Content))
+			throw new ArgumentException("A content value must be provided");
+
+		  var task = new Task<object>(null);
+		  Window.SetTimeout(
+			() => task.Complete(),
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return task;
+		}
+	  }
+	}
+
+Bridge supports the C# "async" keyword and provides its own implementation of Tasks, which are used above to pretend that this class is communicating with a server when a save is requested.
+
+In order to enable saving, the **MessageEditor** needs a "Save" button and it needs an "on-save" callback to be specified on its props. While saving, the form should be disabled, so the **MessageEditor** props need a "Disabled" flag as well.
+
+*When designing an SPA like this, you need to think about whether you will support "optimistic updates", where clicking Save clears the form and acts as if the save action was instanteously accepted - but brings it to the user's attention somehow if the save failed or was rejected. I'm going to go for a simpler "pessimistic update" flow, where the form is disabled until the save is acknowledged, at which point the form will be cleared and re-enabled so that a further entry may be written and then saved.*
+
+The **MessageEditor** should now looks like this:
+
+	using System;
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
+	  {
+		public MessageEditor(Props props) : base(props) { }
+
+		public override ReactElement Render()
+		{
+		  return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
+			DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
+			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+			new TextInput(new TextInput.Props
+			{
+			  ClassName = "title",
+			  Disabled = props.Disabled,
+			  Content = props.Title,
+			  OnChange = newTitle => props.OnChange(new MessageDetails
+			  {
+				Title = newTitle,
+				Content = props.Content
+			  })
+			}),
+			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+			new TextInput(new TextInput.Props
+			{
+			  ClassName = "content",
+			  Disabled = props.Disabled,
+			  Content = props.Content,
+			  OnChange = newContent => props.OnChange(new MessageDetails
+			  {
+				Title = props.Title,
+				Content = newContent
+			  })
+			}),
+			DOM.Button(
+			  new ButtonAttributes { Disabled = props.Disabled, OnClick = e => props.OnSave() },
+			  "Save"
+			)
+		  );
+		}
+
+		public class Props
+		{
+		  public string ClassName;
+		  public string Title;
+		  public string Content;
+		  public Action<MessageDetails> OnChange;
+		  public Action OnSave;
+		  public bool Disabled;
+		}
+	  }
+	}
+
+The "Disabled" flag needs to be able to be applied to the **TextInput** components, so **TextInput** needs to look like this:
+
+	using System;
+	using Bridge.Html5;
+	using Bridge.React;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class TextInput : StatelessComponent<TextInput.Props>
+	  {
+		public TextInput(Props props) : base(props) { }
+
+		public override ReactElement Render()
+		{
+		  return DOM.Input(new InputAttributes
+		  {
+			Type = InputType.Text,
+			ClassName = props.ClassName,
+			Disabled = props.Disabled,
+			Value = props.Content,
+			OnChange = e => props.OnChange(e.CurrentTarget.Value)
+		  });
+		}
+
+		public class Props
+		{
+		  public string ClassName;
+		  public bool Disabled;
+		  public string Content;
+		  public Action<string> OnChange;
+		}
+	  }
+	}
+
+This enables the **MessageEditor** to initiate a save request and for a "Message API" to process the request. Now the **AppContainer** needs to tie these two aspects together.
+
+*Note that the OnSave action on the **MessageEditor** doesn't provide a new **MessageDetails** instance - that is because the Title and Content value that are rendered in the **MessageEditor** could not have been changed since the component was rendered, otherwise an OnChange callback would have been made before OnSave.*
+
+Now, the **AppContainer** gets a bit more interesting because it requires props *and* state. Its props will be external dependencies that it requires access to, while its state will be a copy of all data that is required to render the form. This is a good time to introduce my React (stateful) component guidelines -
+
+1. A stateful component's "props" data should *only* consist of references to external dependencies
+1. A stateful component's "state" data should include *everything* required to render the component tree, though the props may be required to deal with child components' events
+
+At this point, these rules are going to seem very straight-forward. Later, however, things will get a little more nuanced and I'll re-visit them at that point.
+
+The **AppContainer** will now become the following -
+
+	using Bridge.React;
+	using BridgeReactTutorial.API;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class AppContainer : Component<AppContainer.Props, AppContainer.State>
+	  {
+		public AppContainer(AppContainer.Props props) : base(props) { }
+
+		protected override State GetInitialState()
+		{
+		  return new State
+		  {
+		    Message = new MessageDetails { Title = "", Content = "" },
+		    IsSaveInProgress = false
+		  };
+		}
+
+		public override ReactElement Render()
+		{
+		  return new MessageEditor(new MessageEditor.Props
+		  {
+			ClassName = "message",
+			Title = state.Message.Title,
+			Content = state.Message.Content,
+			OnChange = newMessage => SetState(new State
+			{
+			  Message = newMessage,
+			  IsSaveInProgress = state.IsSaveInProgress
+			}),
+			OnSave = async () =>
+			{
+			  SetState(new State { Message = state.Message, IsSaveInProgress = true });
+			  await props.MessageApi.SaveMessage(state.Message);
+			  SetState(new State
+			  {
+				Message = new MessageDetails { Title = "", Content = "" },
+				IsSaveInProgress = false
+			  });
+			},			
+			Disabled = state.IsSaveInProgress
+		  });
+		}
+
+		public class Props
+		{
+		  public IReadAndWriteMessages MessageApi;
+		}
+
+		public class State
+		{
+		  public MessageDetails Message;
+		  public bool IsSaveInProgress;
+		}
+	  }
+	}
+	
+You will need to update App.cs to pass a props reference with a **MessageApi** instance to the **AppContainer** constructor -
+
+	using System.Linq;
+	using Bridge.Html5;
+	using Bridge.React;
+	using BridgeReactTutorial.API;
+	using BridgeReactTutorial.Components;
+
+	namespace BridgeReactTutorial
+	{
+	  public class App
+	  {
+		[Ready]
+		public static void Go()
+		{
+		  var container = Document.GetElementById("main");
+		  container.ClassName = string.Join(
+			" ",
+			container.ClassName.Split().Where(c => c != "loading")
+		  );
+		  React.Render(
+			new AppContainer(new AppContainer.Props { MessageApi = new MessageApi() }),
+			container
+		  );
+		}
+	  }
+	}
+
+With this final piece, we have the outline of a fully functioning application! Granted, its functionality is not particular magnificent, but it *has* illustrated some important principles. We've seen how a component hierarchy should have a top-level *stateful* component, with a component tree beneath it of state*less* components (note that there are no guidelines required regarding what to put into props and what to put into state when writing a stateless component because props is your only option - another reason why stateless components are so much simpler!). We've also seen how we can deal with dependency injection for these top level components, which are the only point at which more complicated logic appears such as "a save request involves disabling the form, calling a method on the API, waiting for the result and then re-enabling the form". It's worth noting that in the next post, this logic will be moved out of the top-level component in a quest to make components as dumb as possible - but that's jumping ahead, and I want the format of these posts to be that we start simple and then get more complicated only as the benefits of doing so can be made clear.
+
+At this point, however, we have something of a problem. If the "Title" and "Content" text inputs do not both have values, then an exception will be raised by the **MessageApi** when a save is attempted. To avoid this, we need some..
+
+### Validation
+
+I mentioned in the "React components" section that there would be a **ValidatedTextInput**, but no code had been presented yet. So here we go, nothing in it should be particularly surprising -
+
+	using System;
+	using Bridge.React;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class ValidatedTextInput : StatelessComponent<ValidatedTextInput.Props>
+	  {
+		public ValidatedTextInput(Props props) : base(props) { }
+
+		public override ReactElement Render()
+		{
+		  var className = props.ClassName;
+		  if (!string.IsNullOrWhiteSpace(props.ValidationMessage))
+			className = (className + " invalid").Trim();
+
+		  return DOM.Span(new Attributes { ClassName = className },
+			new TextInput(new TextInput.Props
+			{
+			  ClassName = props.ClassName,
+			  Disabled = props.Disabled,
+			  Content = props.Content,
+			  OnChange = props.OnChange
+			}),
+			string.IsNullOrWhiteSpace(props.ValidationMessage)
+			  ? null
+			  : DOM.Span(
+			    new Attributes { ClassName = "validation-message" },
+			    props.ValidationMessage
+			  )
+		  );
+		}
+
+		public class Props
+		{
+		  public string ClassName;
+		  public bool Disabled;
+		  public string Content;
+		  public Action<string> OnChange;
+		  public string ValidationMessage;
+		}
+	  }
+	}
+
+This allows the **MessageEditor** to be changed to use these **ValidatedTextInput**s instead of regular **TextInput**s, setting the "ValidationMessage" values according to whether the "Content" string has a value -
+
+	using System;
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
+	  {
+		public MessageEditor(Props props) : base(props) { }
+
+		public override ReactElement Render()
+		{
+		  var formIsInvalid =
+			string.IsNullOrWhiteSpace(props.Title) ||
+			string.IsNullOrWhiteSpace(props.Content);
+
+		  return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
+			DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
+			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+			new ValidatedTextInput(new ValidatedTextInput.Props
+			{
+			  ClassName = "title",
+			  Disabled = props.Disabled,
+			  Content = props.Title,
+			  OnChange = newTitle => props.OnChange(new MessageDetails
+			  {
+				Title = newTitle,
+				Content = props.Content
+			  }),
+			  ValidationMessage = string.IsNullOrWhiteSpace(props.Title)
+				? "Must enter a title"
+				: null
+			}),
+			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+			new ValidatedTextInput(new ValidatedTextInput.Props
+			{
+			  ClassName = "content",
+			  Disabled = props.Disabled,
+			  Content = props.Content,
+			  OnChange = newContent => props.OnChange(new MessageDetails
+			  {
+				Title = props.Title,
+				Content = newContent
+			  }),
+			  ValidationMessage = string.IsNullOrWhiteSpace(props.Content)
+				? "Must enter message content"
+				: null
+			}),
+			DOM.Button(
+			  new ButtonAttributes
+			  {
+			    Disabled = props.Disabled || formIsInvalid,
+			    OnClick = e => props.OnSave()
+			  },
+			  "Save"
+			)
+		  );
+		}
+
+		public class Props
+		{
+		  public string ClassName;
+		  public string Title;
+		  public string Content;
+		  public Action<MessageDetails> OnChange;
+		  public Action OnSave;
+		  public bool Disabled;
+		}
+	  }
+	}
+
+Now, the "Save" button is disabled if the **MessageEditor** is disabled (according to its props flag) *or* if the form entry is invalid. Now, it's not possible for the user to attempt a save that we will know will fail!
+
+*(Moving validation logic out of the components is another thing that will come in the move towards dumb-as-possible components, but that's for part two).*
+
+To keep things looking pretty, adding the following to "styles.css" -
+
+	fieldset.message span.title, fieldset.message span.content { position: relative; }
+	fieldset.message span.validation-message
+	{
+	  position: absolute;
+	  top: -6px;
+	  right: 2px;
+	  padding: 2px 4px;
+	  font-size: 70%;
+	  background: #FFF9D8;
+	  border: 1px solid #EFE9CB;
+	  border-radius: 2px;
+	  color: #A8A390;
+	}
+	fieldset.message button { margin-left: 8px; }
+
+### Message History
+
+What's the point in saving messages if we can't read them back out again? To enable this, the **IReadAndWriteMessages** needs a "GetMessages" method to accompany "SaveMessage" -
+
+	using System;
+	using System.Collections.Generic;
+	using System.Threading.Tasks;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public interface IReadAndWriteMessages
+	  {
+		Task SaveMessage(MessageDetails message);
+		Task<IEnumerable<Tuple<int, MessageDetails>>> GetMessages();
+	  }
+    }
+
+This needs implementing in **MessageApi** -
+
+	using System;
+	using System.Collections.Generic;
+	using System.Threading.Tasks;
+	using Bridge.Html5;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public class MessageApi : IReadAndWriteMessages
+	  {
+		private readonly List<Tuple<int, MessageDetails>> _messages;
+		public MessageApi()
+		{
+		  _messages = new List<Tuple<int, MessageDetails>>();
+		}
+
+		public Task SaveMessage(MessageDetails message)
+		{
+		  if (message == null)
+			throw new ArgumentNullException("message");
+		  if (string.IsNullOrWhiteSpace(message.Title))
+			throw new ArgumentException("A title value must be provided");
+		  if (string.IsNullOrWhiteSpace(message.Content))
+			throw new ArgumentException("A content value must be provided");
+
+		  var task = new Task<object>(null);
+		  Window.SetTimeout(
+			() =>
+			{
+			  _messages.Add(Tuple.Create(_messages.Count, message));
+			  task.Complete();
+			},
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return task;
+		}
+
+		public Task<IEnumerable<Tuple<int, MessageDetails>>> GetMessages()
+		{
+		  // ToArray is used to return a clone of the message set - otherwise, the caller would
+		  // end up with a list that is updated when the internal reference within this class
+		  // is updated (which sounds convenient but it's not the behaviour that would be
+		  // exhibited if this was really persisting messages to a server somewhere)
+		  var task = new Task<IEnumerable<Tuple<int, MessageDetails>>>(null);
+		  Window.SetTimeout(
+			() => task.Complete(_messages.ToArray()),
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return task;
+		}
+	  }
+	}
+
+Now, we'll need a way to render this information -
+
+	using System;
+	using System.Collections.Generic;
+	using System.Linq;
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class MessageHistory : StatelessComponent<MessageHistory.Props>
+	  {
+		public MessageHistory(Props props) : base(props) { }
+
+		public override ReactElement Render()
+		{
+		  var className = props.ClassName;
+		  if (!props.Messages.Any())
+			className = (className + " zero-messages").Trim();
+
+		  // Any time a set of child components is dynamically-created (meaning that the
+		  // numbers of items may vary from one render to another), each must have a unique
+		  // "Key" property set (this may be a int or a string). Here, this is simple as
+		  // each message tuple is a unique id and the contents of that message (and the
+		  // unique id is ideal for use as a unique "Key" property).
+		  var messageElements = props.Messages
+			.Select(idAndMessage => DOM.Div(new Attributes { Key = idAndMessage.Item1 },
+			  DOM.Span(new Attributes { ClassName = "title" }, idAndMessage.Item2.Title),
+			  DOM.Span(new Attributes { ClassName = "content" }, idAndMessage.Item2.Content)
+			));
+
+		  // When child components are specified (as they are through the second argument of
+		  // DOM.Div), the argument is of type Any<ReactElement, string>[] (meaning that each
+		  // element may be another component or it may be a simple text value)
+		  // - The React  bindings have an extension method that transforms an IEnumerable
+		  //   set of components (such as "messageElements" above) into an
+		  //   Any<ReactElement, string>[]
+		  return DOM.FieldSet(new FieldSetAttributes { ClassName = className },
+			DOM.Legend(null, "Message History"),
+			DOM.Div(null, messageElements.ToChildComponentArray())
+		  );
+		}
+
+		public class Props
+		{
+		  public string ClassName;
+		  public IEnumerable<Tuple<int, MessageDetails>> Messages;
+		}
+	  }
+	}
+
+This highlights an important React principle - where there are sets of dynamic child components, each must be provided a unique key. In the component above, we take "props.Messages" and map the data onto a set of Div elements. It's very possible that different messages will be rendered each time and so this is precisely what is meant by "dynamic child components".
+
+There are two reasons why it's important to provide unique keys - the first is performance; the task of React's Virtual DOM is to take the last component tree and the new component tree and work out what changed, so that the minimum changes may be applied to the browser DOM. In order to do this, it is very helpful for React to be able to track components as they move around within a dynamic set - it can allow it to reuse data internally instead of having to throw away representations of components and recreate them:
+
+> When React reconciles the keyed children, it will ensure that any child with key will be reordered (instead of clobbered) or destroyed (instead of reused).
+
+The quote above is from [Facebook's docs about Dynamic Children](https://facebook.github.io/react/docs/multiple-components.html#dynamic-children) - and so "clobbered" must be an official term!
+
+The second reason why it's important is that component state can only be tracked with a component if the component itself can be tracked by React when dynamic elements move around. I'm not going to dwell too long on this because it's only applicable if you are relying on dynamic components having state, which you shouldn't be since only the top-level component should be stateful (and any component that may be created as a dynamic child component should be stateless).
+
+For our purposes here, providing a unique key for each **MessageHistory** row is easy because the "GetMessages" method in the API returns a set of tuples, where each pair is a combination of id for the message and the message itself. This was easy to implement with the in-memory message store that we're using for this sample app, but it's also often easy when persisting by sending the data over the wire to a database somewhere; it's common for the database to generate unique ids for each record, and this would be returned in the data from "GetMessages".
+
+Now we have to return to the **AppContainer** to tie everything together; we need to add the message history data to the **AppContainer**'s state, we need to read the message history after we save and we need to render the message history -
+
+	using System;
+	using System.Collections.Generic;
+	using Bridge.React;
+	using BridgeReactTutorial.API;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class AppContainer : Component<AppContainer.Props, AppContainer.State>
+	  {
+		public AppContainer(AppContainer.Props props) : base(props) { }
+
+		protected override State GetInitialState()
+		{
+		  return new State
+		  {
+			Message = new MessageDetails { Title = "", Content = "" },
+			IsSaveInProgress = false,
+			MessageHistory = new Tuple<int, MessageDetails>[0]
+		  };
+		}
+
+		public override ReactElement Render()
+		{
+		  return DOM.Div(null,
+			new MessageEditor(new MessageEditor.Props
+			{
+			  ClassName = "message",
+			  Title = state.Message.Title,
+			  Content = state.Message.Content,
+			  OnChange = newMessage => SetState(new State
+			  {
+				Message = newMessage,
+				IsSaveInProgress = state.IsSaveInProgress,
+				MessageHistory = state.MessageHistory
+			  }),
+			  OnSave = async () =>
+			  {
+				// Set SaveInProgress to true while the save operation is requested
+				SetState(new State {
+				  Message = state.Message,
+				  IsSaveInProgress = true,
+				  MessageHistory = state.MessageHistory
+				});
+				await props.MessageApi.SaveMessage(state.Message);
+
+				// After the save has completed, clear the message entry form and reset
+				// SaveInProgress to false
+				SetState(new State {
+				  Message = new MessageDetails { Title = "", Content = "" },
+				  IsSaveInProgress = false,
+				  MessageHistory = state.MessageHistory
+				});
+
+				// Then re-load the message history state and re-render when that data arrives
+				var allMessages = await props.MessageApi.GetMessages();
+				SetState(new State {
+				  Message = state.Message,
+				  IsSaveInProgress = state.IsSaveInProgress,
+				  MessageHistory = allMessages
+				});
+			  },
+			  Disabled = state.IsSaveInProgress
+			}),
+			new MessageHistory(new MessageHistory.Props
+			{
+			  ClassName = "history",
+			  Messages = state.MessageHistory
+			})
+		  );
+		}
+
+		public class Props
+		{
+		  public IReadAndWriteMessages MessageApi;
+		}
+
+		public class State
+		{
+		  public MessageDetails Message;
+		  public bool IsSaveInProgress;
+		  public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
+		}
+	  }
+	}
+
+The logic in this component is getting more complicated now, which is down to the event-handling; what needs to happen when this happens and then this happens and then this happens (eg. the user clicks save, we initiate a save request, the API completes the request, we update the UI to clear the form and then start loading the updated message history, then we update the UI with the new message content).
+
+One of the goals going forward will be to separate out this logic, away from the React components. The reason that I've made a couple of mentions of moving towards "dumb components" is that it makes unit testing much easier - everything outside of the React components will be simple C# / JavaScript code, which is always easier to test than UI elements, even when the UI is created using the React library. Another benefit of separating application logic from the UI components is that it makes both sides easier to reason about - and this is another theme that I'll be re-visiting during this mini-series.
+
+It's worth mentioning that, even though it's gotten more complicated, the **AppContainer** (the only stateful component in the application) still adheres to the stateful component guidelines:
+
+1. A stateful component's "props" data should *only* consist of references to external dependencies
+1. A stateful component's "state" data should include *everything* required to render the component tree, though the props may be required to deal with child components' events
+
+*All* of the data required to render the UI is present in the state. The props data is only required within "Render" in order to process some of the callbacks from the child components. Any changes that must then be reflected in the UI come through a call to SetState - at the point of the SetState-triggered re-render, all of the data required to generate the child components will, once again, be present entirely within the state data.
+
+To keep things look nice, add the following to "styles.css" -
+
+	fieldset.history
+	{
+	  opacity: 1;
+	  transition: opacity .5s ease-in-out;
+	}
+	fieldset.history.zero-messages { opacity: 0; }
+	fieldset.history span.title
+	{
+	  padding: 0 8px;
+	  font-weight: bold;
+	}
+	
+This will have the **MessageHistory** invisible to begin with, fading in when the first message is available to display.
+
+### Coming in Part Two..
+
+I think this makes a good point at which to draw the first part of this series to a close. To be honest, we haven't got very close at all yet to the "The Dan Way" of writing React applications - so far, it's been fairly straight-forward and in-line with the basic React guidelines from Facebook.
+
+Which isn't to save that we haven't covered a lot of good ground! This will serve as a good base from which we can improve things. But we haven't seen the "Flux architecture" at all yet, and have only hinted at why we would want it. I'm not happy with how many of the properties on the various props, state and other data types are presented - one of my pet peeves with APIs is not knowing what can and can't be null; on the **TextInput**'s **Props** class, the "ClassName" string *may* be null but the "OnChange" callback must not be. These facts are not clear from just looking at the class. Similarly, it would be nice to know whether or not there are any guarantees about the "Title" and "Content" strings on the **MessageDetails** class (is it ever really acceptable for them to be null?). Finally, the reading and writing of messages through the **MessageApi** implementation we have here works fine for one person doing all the writing, but how could we deal with it if the **MessageApi** simulated a server-based API that received new messages from *other* uses, either through some sort of polling or through a push mechanism? This is an important question for systems that have to support multiple users.
+
+All of these questions will be answered in later posts, along with further advice to try to help you do what I think React does best - write code that is easier to reason about, and thus easier to read, maintain and extend.
