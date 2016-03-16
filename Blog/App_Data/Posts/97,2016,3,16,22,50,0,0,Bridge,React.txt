@@ -1,0 +1,1428 @@
+## Writing React apps using Bridge.NET - The Dan Way (Part Two)
+
+To summarise where we got to in [Part One](Post96): we've got an entry form where, after you enter Title and Content values, you may save a message. During the message-saving process, the form and save button are disabled. Once the saving has completed, the form will be cleared and it will be re-enabled. Validation logic in the **MessageEditor** prevents the form from being saved while one or both of the required inputs are without value. After the save has succeeded, a read action will begin in the background - once the read operation has completed, a **MessageHistory** component will display all of the saved messages. All interactions with the **MessageApi** are handled by the top-level **AppContainer** component. Similarly, all user interaction events are passed up to this top-level component, from where re-renders of the UI state are triggered.
+
+I see this arrangement as a top-to-bottom tree in terms of rendering - the top-level component is in control of what to display in the component hierarchy beneath it, and all of the information required to display those child components is contained within the top-level component's state data.
+
+In terms of event-handling, events may occur deep down within the tree and are then passed back up to the top-level component. As an event passes up from the html element that it originates in, up to the top level, it will gather more and more information - for example, when a user requests a change to the "Title" text input (such as by pressing a key while the input has focus), then an event is raised by the **TextInput** component saying that a string value should be changed. This **TextInput** is a child component of the **MessageEditor**, which acknowledges this string-changed event and raises it own event; a **MessageDetails**-changed event. The "Content" value of this new message will be unchanged, but the "Title" value will have a new value - the new value that the **TextInput** should take. This event is received by the **AppContainer** and it uses it to update its internal representation of the application, changing its "state" reference by calling "SetState" and so triggering a re-render.
+
+The path may be traced downward when considering rendering and may be traced upward when considering events.
+
+This one-way passing of data is very powerful in terms of modelling interactions that are easy to follow. As a reminder, a common way to deal with interactions like this in days gone by (ie. before React popularised "one-way bindings") was for changes to elements to be reflected immediately in-place and for any interested parties to subscribe to events that those elements raise after they change. So, for the message entry form -
+
+<img alt="The proposed example app" src="/Content/Images/Posts/ReactTutorial2.png" class="NoBorder AlwaysFullWidth" />
+
+With the old method, the "Title" and the "Content" inputs would accept changes that the user makes immediately - and the fieldset legend and the save button components would need to listen out to some of these changes. The legend changes to match what is entered in the "Title" input (unless it's blank, in which case the legend shows "Untitled"). The save button needs to be enabled if both "Title" and "Content" have values and *disabled* if one or both of them are without.
+
+I mentally envisage this as star-shaped event handling - a change to one element may fan out to many others. In some cases, these changes would then cascade on to other elements, and then on again and again (hopefully not "again and again and..", but it was difficult to keep a handle on these things with this sort of approach - because it was difficult to get a simple view as to what could affect what).
+
+With one-way data binding, events go up to the top, are processed and then the re-render distributes this new information all the way down. When the **MessageEditor** is rendered, it knows what the current "Title" value is and so it knows what to put in that "Title" **TextInput** *and* it knows what the fieldset legend should be *and* it knows whether the save button should be enabled or not.
+
+This arrangement can take you a long way, I think. But there are a couple of things that I take issue with -
+
+1. I want to be able to easily unit test logic in my application and, while the React library goes a long way to taming the DOM, testing UI components will never be as easy as testing "pure" JavaScript (well, pure C# with Bridge, that will *become* pure JavaScript) - consequently, I want to be able to extract as much logic out of the UI components as possible
+1. If any more event sources are added to the application, then dealing with these events becomes awkward - another "event source" may, for example, be something in the persistence layer that polls for new data from other users (which might not be uncommon since we're creating web applications and these are commonly expected to be multi-user, so it's beneficial to be able to reflect changes made by other users)
+
+We can refine this arrangement a little by introducing an intermediary for events to pass through and by pulling out the logic that exists within components (such as the validation within the **MessageEditor** and the when-a-save-happens-then-.. logic in the **AppContainer**).
+
+### From up-and-down to round-and-round
+
+Rather than talk about how some applications could theoretically benefit from a change to the architecture, I want to do it with a demonstration.
+
+I'm going to change the **MessageApi** so that, after a short delay, new messages start appearing in its internal list. The "SaveMessage" and "GetMessages" methods are unchanged, it's just that there's a background process going on as well. To keep things interesting, I'm going to source these message from the [The Internet Chuck Norris Database API](http://www.icndb.com/api/) -
+
+	using System;
+	using System.Collections.Generic;
+	using System.Threading.Tasks;
+	using Bridge;
+	using Bridge.Html5;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public class MessageApi : IReadAndWriteMessages
+	  {
+		private readonly List<Tuple<int, MessageDetails>> _messages;
+		public MessageApi()
+		{
+		  _messages = new List<Tuple<int, MessageDetails>>();
+
+		  // To further mimic a server-based API (where other people may be recording messages
+		  // of their own), after a 10s delay a periodic task will be executed to retrieve a
+		  // new message
+		  Window.SetTimeout(
+			() => Window.SetInterval(GetChuckNorrisFact, 5000),
+			10000
+		  );
+		}
+
+		public Task SaveMessage(MessageDetails message)
+		{
+		  if (message == null)
+			throw new ArgumentNullException("message");
+		  if (string.IsNullOrWhiteSpace(message.Title))
+			throw new ArgumentException("A title value must be provided");
+		  if (string.IsNullOrWhiteSpace(message.Content))
+			throw new ArgumentException("A content value must be provided");
+
+		  var task = new Task<object>(null);
+		  Window.SetTimeout(
+			() =>
+			{
+			  _messages.Add(Tuple.Create(_messages.Count, message));
+			  task.Complete();
+			},
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return task;
+		}
+
+		public Task<IEnumerable<Tuple<int, MessageDetails>>> GetMessages()
+		{
+		  // ToArray is used to return a clone of the message set - otherwise, the caller would
+		  // end up with a list that is updated when the internal reference within this class
+		  // is updated (which sounds convenient but it's not the behaviour that would be
+		  // exhibited if this was really persisting messages to a server somewhere)
+		  var task = new Task<IEnumerable<Tuple<int, MessageDetails>>>(null);
+		  Window.SetTimeout(
+			() => task.Complete(_messages.ToArray()),
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return task;
+		}
+
+		private void GetChuckNorrisFact()
+		{
+		  var request = new XMLHttpRequest();
+		  request.ResponseType = XMLHttpRequestResponseType.Json;
+		  request.OnReadyStateChange = () =>
+		  {
+			if (request.ReadyState != AjaxReadyState.Done)
+			  return;
+
+			if ((request.Status == 200) || (request.Status == 304))
+			{
+			  try
+			  {
+				var apiResponse = (ChuckNorrisFactApiResponse)request.Response;
+				if ((apiResponse.Type == "success")
+				&& (apiResponse.Value != null)
+				&& !string.IsNullOrWhiteSpace(apiResponse.Value.Joke))
+				{
+				  // The Chuck Norris Facts API (http://www.icndb.com/api/) returns strings
+				  // html-encoded, so they need decoding before be wrapped up in a
+				  // MessageDetails instance
+				  SaveMessage(new MessageDetails
+				  {
+				    Title = "Fact",
+				    Content = HtmlDecode(apiResponse.Value.Joke)
+				  });
+				  return;
+				}
+			  }
+			  catch
+			  {
+				// Ignore any error and drop through to the fallback message-generator below
+			  }
+			}
+			SaveMessage(new MessageDetails
+			{
+			  Title = "Fact",
+			  Content = "API call failed when polling for server content :("
+			});
+		  };
+		  request.Open("GET", "http://api.icndb.com/jokes/random");
+		  request.Send();
+		}
+
+		private string HtmlDecode(string value)
+		{
+		  if (value == null)
+			throw new ArgumentNullException("value");
+
+		  var wrapper = Document.CreateElement("div");
+		  wrapper.InnerHTML = value;
+		  return wrapper.TextContent;
+		}
+
+		[IgnoreCast]
+		private class ChuckNorrisFactApiResponse
+		{
+		  public extern string Type { [Template("type")] get; }
+		  public extern FactDetails Value { [Template("value")] get; }
+
+		  [IgnoreCast]
+		  public class FactDetails
+		  {
+			public extern int Id { [Template("id")] get; }
+			public extern string Joke { [Template("joke")]get; }
+		  }
+		}
+	  }
+	}
+
+*The Chuck-Norris-fact-retrieval code could be made shortener by casting the "apiResponse" reference to **dynamic**, but I thought that it would a nice opportunity to show how you can call a JSON-returning API with Bridge and then access the data through a known object model (which is why I created a **ChuckNorrisFactApiResponse** class to use instead).*
+
+Without any other changes to the code we have so far, this works.. in a manner of speaking. Any time you save a message of your own, the read action that follows the save will pull back *all* of the messages from the **MessageApi**'s in-memory set. So, when a read is explicitly initiated, all of the most recent data will come back.
+
+But it would be nice if the new messages could appear in the **MessageHistory** even without you, as the user, saving your own messages. They could appear in the history even as you are in the process of writing your own content.
+
+One way to do this would be to have the **MessageApi** raise an event whenever its message history data changes. Then, the **AppContainer** would listen for events from its **MessageApi** reference (which it has in its props, since props on a stateful component are used to provide references to the "external environment") as well as listening to events from the components that it renders.
+
+On the one hand, this would actually make the save logic cleaner - the OnSave handler that the **AppContainer** passes to the **MessageEditor** in its props would only have to disable the form during the save and clear / re-enable it after the save, it *wouldn't* have to then request updated message data from the **MessageApi**, since it would know that the **MessageApi** would raise its own event when it had accepted the newly-saved message. 
+
+But, on the other hand, dealing with more event sources means that more logic is required in the **AppContainer** (which I want to move away from) and we no longer have the simple rendering-goes-down-the-tree and events-come-up-the-tree, now we have rendering-goes-down-the-tree and events-come-up-the-tree *and* events-come-from-some-other-places-too.
+
+So I'm going to look at an alternative..
+
+#### Extracting UI logic
+
+Instead of the **AppContainer** potentially having to deal with multiple event sources and working out how events may or may not change its state, I'm going to pull that handling of UI state into another class entirely; somewhere to *store* this state, that will act as a single (and very simple) event source for **AppContainer**. This store will have a single event that the **AppContainer** will subscribe to; an argument-less "OnChange" event. When the **AppContainer** receives an "OnChange" event from the store, it will access data that the store makes available in order to update its own state reference and thus trigger a re-render.
+
+Since events will be handled by this store, whenever an event from the component tree is passed up to the **AppContainer**, the **AppContainer** needs to pass it along to the store (instead of trying to process the event itself). So the **AppContainer** could act like an event source for this new store class. And, since the store class will be dealing with processing events (such as "user has requested a new message be saved"), it will also have to deal with the **MessageApi** being an event source.
+
+This is a good illustration of separation of concerns - the **AppContainer** used to be responsible for rendering the component tree *and* dealing with handling events (which is where the real complexity of an application lies). With this new plan, the **AppContainer** will only deal with re-rendering and the event processing is dealt with by "pure" (ie. non-UI-related) C# code. However, we could *still* make the "multiple event source" issue a little cleaner. The store in this example will only have two event sources (the **AppContainer** - from user interactions - and the **MessageApi** - from new Chuck Norris facts arriving), but a more complex application could result in many event sources being required.
+
+And, sometimes, a particular store might not even want access to the full event source reference; if our store was *only* going to be used for dealing with data for a form that edits an existing message (and doesn't want to show a message history anywhere), then it wouldn't need a full **MessageApi** reference - it just needs to be able to read one message in particular to edit, be able to request a change to that message be saved and then know when that save request had been processed. For this store to say that it requires a full **MessageApi** would be an exaggeration - it would be claiming that it had a greater dependency than it really does.
+
+It makes sense to have one "UI store" per page of your application, so if we were to extend this example such that the main page allowed you to record new messages and see the message history and we added a way to edit a particular message on a different screen, then we might have two stores and two top-level components and a router to handle navigation from one to the other. I don't want to jump too far ahead here, I just mean to point out that different stores may rely upon different event sources and rely on different abilities of those event sources.
+
+#### The message bus
+
+So the next change that I'm going to propose is to decouple event sources from the store by having all events broadcast as messages. These are sent to some sort of message bus, which then passes them on to any interested parties. This would mean that the **AppContainer** would send a message to the bus whenever the user has interacted with the UI (whether this be an edit to a field or a request to save). When "SaveMessage" is called on the **MessageApi** then it will no longer return a **Task**, instead a message will be passed to the bus when the save has completed. When a new Chuck Norris fact is received by the **MessageApi**, it will send a message to the bus to say that new message data is available.
+
+This would mean that the store class will only have a single "event source", which is this message bus. It will subscribe to this bus, and whenever a message is dispatched that the store is interested in then it will deal with it accordingly. If a store were to receive a message that it *wasn't* interested in, then it would just ignore it.
+
+Introducing a message bus like this is a common technique to decouple areas of a system and it is another approach that makes unit testing easier later on - since the store class(es) are where the complicated event-handling logic lives, this is the code that needs the most testing. With this proposed arrangement, to test a store's logic you need only to new one up, pass it a message bus reference used solely within the current unit test, push particular messages through the bus and then verify that the store raises its OnChange event after messages when you expect it to and that the data that the store makes public is what you expect at these times. This allows all of the complicated logic to be tested with zero UI components involved and reduces the times when mocks are required since so much of the communication with the store is done via messages. (In order to test the "Save" functionality in our example app, a mock **IReadAndWriteMessages** *would* be required by our **MessageWriterStore**, however, so that it could call "SaveMessage" on something that doesn't actually persist data - and so that the unit test could confirm that "SaveMessage" was called with the expected data).
+
+To summarise all of the above, we will move away slightly from the paths of communication being rendering-goes-down-the-tree and events-come-up-the-tree. Before, these paths were a continuous chain because events came up the tree and were processed and the re-render immediately went back down the tree again. Now we have rendering-goes-down-the-tree and events-come-up-the-tree but then nothing seems to happen immediately, instead the top-level component sends off a message and does nothing more.. until the store receives that message, processes it as an event (and applies any complicated logic) and then raises its OnChange event, which the top-level component receives and triggers a re-render.
+
+I must admit, that sounds *more* complicated! But don't lose sight of the fact that we will side-step the complexities that multiple event sources can introduce *and* we will separate logic from UI, making the code more testable *and* making each part of it easier to reason about and thus easier to maintain and extend in the future.
+
+*(Note: This approach brings us much closer to treating everything as "asynchronous by default" - even UI changes now are implemented in a fire-and-forget manner; the top-level component sends out a message when the UI should be updated and then does nothing until it's informed by the store that it should update. While it initially feels strange to not expect to "immediately" update UI components in a synchronous manner, the advantage to async being the norm is that it's common for async code to be a bit scary in otherwise synchronous code - but here it's all the same, and not scary at all. It's also worth noting that we weren't truly updating in a synchronous manner before, since React's SetState method actually operates asynchronously - this allows React to batch updates if many occur in succession, potentially further reducing the number of times that the browser DOM actually needs to be interacted with; clever stuff!)*
+
+### The new architecture
+
+I must admit, at this point, that I can't take any credit for the above ideas. What I've outlined is referred to as the [Flux Architecture](https://facebook.github.io/flux/docs/overview.html#content) (since different people have extracted their own variations on the concept, it might be safer to describe it as a Flux-like architecture, but let's not split hairs).
+
+Below is the classic Flux diagram -
+
+<img alt="The proposed example app" src="/Content/Images/Posts/FluxDiagramSimple.png" class="AlwaysFullWidth" />
+
+The message bus is referred to as the "Dispatcher", messages are known as "Actions". The "View" is the React component tree (the **AppContainer** listens for the "OnChange" event from the Store and re-renders when it receives it). Note that actions come not just from the View but also from outside the cycle; in our case we have messages coming from the **MessageApi** when new Chuck Norris facts arrive. In an application with routing, there would be actions from the router when the URL changes.
+
+So... what's required to get from the current architecture that the example application has to a Flux-like one?
+
+Let's start with the Dispatcher and the messages that flow through it. The first good news is that the Bridge React bindings include a Dispatcher implementation; the **AppDispatcher**. This has three methods:
+
+	void Register(Action<DispatcherMessage> callback);
+	void HandleViewAction(IDispatcherAction action);
+	void HandleServerAction(IDispatcherAction action);
+
+The **DispatcherMessage** is a class with two properties; a "Source" (either "Server" or "View") and "Action". In some scenarios it may be useful to know if an action has originated from the server (such as new data arriving via the API) or from the view. To be honest, I haven't found it to be very important very often, but you might theoretically bypass some complicated validation if you know that data has come from the server rather than the user - frankly, I think that this sort of information is better expressed through a rich object model (which I'll be talking about in part three) and so the most compelling reason for actions being identified as from-Server or from-User is that it's consistent with other Flux implementations out there. The **IDispatcherAction** interface is empty and is only used as a marker, to identify classes as being intended for use as a Dispatcher action.
+
+When writing in JavaScript, actions tend to be simple objects with a "type" or "actionType" property that identifies what sort of action it is. It will then have further properties, depending upon what action it needs to describe. I've taken the below example from an article (that wasn't written by me); [A (little more) complex react and flux example](http://spapas.github.io/2015/09/08/more-complex-react-flux-example/) -
+
+	AppDispatcher.dispatch({
+	  actionType: BookConstants.MESSAGE_ADD,
+	  message: {
+		color: 'green',
+		text: msg
+	  }
+	});
+
+However, we're writing in C# and we're going to take advantage of that! Our actions will be distinct types. When the store listens out messages, it won't compare an "actionType" string to work out what a particular action represents, instead we'll perform type comparisons and, when we find an action that we're interested in, we'll cast the current action to the matched type and then access its data in a type-safe manner.
+
+Create a new folder in the project from [Part One](Post96) called "Actions". The simplest action to begin with is the action that would be raised by the **AppContainer** when the user has clicked the Save button -
+
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class MessageSaveRequested : IDispatcherAction
+	  {
+		public MessageDetails Message;
+	  }
+	}
+
+Previously, the **AppContainer**'s Render method contained logic about dealing with save requests -
+
+    OnSave = async () =>
+    {
+	  // Set SaveInProgress to true while the save operation is requested
+	  SetState(new State {
+ 	    Message = state.Message,
+	    IsSaveInProgress = true,
+	    MessageHistory = state.MessageHistory
+	  });
+	  await props.MessageApi.SaveMessage(state.Message);
+
+	  // After the save has completed, clear the message entry form and reset
+	  // SaveInProgress to false
+	  SetState(new State {
+ 	    Message = new MessageDetails { Title = "", Content = "" },
+	    IsSaveInProgress = false,
+	    MessageHistory = state.MessageHistory
+	  });
+
+	  // Then re-load the message history state and re-render when that data arrives
+	  var allMessages = await props.MessageApi.GetMessages();
+	  SetState(new State {
+	    Message = state.Message,
+	    IsSaveInProgress = state.IsSaveInProgress,
+	    MessageHistory = allMessages
+	  });
+    }
+
+But, if all that it needs to do when a save-request bubbles up to it is send an appropriate action through the Dispatcher, then it becomes much simpler -
+
+	OnSave = () => props.Dispatcher.HandleViewAction(
+	   new MessageSaveRequested { Message = state.Message }
+	)
+
+I've only shown the change to the "OnSave" property, rather than show the change within the context of the complete **AppContainer** class because there are other things I want to rearrange at this point. Firstly, the **MessageEditor** "OnChange" handler also needs to be altered - as I described above, when a user interaction is expected to require a re-render, this will *not* result in SetState being called immediately. Instead, an action will be sent to the Dispatcher. We need to define this action, so create another class in the "Actions" folder -
+
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class MessageEditStateChanged : IDispatcherAction
+	  {
+		public MessageEditState NewState;
+	  }
+	}
+
+The other change is in the format of the data that is passed to the **MessageEditor**. Before, separate "Title", "Content" and "Disabled" values were passed to it and the component would do three things with that information -
+
+1. It would populate the "Title" and "Content" text inputs with the provided values
+1. If the "Title" string was populated then this value would be used to set the fieldset legend text, otherwise the legend would show "Untitled"
+1. Validation messages would be displayed for "Title" and "Content" if one or both of the values was blank
+
+These second and third things are precisely the sort of logic that should be extracted out into the store. Consequently, the **MessageEditor** will be changed so that it no longer takes these individual values and, instead, takes a **MessageEditState** that has a "Caption" string  (for the legend text), "Title" and "Content" strings and validation messages for these user-entered strings. The "Disabled" property will replaced with "IsSaveInProgress" - if this is true then none of the form elements (the text inputs or the save button) should be enabled. If a save is *not* in progress, then the text inputs should be enabled but the save button should only be enabled if neither validation message has any content. That is arguably more logic that could be extracted, but I think that this approach will strike a good balance - keeping the component "dumb" without having to spell out every little thing to the nth degree. Add two new files to the "ViewModels" folder to define the following classes -
+
+	namespace BridgeReactTutorial.ViewModels
+	{
+	  public class MessageEditState
+	  {
+		public string Caption;
+		public TextEditState Title;
+		public TextEditState Content;
+		public bool IsSaveInProgress;
+	  }
+	}
+
+	namespace BridgeReactTutorial.ViewModels
+	{
+	  public class TextEditState
+	  {
+		public string Text;
+		public string ValidationError;
+	  }
+	}
+	
+Now the **MessageEditor** may be rewritten to the following (note that after this change, the project isn't going to compile any more - there are a bunch of other alterations that will be required until everything builds again, all of which will be covered below):
+
+	using System;
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
+	  {
+		public MessageEditor(Props props) : base(props) { }
+
+		public override ReactElement Render()
+		{
+		  var formIsInvalid =
+			!string.IsNullOrWhiteSpace(props.Message.Title.ValidationError) ||
+			!string.IsNullOrWhiteSpace(props.Message.Content.ValidationError);
+
+		  return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
+			DOM.Legend(null, props.Message.Caption),
+			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+			new ValidatedTextInput(new ValidatedTextInput.Props
+			{
+			  ClassName = "title",
+			  Disabled = props.Message.IsSaveInProgress,
+			  Content = props.Message.Title.Text,
+			  OnChange = newTitle => props.OnChange(new MessageEditState
+			  {
+				Title = new TextEditState { Text = newTitle },
+				Content = props.Message.Content
+			  }),
+			  ValidationMessage = props.Message.Title.ValidationError
+			}),
+			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+			new ValidatedTextInput(new ValidatedTextInput.Props
+			{
+			  ClassName = "content",
+			  Disabled = props.Message.IsSaveInProgress,
+			  Content = props.Message.Content.Text,
+			  OnChange = newContent => props.OnChange(new MessageEditState
+			  {
+				Title = props.Message.Title,
+				Content = new TextEditState { Text = newContent },
+			  }),
+			  ValidationMessage = props.Message.Content.ValidationError
+			}),
+			DOM.Button(
+			  new ButtonAttributes
+			  {
+				Disabled = formIsInvalid || props.Message.IsSaveInProgress,
+				OnClick = e => props.OnSave()
+			  },
+			  "Save"
+			)
+		  );
+		}
+
+		public class Props
+		{
+		  public string ClassName;
+		  public MessageEditState Message;
+		  public Action<MessageEditState> OnChange;
+		  public Action OnSave;
+		}
+	  }
+	}
+
+Now the **AppContainer** becomes *much* simpler -
+
+	using System;
+	using System.Collections.Generic;
+	using Bridge.React;
+	using BridgeReactTutorial.Actions;
+	using BridgeReactTutorial.ViewModels;
+	using BridgeReactTutorial.Stores;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class AppContainer : Component<AppContainer.Props, AppContainer.State>
+	  {
+		public AppContainer(AppContainer.Props props) : base(props) { }
+
+		protected override void ComponentDidMount()
+		{
+		  props.Store.Change += StoreChanged;
+		}
+		protected override void ComponentWillUnmount()
+		{
+		  props.Store.Change -= StoreChanged;
+		}
+		private void StoreChanged()
+		{
+		  SetState(new State
+		  {
+			Message = props.Store.Message,
+			MessageHistory = props.Store.MessageHistory
+		  });
+		}
+
+		public override ReactElement Render()
+		{
+		  if (state == null)
+			return null;
+			
+		  return DOM.Div(null,
+			new MessageEditor(new MessageEditor.Props
+			{
+			  ClassName = "message",
+			  Message = state.Message,
+			  OnChange = newState => props.Dispatcher.HandleViewAction(
+				new MessageEditStateChanged { NewState = newState }
+			  ),
+			  OnSave = () => props.Dispatcher.HandleViewAction(
+				new MessageSaveRequested
+				{
+				  Message = new MessageDetails
+				  {
+					Title = state.Message.Title.Text,
+					Content = state.Message.Content.Text
+				  }
+				}
+			  )
+			}),
+			new MessageHistory(new MessageHistory.Props
+			{
+			  ClassName = "history",
+			  Messages = state.MessageHistory
+			})
+		  );
+		}
+
+		public class Props
+		{
+		  public AppDispatcher Dispatcher;
+		  public MessageWriterStore Store;
+		}
+
+		public class State
+		{
+		  public MessageEditState Message;
+		  public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
+		}
+	  }
+	}
+
+It is now almost devoid of logic, it only exists to listen to changes from the store (which we'll define in a moment), to render components and to direct events that are passed up from these components to the Dispatcher. Note that it no longer has any dependency upon the **MessageApi**.
+
+A couple of things to note - the Dispatcher and Store are both passed to the component through its props, but when the Store raises a Change event the **AppContainer** copies data references from the Store into its own state, meaning that *all* of the information that the **AppContainer** requires to render itself is contained within its state. This follows the "Guidelines for Stateful Components" that I wrote [last time](Post96) -
+
+1. A stateful component's "props" data should *only* consist of references to external dependencies
+1. A stateful component's "state" data should include *everything* required to render the component tree, though the props may be required to deal with child components' events
+
+The **AppContainer** now uses some React component life cycle methods that it wasn't before - "ComponentDidMount" and "ComponentWillUnmount" - to ensure that the handler attached to the Store's Change event is correctly removed when no longer required. In our example application, the **AppContainer** is never "unmounted" but in a more complicated application then the top-level components may be changed based upon how the user navigates through the application. (A component is "mounted" when it's being added to the component tree and "unmounted" when it's being removed - in an application with a router, the current top-level component may be changed based upon the current route, in which case there would be top-level components being mounted and unmounted as the route changes and it is important that any event handlers that they attached be detached when they're not needed).
+
+One final thing to note before moving on to the Store implementation is that there is no longer a "GetInitialState" implementation in the **AppContainer** and the "Render" method will return null if state doesn't yet have a value. "GetInitialState" was *another* example of logic that is better placed outside of the component classes - now the **AppContainer** is not responsible for having to know what its initial state should be, it just renders *nothing* until the Store has raised a Change request that tells the **AppContainer** what to display.
+
+The child components are "dumb" as all they have to do is render according to the props data that they are provided with and now the top-level stateful component is similarly "dumb" as all it does is listen to the Store and pass the information down to dumb stateless components - and then listen for events from the child components, in order to pass the information on to the Dispatcher.
+
+We're almost ready to talk about how to create the Store now, but first we need to adapt the **MessageApi** to work with the Dispatcher, rather than with **Task**s.
+
+	using System;
+	using System.Collections.Generic;
+	using Bridge;
+	using Bridge.Html5;
+	using Bridge.React;
+	using BridgeReactTutorial.Actions;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public class MessageApi : IReadAndWriteMessages
+	  {
+		private readonly AppDispatcher _dispatcher;
+		private readonly List<Tuple<int, MessageDetails>> _messages;
+		public MessageApi(AppDispatcher dispatcher)
+		{
+		  if (dispatcher == null)
+			throw new ArgumentException("dispatcher");
+
+		  _dispatcher = dispatcher;
+		  _messages = new List<Tuple<int, MessageDetails>>();
+
+		  // To further mimic a server-based API (where other people may be recording messages
+		  // of their own), after a 10s delay a periodic task will be executed to retrieve a
+		  // new message
+		  Window.SetTimeout(
+			() => Window.SetInterval(GetChuckNorrisFact, 5000),
+			10000
+		  );
+		}
+
+		public RequestId SaveMessage(MessageDetails message)
+		{
+		  return SaveMessage(message, optionalSaveCompletedCallback: null);
+		}
+
+		private RequestId SaveMessage(
+		  MessageDetails message,
+		  Action optionalSaveCompletedCallback)
+		{
+		  if (message == null)
+			throw new ArgumentNullException("message");
+		  if (string.IsNullOrWhiteSpace(message.Title))
+			throw new ArgumentException("A title value must be provided");
+		  if (string.IsNullOrWhiteSpace(message.Content))
+			throw new ArgumentException("A content value must be provided");
+
+		  var requestId = new RequestId();
+		  Window.SetTimeout(
+			() =>
+			{
+			  _messages.Add(Tuple.Create(_messages.Count, message));
+			  _dispatcher.HandleServerAction(
+			    new MessageSaveSucceeded { RequestId = requestId }
+			  );
+			  if (optionalSaveCompletedCallback != null)
+				optionalSaveCompletedCallback();
+			},
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return requestId;
+		}
+
+		public RequestId GetMessages()
+		{
+		  // ToArray is used to return a clone of the message set - otherwise, the caller would
+		  // end up with a list that is updated when the internal reference within this class
+		  // is updated (which sounds convenient but it's not the behaviour that would be
+		  // exhibited if this was really persisting messages to a server somewhere)
+		  var requestId = new RequestId();
+		  Window.SetTimeout(
+			() => _dispatcher.HandleServerAction(new MessageHistoryUpdated
+			{
+			  RequestId = requestId,
+			  Messages = _messages.ToArray()
+			}),
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return requestId;
+		}
+
+		private void GetChuckNorrisFact()
+		{
+		  var request = new XMLHttpRequest();
+		  request.ResponseType = XMLHttpRequestResponseType.Json;
+		  request.OnReadyStateChange = () =>
+		  {
+			if (request.ReadyState != AjaxReadyState.Done)
+			  return;
+
+			if ((request.Status == 200) || (request.Status == 304))
+			{
+			  try
+			  {
+				var apiResponse = (ChuckNorrisFactApiResponse)request.Response;
+				if ((apiResponse.Type == "success")
+				&& (apiResponse.Value != null)
+				&& !string.IsNullOrWhiteSpace(apiResponse.Value.Joke))
+				{
+				  // The Chuck Norris Facts API (http://www.icndb.com/api/) returns strings
+				  // html-encoded, so they need decoding before be wrapped up in a
+				  // MessageDetails instance
+				  // - Note: After the save has been processed, GetMessages is called so
+				  //   that a MessageHistoryUpdate action is dispatched
+				  SaveMessage(
+					new MessageDetails
+					{
+					  Title = "Fact",
+					  Content = HtmlDecode(apiResponse.Value.Joke)
+					},
+					() => GetMessages()
+				  );
+				  return;
+				}
+			  }
+			  catch
+			  {
+				// Ignore any error and drop through to the fallback message-generator below
+			  }
+			}
+			SaveMessage(new MessageDetails
+			{
+			  Title = "Fact",
+			  Content = "API call failed when polling for server content :("
+			});
+		  };
+		  request.Open("GET", "http://api.icndb.com/jokes/random");
+		  request.Send();
+		}
+
+		private string HtmlDecode(string value)
+		{
+		  if (value == null)
+			throw new ArgumentNullException("value");
+
+		  var wrapper = Document.CreateElement("div");
+		  wrapper.InnerHTML = value;
+		  return wrapper.TextContent;
+		}
+
+		[IgnoreCast]
+		private class ChuckNorrisFactApiResponse
+		{
+		  public extern string Type { [Template("type")] get; }
+		  public extern FactDetails Value { [Template("value")] get; }
+
+		  [IgnoreCast]
+		  public class FactDetails
+		  {
+			public extern int Id { [Template("id")] get; }
+			public extern string Joke { [Template("joke")]get; }
+		  }
+		}
+	  }
+	}
+
+This means that the **IReadAndWriteMessages** interface no longer returns **Task**s -
+
+	using BridgeReactTutorial.ViewModels;
+	
+	namespace BridgeReactTutorial.API
+	{
+	  public interface IReadAndWriteMessages
+	  {
+		RequestId SaveMessage(MessageDetails message);
+		RequestId GetMessages();
+	  }
+	}
+
+Each of the two methods now return a "**RequestId**". This is a unique identifier that will be used to tie future actions back to specific calls to the "GetMessages" or "SaveMessaage" methods. When a user requests that a message be saved in our sample app, the **AppContainer** sends a **MessageSaveRequested** action through the Dispatcher. The store will receive this action from the Dispatcher and use the message data in it to call "SaveMessage", which will give the Store a unique **RequestId**. After the **MessageApi** has completed the save, it will raise a **MessageSaveSucceeded** action that has a "RequestId" value, the same **RequestId** as "SaveMessage" returned. This is how the Store knows that the save which succeeded was, in fact, the save that it initiated. In the app here, there wouldn't be any doubt since there is only one place where a new message may be saved, but in a more complicated application it's feasible that there may be multiple components that could initiate a save and it would be important to be able to be able to trace any "save succeeded" notification back to where it came from.
+
+The **RequestId** has a nice feature in that two instances may be compared to determine which is most recent - this *could* be applicable to an application like our example because, shortly, the message history will be updated after a user has created a new message *and* it will be automatically updated when a new Chuck Norris fact appears. It's not too difficult to imagine that there could be a race condition that occurs when two "new message history" actions are received by the Store (one from the user-saves-message-and-then-fresh-history-is-automatically-retrieved-after-the-save-is-completed process and one from a new Chuck Norris fact arriving). In the real world, with unpredictable server and network times, it's possible for "Server Call A" to start before "Server Call B" but for "Server Call A" to finish *after* "Server Call B" - in this case we *want* the "new message history" from "Server Call B", since it should be more recent, but the data from "Server Call A" arrives *after* it and we need to know which result is freshest. If each action that relates to "new data arrived from API" has a **RequestId** then we can compare the two values using the "ComesAfter" function, allow us to ignore the stale data.
+
+The **RequestId** implementation is fairly simple (add a new "RequestId.cs" file to the "API" folder and paste in the following) -
+
+	using System;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public class RequestId
+	  {
+		private static DateTime _timeOfLastId = DateTime.MinValue;
+		private static int _offsetOfLastId = 0;
+
+		private readonly DateTime _requestTime;
+		private readonly int _requestOffset;
+		public RequestId()
+		{
+		  _requestTime = DateTime.Now;
+		  if (_timeOfLastId < _requestTime)
+		  {
+			_offsetOfLastId = 0;
+			_timeOfLastId = _requestTime;
+		  }
+		  else
+			_offsetOfLastId++;
+		  _requestOffset = _offsetOfLastId;
+		}
+
+		public bool ComesAfter(RequestId other)
+		{
+		  if (other == null)
+			throw new ArgumentNullException("other");
+
+		  if (_requestTime == other._requestTime)
+			return _requestOffset > other._requestOffset;
+		  return (_requestTime > other._requestTime);
+		}
+	  }
+	}
+	
+In the new **MessageApi** code above, two actions were referenced that haven't been defined yet, so add two more classes to the "Actions" folder for the following:
+
+	using System;
+	using System.Collections.Generic;
+	using Bridge.React;
+	using BridgeReactTutorial.API;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class MessageHistoryUpdated : IDispatcherAction
+	  {
+		public RequestId RequestId;
+		public IEnumerable<Tuple<int, MessageDetails>> Messages;
+	  }
+	}
+
+	using Bridge.React;
+	using BridgeReactTutorial.API;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class MessageSaveSucceeded : IDispatcherAction
+	  {
+		public RequestId RequestId;
+	  }
+	}
+
+*(Note: A **MessageHistoryUpdated** will be emitted after a "GetMessages" call is made but one will also be emitted every time that a new Chuck Norris fact arrives)*.
+
+So, now, *finally*, we can look at how to create a Store.
+
+Create a new folder in the project root called "Stores" and add a new class file to it; "MessageWriterStore.cs" -
+
+	using System;
+	using System.Collections.Generic;
+	using Bridge.React;
+	using BridgeReactTutorial.Actions;
+	using BridgeReactTutorial.API;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Stores
+	{
+	  public class MessageWriterStore
+	  {
+		private RequestId _saveActionRequestId, _lastDataUpdatedRequestId;
+		public MessageWriterStore(IReadAndWriteMessages messageApi, AppDispatcher dispatcher)
+		{
+		  if (messageApi == null)
+			throw new ArgumentNullException("messageApi");
+		  if (dispatcher == null)
+			throw new ArgumentNullException("dispatcher");
+
+		  Message = GetInitialMessageEditState();
+		  MessageHistory = new Tuple<int, MessageDetails>[0];
+
+		  dispatcher.Register(message =>
+		  {
+			if (message.Action is StoreInitialised)
+			{
+			  var storeInitialised = (StoreInitialised)message.Action;
+			  if (storeInitialised.Store == this)
+				OnChange();
+			}
+			else if (message.Action is MessageEditStateChanged)
+			{
+			  var messageEditStateChanged = (MessageEditStateChanged)message.Action;
+			  Message = messageEditStateChanged.NewState;
+			  ValidateMessage(Message);
+			  OnChange();
+			}
+			else if (message.Action is MessageSaveRequested)
+			{
+			  var messageSaveRequested = (MessageSaveRequested)message.Action;
+			  _saveActionRequestId = messageApi.SaveMessage(messageSaveRequested.Message);
+			  Message.IsSaveInProgress = true;
+			  OnChange();
+			}
+			else if (message.Action is MessageSaveSucceeded)
+			{
+			  var messageSaveSucceeded = (MessageSaveSucceeded)message.Action;
+			  if (messageSaveSucceeded.RequestId == _saveActionRequestId)
+			  {
+				_saveActionRequestId = null;
+				Message = GetInitialMessageEditState();
+				OnChange();
+				_lastDataUpdatedRequestId = messageApi.GetMessages();
+			  }
+			}
+			else if (message.Action is MessageHistoryUpdated)
+			{
+			  var messageHistoryUpdated = (MessageHistoryUpdated)message.Action;
+			  if ((_lastDataUpdatedRequestId == null)
+			  || (_lastDataUpdatedRequestId == messageHistoryUpdated.RequestId)
+			  || messageHistoryUpdated.RequestId.ComesAfter(_lastDataUpdatedRequestId))
+			  {
+				_lastDataUpdatedRequestId = messageHistoryUpdated.RequestId;
+				MessageHistory = messageHistoryUpdated.Messages;
+				OnChange();
+			  }
+			}
+		  });
+		}
+
+		public event Action Change;
+		public MessageEditState Message;
+		public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
+
+		private MessageEditState GetInitialMessageEditState()
+		{
+		  // Note: By using the ValidateMessage here, we don't need to duplicate the "Untitled"
+		  // string that should be used for the Caption value when the UI is first rendered
+		  // or when the user has entered some Title content but then deleted it again.
+		  // Similarly, we avoid having to repeat the validation messages that should be
+		  // displayed when the form is empty, since they will be set by ValidateMessage.
+		  var blankMessage = new MessageEditState
+		  {
+			Caption = "",
+			Title = new TextEditState { Text = "" },
+			Content = new TextEditState { Text = "" },
+			IsSaveInProgress = false
+		  };
+		  ValidateMessage(blankMessage);
+		  return blankMessage;
+		}
+
+		private void ValidateMessage(MessageEditState message)
+		{
+		  if (message == null)
+			throw new ArgumentNullException("message");
+
+		  message.Caption = string.IsNullOrWhiteSpace(message.Title.Text)
+			? "Untitled"
+			: message.Title.Text.Trim();
+		  message.Title.ValidationError = string.IsNullOrWhiteSpace(message.Title.Text)
+			? "Must enter a title"
+			: null;
+		  message.Content.ValidationError = string.IsNullOrWhiteSpace(message.Content.Text)
+			? "Must enter message content"
+			: null;
+		}
+
+		private void OnChange()
+		{
+		  if (Change != null)
+			Change();
+		}
+	  }
+	}
+
+There's really nothing very complicated here at all. What I like is that all of the logic that was previously ensconced within component classes is now in a C# class which has zero UI-based dependencies. What I also like is how clear the logic is, it's very easy to read through how the various actions are matched and to see precisely what state changes will occur. In fact, the **MessageWriterStore** is just a simple state machine where each transition is based upon the action that it receives from the Dispatcher. It's reassuring that the Flux architecture is based upon these time-tested computer science devices; the message bus and [state machine](Post61) - while it might take a little while to internalise how to write applications based around this "one-way binding" / "one-way message passing" arrangement, once it clicks it feels very natural.
+
+Having the core application logic in classes like this really helps ensure that code will have those two great properties that I will keep repeating through this series - that it's easy to reason about and that it's easy to test. It's easy to reason about as it's easy to see how user (and server) actions flow through the code, there are few surprises. It's easy to test because there are few dependencies - to test anything in the **MessageWriterStore**, each unit test would need to provide an **AppDispatcher** instance and a mock **IReadAndWriteMessages** implementation, it would then push one or more messages through the Dispatcher and confirm that the public **MessageWriterStore** state matches expectations at the end. For example, to test the "Content" text input validation, you would play back a **MessageEditStateChanged** action with a blank "Content" string in the **MessageEditState** and ensure that the expected validation message text was present in the "Message" reference of the **MessageWriterStore** afterwards.
+
+There are a couple of minor things that I'm not so keen about in the code above. Firstly, there's the laborious type-checking and casting that is required when matching the actions. Secondly, there's the duplication on calling "OnChange" whenever an action is matched. Thirdly, the logic around **RequestId** comparison when a **MessageHistoryUpdated** is matched is a bit clumsy.
+
+For that third point, add a new file "RequestIdExtensions.cs" to the "API" folder with the following content -
+
+	using System;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public static class RequestIdExtensions
+	  {
+		public static bool IsEqualToOrComesAfter(this RequestId source, RequestId other)
+		{
+		  if (source == null)
+			throw new ArgumentNullException("source");
+
+		  // If the "other" reference is no-RequestId then the "source" may be considered to
+		  // come after it
+		  if (source == null)
+			return true;
+
+		  return source.ComesAfter(other);
+		}
+	  }
+	}
+
+And for the first two points, we can use some extension methods which are included in the Bridge / React bindings -
+
+	using System;
+	using System.Collections.Generic;
+	using Bridge.React;
+	using BridgeReactTutorial.Actions;
+	using BridgeReactTutorial.API;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Stores
+	{
+	  public class MessageWriterStore
+	  {
+		private RequestId _saveActionRequestId, _lastDataUpdatedRequestId;
+		public MessageWriterStore(IReadAndWriteMessages messageApi, AppDispatcher dispatcher)
+		{
+		  if (messageApi == null)
+			throw new ArgumentNullException("messageApi");
+		  if (dispatcher == null)
+			throw new ArgumentNullException("dispatcher");
+
+		  Message = GetInitialMessageEditState();
+		  MessageHistory = new Tuple<int, MessageDetails>[0];
+
+		  dispatcher.Register(message =>
+		  {
+			message
+			  .If<StoreInitialised>(
+				condition: action => (action.Store == this),
+				work: action => { }
+			  )
+			  .Else<MessageEditStateChanged>(action =>
+			  {
+				Message = action.NewState;
+				ValidateMessage(Message);
+			  })
+			  .Else<MessageSaveRequested>(action =>
+			  {
+				_saveActionRequestId = messageApi.SaveMessage(action.Message);
+				Message.IsSaveInProgress = true;
+			  })
+			  .Else<MessageSaveSucceeded>(
+				condition: action => (action.RequestId == _saveActionRequestId),
+				work: action =>
+				{
+				  _saveActionRequestId = null;
+				  Message = GetInitialMessageEditState();
+				  _lastDataUpdatedRequestId = messageApi.GetMessages();
+				}
+			  )
+			  .Else<MessageHistoryUpdated>(
+				condition: action =>
+				  action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
+				work: action =>
+				{
+				  _lastDataUpdatedRequestId = action.RequestId;
+				  MessageHistory = action.Messages;
+				}
+			  )
+			  .IfAnyMatched(OnChange);
+		  });
+		}
+
+		public event Action Change;
+		public MessageEditState Message;
+		public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
+
+		private MessageEditState GetInitialMessageEditState()
+		{
+		  // Note: By using the ValidateMessage here, we don't need to duplicate the "Untitled"
+		  // string that should be used for the Caption value when the UI is first rendered
+		  // or when the user has entered some Title content but then deleted it again.
+		  // Similarly, we avoid having to repeat the validation messages that should be
+		  // displayed when the form is empty, since they will be set by ValidateMessage.
+		  var blankMessage = new MessageEditState
+		  {
+			Caption = "",
+			Title = new TextEditState { Text = "" },
+			Content = new TextEditState { Text = "" },
+			IsSaveInProgress = false
+		  };
+		  ValidateMessage(blankMessage);
+		  return blankMessage;
+		}
+
+		private void ValidateMessage(MessageEditState message)
+		{
+		  if (message == null)
+			throw new ArgumentNullException("message");
+
+		  message.Caption = string.IsNullOrWhiteSpace(message.Title.Text)
+			? "Untitled"
+			: message.Title.Text.Trim();
+		  message.Title.ValidationError = string.IsNullOrWhiteSpace(message.Title.Text)
+			? "Must enter a title"
+			: null;
+		  message.Content.ValidationError = string.IsNullOrWhiteSpace(message.Content.Text)
+			? "Must enter message content"
+			: null;
+		}
+
+		private void OnChange()
+		{
+		  if (Change != null)
+			Change();
+		}
+	  }
+	}
+
+Hopefully it's clear enough how they work. The "If" and the "Else" functions both have a generic type parameter for the kind of action to match and may be called with a single "work" argument (meaning "do this if the action type is matched") or two arguments; "condition" and "work" (where "condition" looks at the action, typed to match the generic type parameter, and returns true or false depending upon whether the action should be considered or ignored). The "condition" argument is most clearly illustrated by the **MessageHistoryUpdated**, it ensures that any stale **MessageHistoryUpdated** action will be ignored. The "work" implementation for **StoreInitialised** is empty because all that is required when a **StoreInitialised** action is received (that targets the current store) is to call "OnChange" and the "IfAnyMatched" extension method calls "OnChange" if any of the actions are matched.
+
+There's just one final thing to do now in order to make the application compile again, the entry point logic in App.cs needs updating -
+
+	using System.Linq;
+	using Bridge.Html5;
+	using Bridge.React;
+	using BridgeReactTutorial.Actions;
+	using BridgeReactTutorial.API;
+	using BridgeReactTutorial.Components;
+	using BridgeReactTutorial.Stores;
+
+	namespace BridgeReactTutorial
+	{
+	  public class App
+	  {
+		[Ready]
+		public static void Go()
+		{
+		  var container = Document.GetElementById("main");
+		  container.ClassName = string.Join(
+			" ",
+			container.ClassName.Split().Where(c => c != "loading")
+		  );
+
+		  var dispatcher = new AppDispatcher();
+		  var messageApi = new MessageApi(dispatcher);
+		  var store = new MessageWriterStore(messageApi, dispatcher);
+		  React.Render(
+			new AppContainer(new AppContainer.Props
+			{
+			  Dispatcher = dispatcher,
+			  Store = store
+			}),
+			container
+		  );
+		  dispatcher.HandleViewAction(new StoreInitialised { Store = store });
+		}
+	  }
+	}
+
+Both the **MessageWriterStore** and the **AppContainer** need a reference to a shared Dispatcher, **MessageWriterStore** needs a Message API wrapper to talk to and the **AppContainer** needs a reference to the Store. In a lot of the Flux articles that I read at first, the Dispatcher was a static reference that everything had access to - but I much prefer this arrangement, where the places that explicitly need it (ie. the Stores and the top-level components) have it passed in as a constructor argument or through props. This makes a class' requirements much more explicit - if a class has implicit dependencies then it's more difficult to tell at a glance how it works. And *not* having a static Dispatcher means that unit testing is simpler, since there is no implicit shared state between elements within an application.
+
+The only part of this code that may not be very intuitive is the need to send a **StoreInitialised** action to the Dispatcher immediately after setting up all of the references. This is required before the **AppContainer** won't render anything until it processes its first "Change" event from the **MessageWriterStore** (because, until that point, the **AppContainer**'s state reference will be null). When the Store receives the **StoreInitialised** action, it will raise its "Change" event and the **AppContainer** will perform its first "real" render. If this was an application with a routing element, with a Store per page / form, then it would seem natural for the router to raise a **StoreInitialised** action for the Store that should be active for the current route (it is just a little odd-looking in a simple application like the example here unless you know why it is necessary).
+
+### Lots of actions?
+
+With that, the change in architecture is complete. Hopefully it's easy to envisage how further functionality is enabled by adding further specialised components and communicating using different action types. Each action is handled in a very clear way in the Store(s) and so the overall complexity should (approximately) grow linearly with the [essential complexity](http://codebetter.com/markneedham/2010/03/18/essential-and-accidental-complexity/), rather than exponentially (which is what tends to happens a lot with more haphazard architectures, or where you have the "star-shaped event handling" that I described earlier).
+
+The only adjustment that I'd like to make at this point is to the actions themselves - if there's a variation of the **MessageEditStateChanged**, **MessageSaveRequested** and **MessageSaveSucceeded** actions required for every kind of form where a user creates / edits data and tries to save it, then there's going to be a lot of action classes that are basically the same.
+
+This seems like a perfect case for C# generics - a single generic class may be used to represent many types of user edit action without sacrificing type safety. Rename the "MessageEditStateChanged.cs" action class to "UserEditRequested.cs" and replace the content, which is currently:
+
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class MessageEditStateChanged : IDispatcherAction
+	  {
+		public MessageEditState NewState;
+	  }
+	}
+
+With this:
+
+	using Bridge.React;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class UserEditRequested<T> : IDispatcherAction
+	  {
+		public T NewState;
+	  }
+	  public static class UserEditRequested
+	  {
+	    public static UserEditRequested<T> For<T>(T newState)
+	    {
+	      return new UserEditRequested<T> { NewState = newState };
+	    }
+	  }
+	}
+
+Now, anywhere that there is a reference to **MessageEditStateChanged**, you will need to change it to be a **UserEditRequested&lt;MessageEditState&gt;**.
+
+The non-generic "For" function is just for convenience, it allows you to create a new **UserEditRequested&lt;T&gt;** instance without writing out the type of "T" - it will be inferred by the type of the "newState" reference passed for it. The "OnChange" lambda set on the **MessageEditor** props was previously
+
+	OnChange = newState => props.Dispatcher.HandleViewAction(
+	  new MessageEditStateChanged { NewState = newState }
+	)
+
+but should now become
+
+	OnChange = newState => props.Dispatcher.HandleViewAction(
+	  UserEditRequested.For(newState)
+	)
+
+(Since "newState" is a **MessageEditState** instance, the action that will be raised will be a **UserEditRequested&lt;MessageEditState&gt;**).
+
+Now, the action-matching code in the **MessageWriteStore** needs to change from
+
+	.Else<MessageEditStateChanged>(action =>
+	{
+	  Message = action.NewState;
+	  ValidateMessage(Message);
+	})
+
+to
+
+	.Else<UserEditRequested<MessageEditState>>(action =>
+	{
+	  Message = action.NewState;
+	  ValidateMessage(Message);
+	})
+	
+Similar changes should be made, so that "MessageSaveRequested.cs" is replaced with
+
+	using Bridge.React;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class SaveRequested<T> : IDispatcherAction
+	  {
+		public T Data;
+	  }
+	  public static class SaveRequested
+	  {
+		public static SaveRequested<T> For<T>(T data)
+		{
+		  return new SaveRequested<T> { Data = data };
+		}
+	  }
+	}
+	
+And "MessageSaveSucceeded.cs" is replaced with
+
+	using Bridge.React;
+	using BridgeReactTutorial.API;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class SaveSucceeded : IDispatcherAction
+	  {
+		public RequestId RequestId;
+	  }
+	}
+	
+And, finally, "MessageHistoryUpdated.cs" replaced with
+
+	using Bridge.React;
+	using BridgeReactTutorial.API;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class DataUpdated<T> : IDispatcherAction
+	  {
+		public RequestId RequestId;
+		public T Data;
+	  }
+	  public static class DataUpdated
+	  {
+		public static DataUpdated<T> For<T>(RequestId requestId, T data)
+		{
+		  return new DataUpdated<T> { RequestId = requestId, Data = data };
+		}
+	  }
+	}
+
+*(Note that **SaveSucceeded** is not a generic class because the only information that it contains is the **RequestId** that corresponds to the save operation that it indicates has completed).*
+
+The action type-matching that occurs in the **MessageWriteStore** now needs to be changed to:
+
+    dispatcher.Register(message =>
+    {
+      message
+        .If<StoreInitialised>(
+          condition: action => (action.Store == this),
+          work: action => { }
+        )
+        .Else<UserEditRequested<MessageEditState>>(action =>
+        {
+          Message = action.NewState;
+          ValidateMessage(Message);
+        })
+        .Else<SaveRequested<MessageDetails>>(action =>
+        {
+          _saveActionRequestId = messageApi.SaveMessage(action.Data);
+          Message.IsSaveInProgress = true;
+        })
+        .Else<SaveSucceeded>(
+          condition: action => (action.RequestId == _saveActionRequestId),
+          work: action =>
+          {
+            _saveActionRequestId = null;
+            Message = GetInitialMessageEditState();
+            _lastDataUpdatedRequestId = messageApi.GetMessages();
+          }
+        )
+        .Else<DataUpdated<IEnumerable<Tuple<int, MessageDetails>>>>(
+		  condition: action =>
+		    action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
+          work: action =>
+          {
+            _lastDataUpdatedRequestId = action.RequestId;
+            MessageHistory = action.Data;
+          }
+        )
+        .IfAnyMatched(OnChange);
+    });
+	
+The **AppContainer** now becomes:
+
+	using System;
+	using System.Collections.Generic;
+	using Bridge.React;
+	using BridgeReactTutorial.Actions;
+	using BridgeReactTutorial.ViewModels;
+	using BridgeReactTutorial.Stores;
+
+	namespace BridgeReactTutorial.Components
+	{
+	  public class AppContainer : Component<AppContainer.Props, AppContainer.State>
+	  {
+		public AppContainer(AppContainer.Props props) : base(props) { }
+
+		protected override void ComponentDidMount()
+		{
+		  props.Store.Change += StoreChanged;
+		}
+		protected override void ComponentWillUnmount()
+		{
+		  props.Store.Change -= StoreChanged;
+		}
+		private void StoreChanged()
+		{
+		  SetState(new State
+		  {
+			Message = props.Store.Message,
+			MessageHistory = props.Store.MessageHistory
+		  });
+		}
+
+		public override ReactElement Render()
+		{
+		  if (state == null)
+			return null;
+
+		  return DOM.Div(null,
+			new MessageEditor(new MessageEditor.Props
+			{
+			  ClassName = "message",
+			  Message = state.Message,
+			  OnChange = newState => props.Dispatcher.HandleViewAction(
+				UserEditRequested.For(newState)
+			  ),
+			  OnSave = () => props.Dispatcher.HandleViewAction(
+				SaveRequested.For(new MessageDetails
+				{
+				  Title = state.Message.Title.Text,
+				  Content = state.Message.Content.Text
+				})
+			  )
+			}),
+			new MessageHistory(new MessageHistory.Props
+			{
+			  ClassName = "history",
+			  Messages = state.MessageHistory
+			})
+		  );
+		}
+
+		public class Props
+		{
+		  public AppDispatcher Dispatcher;
+		  public MessageWriterStore Store;
+		}
+
+		public class State
+		{
+		  public MessageEditState Message;
+		  public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
+		}
+	  }
+	}
+
+And the **MessageApi**:
+
+	using System;
+	using System.Collections.Generic;
+	using Bridge;
+	using Bridge.Html5;
+	using Bridge.React;
+	using BridgeReactTutorial.Actions;
+	using BridgeReactTutorial.ViewModels;
+
+	namespace BridgeReactTutorial.API
+	{
+	  public class MessageApi : IReadAndWriteMessages
+	  {
+		private readonly AppDispatcher _dispatcher;
+		private readonly List<Tuple<int, MessageDetails>> _messages;
+		public MessageApi(AppDispatcher dispatcher)
+		{
+		  if (dispatcher == null)
+			throw new ArgumentException("dispatcher");
+
+		  _dispatcher = dispatcher;
+		  _messages = new List<Tuple<int, MessageDetails>>();
+
+		  // To further mimic a server-based API (where other people may be recording messages
+		  // of their own), after a 10s delay a periodic task will be executed to retrieve a
+		  // new message
+		  Window.SetTimeout(
+			() => Window.SetInterval(GetChuckNorrisFact, 5000),
+			10000
+		  );
+		}
+
+		public RequestId SaveMessage(MessageDetails message)
+		{
+		  return SaveMessage(message, optionalSaveCompletedCallback: null);
+		}
+
+		private RequestId SaveMessage(MessageDetails message, Action optionalSaveCompletedCallback)
+		{
+		  if (message == null)
+			throw new ArgumentNullException("message");
+		  if (string.IsNullOrWhiteSpace(message.Title))
+			throw new ArgumentException("A title value must be provided");
+		  if (string.IsNullOrWhiteSpace(message.Content))
+			throw new ArgumentException("A content value must be provided");
+
+		  var requestId = new RequestId();
+		  Window.SetTimeout(
+			() =>
+			{
+			  _messages.Add(Tuple.Create(_messages.Count, message));
+			  _dispatcher.HandleServerAction(new SaveSucceeded { RequestId = requestId });
+			  if (optionalSaveCompletedCallback != null)
+				optionalSaveCompletedCallback();
+			},
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return requestId;
+		}
+
+		public RequestId GetMessages()
+		{
+		  // ToArray is used to return a clone of the message set - otherwise, the caller would
+		  // end up with a list that is updated when the internal reference within this class
+		  // is updated (which sounds convenient but it's not the behaviour that would be
+		  // exhibited if this was really persisting messages to a server somewhere)
+		  var requestId = new RequestId();
+		  Window.SetTimeout(
+			() => _dispatcher.HandleServerAction(DataUpdated.For(requestId, _messages.ToArray())),
+			1000 // Simulate a roundtrip to the server
+		  );
+		  return requestId;
+		}
+
+		private void GetChuckNorrisFact()
+		{
+		  var request = new XMLHttpRequest();
+		  request.ResponseType = XMLHttpRequestResponseType.Json;
+		  request.OnReadyStateChange = () =>
+		  {
+			if (request.ReadyState != AjaxReadyState.Done)
+			  return;
+
+			if ((request.Status == 200) || (request.Status == 304))
+			{
+			  try
+			  {
+				var apiResponse = (ChuckNorrisFactApiResponse)request.Response;
+				if ((apiResponse.Type == "success")
+				&& (apiResponse.Value != null)
+				&& !string.IsNullOrWhiteSpace(apiResponse.Value.Joke))
+				{
+				  // The Chuck Norris Facts API (http://www.icndb.com/api/) returns strings
+				  // html-encoded, so they need decoding before be wrapped up in a
+				  // MessageDetails instance
+				  // - Note: After the save has been processed, GetMessages is called so
+				  //   that a MessageHistoryUpdate action is dispatched
+				  SaveMessage(
+					new MessageDetails
+					{
+					  Title = "Fact",
+					  Content = HtmlDecode(apiResponse.Value.Joke)
+					},
+					() => GetMessages()
+				  );
+				  return;
+				}
+			  }
+			  catch
+			  {
+				// Ignore any error and drop through to the fallback message-generator below
+			  }
+			}
+			SaveMessage(new MessageDetails
+			{
+			  Title = "Fact",
+			  Content = "API call failed when polling for server content :("
+			});
+		  };
+		  request.Open("GET", "http://api.icndb.com/jokes/random");
+		  request.Send();
+		}
+
+		private string HtmlDecode(string value)
+		{
+		  if (value == null)
+			throw new ArgumentNullException("value");
+
+		  var wrapper = Document.CreateElement("div");
+		  wrapper.InnerHTML = value;
+		  return wrapper.TextContent;
+		}
+
+		[IgnoreCast]
+		private class ChuckNorrisFactApiResponse
+		{
+		  public extern string Type { [Template("type")] get; }
+		  public extern FactDetails Value { [Template("value")] get; }
+
+		  [IgnoreCast]
+		  public class FactDetails
+		  {
+			public extern int Id { [Template("id")] get; }
+			public extern string Joke { [Template("joke")]get; }
+		  }
+		}
+	  }
+	}
+
+*(I contemplated leaving it as an exercise for the reader to change all of the action instantiation code to use the new generic classes, but with so much code in this post already I thought I might as well go whole-hog and include the final version of the everything!)*
+
+No type-safety has been lost in this refactor but, hopefully, it's clear how action classes can scale with an application's complexity. Needing a lot of new actions every time that a new section is added to an application would be no fun and would just add to the code churn required, so being able to reuse actions like this is a boon.
+
+### The third and final part
+
+We've covered a lot of ground here, so I'm going to draw things to a close. Flux is a big deal and I've read plenty of articles that make it sound mind-bending and difficult to grasp. Hopefully this has explored *why* it makes sense as much as how to think in terms of it (and write code in the style of it!).
+
+Next time, now that React and Flux are dealt with, I want to look at how we can go *further* in the quest to *make code easier to reason about and to test* - there is a lot more that we can do with the C# type system to really express intent, requirements and limitations and I strongly believe that doing so will lead to higher quality code. As a side benefit, I'll also be showing how to make a simple tweak to components that will offer potentially huge performance benefits to highly-complex / deeply-nested UIs. I really think that using C# and Bridge can be more than just a possibility for writing React applications, it can be one of the *best* ways to do so!
