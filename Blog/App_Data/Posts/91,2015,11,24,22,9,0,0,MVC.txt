@@ -48,7 +48,7 @@ Even if I don't want any URL to match to this Controller / Action, I still need 
 Eventually I read enough answers that I came to the correct information (after reading a *lot* more unhelpful suggestions about "RedirectToAction"). The credit goes to this answer: [stackoverflow.com/a/16453648](http://stackoverflow.com/a/16453648), but I'll take its information to complete my original example -
 
     var defaultController = new DefaultController();
-	defaultController.ControlContext = new ControllerContext(
+	defaultController.ControllerContext = new ControllerContext(
 		this.ControllerContext.RequestContext,
 		defaultController
 	);
