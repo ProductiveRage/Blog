@@ -864,10 +864,10 @@ For that third point, add a new file "RequestIdExtensions.cs" to the "API" folde
 
 		  // If the "other" reference is no-RequestId then the "source" may be considered to
 		  // come after it
-		  if (source == null)
+		  if (other == null)
 			return true;
 
-		  return source.ComesAfter(other);
+		  return (source == other) || source.ComesAfter(other);
 		}
 	  }
 	}
