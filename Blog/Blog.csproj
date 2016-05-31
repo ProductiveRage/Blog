@@ -162,6 +162,8 @@
     <Content Include="App_Data\AllEnglishWords.txt" />
     <Content Include="App_Data\Posts\1,2011,3,14,20,14,2,0,Immutability.txt" />
     <Content Include="App_Data\Posts\10,2011,8,30,19,06,0,0,Mercurial.txt" />
+    <Content Include="App_Data\Posts\101,2016,5,31,21,34,0,0.txt" />
+    <Content Include="App_Data\Posts\100,2016,5,31,21,33,0,0.txt" />
     <Content Include="App_Data\Posts\11,2011,12,6,18,11,0,0.txt" />
     <Content Include="App_Data\Posts\12,2011,12,8,20,50,0,0,Mercurial.txt" />
     <Content Include="App_Data\Posts\13,2011,12,8,23,46,0,0,ASP.Net,MVC.txt" />
