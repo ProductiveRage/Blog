@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Web.Mvc;
 using System.Web.Routing;
 using System.Web.SessionState;
@@ -28,14 +29,14 @@ namespace Blog.Factories
 						new PostIndexerFactory(requestContext.HttpContext).Get(),
 						Constants.CanonicalLinkBase,
 						IsLocalHost(requestContext) ? null : Constants.GoogleAnalyticsId,
-						GetLongTermCache(requestContext)
+						GetPostContentCache(requestContext)
 					);
 
 				case "RSS":
 					return new RSSController(
 						new PostRepositoryFactory(requestContext.HttpContext).Get(),
 						10, // maximumNumberOfPostsToPublish
-						GetLongTermCache(requestContext)
+						GetPostContentCache(requestContext)
 					);
 
 				case "ViewPost":
@@ -44,7 +45,7 @@ namespace Blog.Factories
 						Constants.CanonicalLinkBase,
 						IsLocalHost(requestContext) ? null : Constants.GoogleAnalyticsId,
 						Constants.DisqusShortName,
-						GetLongTermCache(requestContext)
+						GetPostContentCache(requestContext)
 					);
 
 				case "StaticContent":
@@ -55,14 +56,20 @@ namespace Blog.Factories
 			}
 		}
 
-		private ICache GetLongTermCache(RequestContext requestContext)
+		private ICache GetPostContentCache(RequestContext requestContext)
 		{
 			if (requestContext == null)
 				throw new ArgumentNullException("requestContext");
 
-			return new ASPNetCacheCache(
-				requestContext.HttpContext.Cache,
-				TimeSpan.FromDays(1)
+			return new LayeredCache(
+				new ASPNetCacheCache(
+					requestContext.HttpContext.Cache,
+					TimeSpan.FromDays(1)
+				),
+				new JsonSerialisingDiskCache(
+					new DirectoryInfo(requestContext.HttpContext.Server.MapPath("~/App_Data/Cache")),
+					swallowAnyFileAccessExceptions: true
+				)
 			);
 		}
 

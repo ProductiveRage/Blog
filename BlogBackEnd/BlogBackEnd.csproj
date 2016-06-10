@@ -43,11 +43,16 @@
     <Reference Include="MarkdownSharp">
       <HintPath>..\External Dependencies\MarkDown\MarkdownSharp.dll</HintPath>
     </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\packages\Newtonsoft.Json.8.0.3\lib\net40\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Web" />
     <Reference Include="System.XML" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Caching\LayeredCache.cs" />
+    <Compile Include="Caching\JsonSerialisingDiskCache.cs" />
     <Compile Include="Caching\ASPNetCacheCache.cs" />
     <Compile Include="Caching\ICache.cs" />
     <Compile Include="FullTextIndexing\PostIndexContent.cs" />
@@ -67,6 +72,9 @@
     <Compile Include="Models\Post.cs" />
     <Compile Include="Models\PostStub.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
