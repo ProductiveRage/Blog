@@ -14,19 +14,19 @@ namespace Blog.Controllers
 	{
 		private readonly IPostRepository _postRepository;
 		private readonly int _maximumNumberOfPostsToPublish;
-		private readonly ICache _cache;
-		public RSSController(IPostRepository postRepository, int maximumNumberOfPostsToPublish, ICache cache)
+		private readonly ICache _postContentCache;
+		public RSSController(IPostRepository postRepository, int maximumNumberOfPostsToPublish, ICache postContentCache)
 		{
 			if (postRepository == null)
 				throw new ArgumentNullException("postRepository");
 			if (maximumNumberOfPostsToPublish <= 0)
 				throw new ArgumentOutOfRangeException("maximumNumberOfPostsToPublish", "must be greater than zero");
-			if (cache == null)
-				throw new ArgumentNullException("cache");
+			if (postContentCache == null)
+				throw new ArgumentNullException("postContentCache");
 
 			_postRepository = postRepository;
 			_maximumNumberOfPostsToPublish = maximumNumberOfPostsToPublish;
-			_cache = cache;
+			_postContentCache = postContentCache;
 		}
 
 		[Stopwatch]
@@ -56,7 +56,7 @@ namespace Blog.Controllers
 						))
 						.ToNonNullImmutableList(),
 					new PostSlugRetriever(posts),
-					_cache
+					_postContentCache
 				)
 			);
 		}

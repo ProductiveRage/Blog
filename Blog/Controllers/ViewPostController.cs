@@ -15,24 +15,24 @@ namespace Blog.Controllers
 	{
 		private readonly IPostRepository _postRepository;
 		private readonly string _optionalCanonicalLinkBase, _optionalGoogleAnalyticsId, _optionalDisqusShortName;
-		private readonly ICache _cache;
+		private readonly ICache _postContentCache;
 		public ViewPostController(
 			IPostRepository postRepository,
 			string optionalCanonicalLinkBase,
 			string optionalGoogleAnalyticsId,
 			string optionalDisqusShortName,
-			ICache cache)
+			ICache postContentCache)
 		{
 			if (postRepository == null)
 				throw new ArgumentNullException("postRepository");
-			if (cache == null)
-				throw new ArgumentNullException("cache");
+			if (postContentCache == null)
+				throw new ArgumentNullException("postContentCache");
 
 			_postRepository = postRepository;
 			_optionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			_optionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			_optionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
-			_cache = cache;
+			_postContentCache = postContentCache;
 		}
 
 		[Stopwatch]
@@ -84,7 +84,7 @@ namespace Blog.Controllers
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
 					new PostSlugRetriever(_postRepository),
-					_cache
+					_postContentCache
 				)
 			);
 		}
@@ -114,7 +114,7 @@ namespace Blog.Controllers
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
 					new PostSlugRetriever(_postRepository),
-					_cache
+					_postContentCache
 				)
 			);
 		}
@@ -146,7 +146,7 @@ namespace Blog.Controllers
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
 					new PostSlugRetriever(_postRepository),
-					_cache
+					_postContentCache
 				)
 			);
 		}
@@ -187,7 +187,7 @@ namespace Blog.Controllers
                     _optionalGoogleAnalyticsId,
                     _optionalDisqusShortName,
                     new PostSlugRetriever(_postRepository),
-                    _cache
+                    _postContentCache
                 )
             );
         }

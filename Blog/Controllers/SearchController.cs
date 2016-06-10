@@ -15,21 +15,21 @@ namespace Blog.Controllers
 		private readonly IPostRepository _postRepository;
 		private readonly IPostIndexer _postIndexer;
 		private readonly string _optionalCanonicalLinkBase, _optionalGoogleAnalyticsId;
-		private readonly ICache _cache;
-		public SearchController(IPostRepository postRepository, IPostIndexer postIndexer, string optionalCanonicalLinkBase, string optionalGoogleAnalyticsId, ICache cache)
+		private readonly ICache _postContentCache;
+		public SearchController(IPostRepository postRepository, IPostIndexer postIndexer, string optionalCanonicalLinkBase, string optionalGoogleAnalyticsId, ICache postContentCache)
 		{
 			if (postRepository == null)
 				throw new ArgumentNullException("postRepository");
 			if (postIndexer == null)
 				throw new ArgumentNullException("postIndexer");
-			if (cache == null)
-				throw new ArgumentNullException("cache");
+			if (postContentCache == null)
+				throw new ArgumentNullException("postContentCache");
 
 			_postRepository = postRepository;
 			_postIndexer = postIndexer;
 			_optionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			_optionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
-			_cache = cache;
+			_postContentCache = postContentCache;
 		}
 
 		[ValidateInput(false)]
@@ -59,7 +59,7 @@ namespace Blog.Controllers
 					_postRepository.GetArchiveLinks(),
 					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
-					_cache
+					_postContentCache
 				)
 			);
 		}
