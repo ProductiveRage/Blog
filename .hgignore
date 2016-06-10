@@ -36,3 +36,5 @@ _ReSharper*/
 [Pp]ackages\*
 
 SearchIndex.dat
+
+Cache/
