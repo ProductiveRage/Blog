@@ -10,8 +10,6 @@ namespace Blog.Helpers.Posts
 	/// </summary>
 	public static class MarkdownHelper
 	{
-		private static Markdown markdownTransformer = new Markdown();
-
 		/// <summary>
 		/// Transforms a string of Markdown into HTML
 		/// </summary>
@@ -33,7 +31,7 @@ namespace Blog.Helpers.Posts
 			if (text == null)
 				throw new ArgumentNullException("text");
 
-			return markdownTransformer.Transform(text);
+			return (new Markdown()).Transform(text);
 		}
 	}
 }
