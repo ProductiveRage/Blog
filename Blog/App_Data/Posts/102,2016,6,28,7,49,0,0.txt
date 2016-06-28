@@ -1,0 +1,818 @@
+## Creating a C# ("Roslyn") Analyser - For beginners by a beginner
+
+I've been meaning to try writing a post about creating analysers for a little while now - they're a technology that I think has huge promise for improving code quality and they're something that I've successfully played around with recently.. but I'm still very much in the early phases of being proficient and they're not something that I can just sit down and bang out easily (ie. not without a lot of googling).
+
+So this won't be the post of an expert - but I'm hoping to use that to my advantage since I hopefully remember the pain points all too well and can go through the sort of things that I try when I'm hashing these out.
+
+Most of the analysers I've been writing have been for libraries that work with [Bridge.NET](http://bridge.net/), which introduces some of its own complications. I'm hoping to talk about those problems and how to overcome them in a later post - this one will be a more general introduction.
+
+### Creating a fresh Analyser project
+
+The easiest way to get started is to use a Microsoft template. To do this, first you need to install the Visual Studio 2016 SDK and to do *this* you go to File / New / Project and then choose C# in the left navigation pane, click on Extensibility and then select "Install the Visual Studio Extensibility Tools" (you may already have it installed, it's an optional component of VS2015 - if you see no link to "Install the Visual Studio Extensibility Tools" then hopefully that's why). Next, from the same Extensibility section, you need to select "Download the .NET Compiler Platform SDK". This will ensure that you have the project template installed that we're going to use and it installs some other helpful tools, such as the Syntax Visualizer (which we'll see in a moment).
+
+Now that you have the template and since you're already in File / New / Project / C# / Extensibility, select "Analyzer with Code Fix (NuGet + VSIX)" to create an example analyser solution. This will be a fully operational analyser, split into three projects - the analyser itself, a unit test library and a "Vsix" project. This last one would be used if you wanted to create an analyser that would be installed and applied to *all* projects that you would ever open and *not* apply to any specific library. What I'll be talking about here will be creating an analyser to work with a particular library (that would be distributed *with* the library) - so that everyone consuming the library can benefit from it. As such, to keep things simple, delete the "Vsix" project now,
+
+The example analyser that this template installs does something very simple - it looks for class names that are not upper case and it warns about them. In terms of functionality, this is not particularly useful.. but in terms of education and illustrating how to get started it's a good jumping off point. In fact, the project includes not just an analyser but also a "code fix" - once a non-all-upper-case class name is identified and warned about, a quick fix will be offered in the IDE to change the name to match the upper case regime that it's pushing. Code fixes can be really helpful but I'll talk about them another day, I think that there already will be plenty to deal with in this post.
+
+The analyser class looks basically like this (I've removed comments and replaced localisable strings with hard-coded strings, just to make it a little less to absorb all at once) -
+
+	using System.Collections.Immutable;
+	using System.Linq;
+	using Microsoft.CodeAnalysis;
+	using Microsoft.CodeAnalysis.Diagnostics;
+
+	namespace ExampleAnalyser
+	{
+		[DiagnosticAnalyzer(LanguageNames.CSharp)]
+		public class ExampleAnalyserAnalyzer : DiagnosticAnalyzer
+		{
+			public const string DiagnosticId = "ExampleAnalyser";
+			private const string Category = "Naming";
+			private static readonly LocalizableString Title
+				= "Type name contains lowercase letters";
+			private static readonly LocalizableString MessageFormat
+				= "Type name '{0}' contains lowercase letters";
+			private static readonly LocalizableString Description
+				= "Type names should be all uppercase.";
+
+			private static DiagnosticDescriptor Rule = new DiagnosticDescriptor(
+				DiagnosticId,
+				Title,
+				MessageFormat,
+				Category,
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: Description
+			);
+
+			public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
+			{
+				get { return ImmutableArray.Create(Rule); }
+			}
+
+			public override void Initialize(AnalysisContext context)
+			{
+				context.RegisterSymbolAction(AnalyzeSymbol, SymbolKind.NamedType);
+			}
+
+			private static void AnalyzeSymbol(SymbolAnalysisContext context)
+			{
+				var namedTypeSymbol = (INamedTypeSymbol)context.Symbol;
+				if (namedTypeSymbol.Name.ToCharArray().Any(char.IsLower))
+				{
+					context.ReportDiagnostic(Diagnostic.Create(
+						Rule,
+						namedTypeSymbol.Locations[0],
+						namedTypeSymbol.Name
+					));
+				}
+			}
+		}
+	}
+
+To summarise what's in the above code:
+
+1. **Every analyser needs at least one rule that it will declare**, where a rule has various properties such as a Diagnostic Id, Category, Title, MessageFormat, Description and Severity. The two that are most immediately interesting are Severity (make it a Warning to point out a potential mistake or make it an Error to indicate a critical problem that will prevent a build from being completed) and MessageFormat, since MessageFormat is responsible for the text that will be displayed to the user in their Error List. MessageFormat supports string replacement; in the above example, you can see that there is a "{0}" placeholder in the MessageFormat - when "Diagnostic.Create" is called, the argument "namedTypeSymbol.Name" is injected into that "{0}" placeholder.
+1. **Every analyser needs to declare a "SupportedDiagnostics" value that lists all of the types of rule** that it is possible for the analyser to raise. This is vital in order for the analyser to work correctly at runtime. (If you create an analyser that has three different types of rule that it can report but you forget to declare one of the types in the "SupportedDiagnostics" property, there is actually an analyser that is installed with the template that points out the mistake to you - which is a great example of how analysers can protect you at compile time from potential runtime problems!)
+1. **Every analyser needs an "Initialize" method that registers what type of symbol (more on what this actually means in a moment) it's interested in** and provides a reference to a method that will perform the actual analysis
+
+The simple task of the class above is to look at any "named type" (ie. classes and structs) and inspect their name to ensure that they consist entirely of capital letters (remember, this example included in the "Analyzer with Code Fix (NuGet + VSIX)" template is simply for educational purposes and *not* because it's believed that all class names should be SHOUTING_FORMAT! :) Any class that doesn't have an all-caps name will result in a warning in the Error List.
+
+To illustrate how this should work, the test project includes the following test method -
+
+	[TestMethod]
+	public void TestMethod2()
+	{
+		var test = @"
+	using System;
+	using System.Collections.Generic;
+	using System.Linq;
+	using System.Text;
+	using System.Threading.Tasks;
+	using System.Diagnostics;
+
+	namespace ConsoleApplication1
+	{
+		class TypeName
+		{   
+		}
+	}";
+		var expected = new DiagnosticResult
+		{
+			Id = "ExampleAnalyser",
+			Message = String.Format("Type name '{0}' contains lowercase letters", "TypeName"),
+			Severity = DiagnosticSeverity.Warning,
+			Locations = new[] {
+				new DiagnosticResultLocation("Test0.cs", 11, 15)
+			}
+		};
+
+		VerifyCSharpDiagnostic(test, expected);
+	}
+
+This makes it clear to see precisely what sort of thing the analyser is looking for but it also gives us another immediate benefit - we can actually execute the analyser and step through it in the debugger if we want to have a poke around with exactly what is in the **SymbolAnalysisContext** reference or if we want to look at the properties of a particular **INamedTypeSymbol** instance. This is as easy as putting a breakpoint into the "AnalyzeSymbol" method in the example analyser and then going back into the test class, right-clicking within "TestMethod2" and selecting "Debug Tests".
+
+I want to introduce one other useful technique before moving on - the use of the "Syntax Visualizer". An analyser works on an in-memory tree of nodes that represent the source code of the file that you're looking at\*. In the unit test above, the named symbol "TypeName" is a child node of the "TypeName" class declaration, which is a child node of the "ConsoleApplication1" namespace, which is a child of a top-level construct called the "CompilationUnit". Understanding the various types of node will be key to writing analysers and the Syntax Visualizer makes this a little bit easier.
+
+\* *(Although an analyser starts by examining source code in a particular file, it's also possible to look up types and values that are referenced in that code that live elsewhere - to find out what namespace a class that is referenced exists in, for example, or to determine what arguments a method that is called that exists in a different library. These lookups are more expensive than looking solely at the content in the current file, however, and so should only be done if strictly necessary. We will see how to do this shortly. When looking only at content parsed from the current file, we are looking at the "syntax tree". When looking up references elsewhere in the solution we accessing the "semantic model").*
+
+Having installed the ".NET Compiler Platform SDK" earlier, you will now have access to this tool - go to View / Other Windows / Syntax Visualizer. This shows the syntax tree for any code within your project. So, if you click on the name "TestMethod2" then you will see that it is an **IdentifierToken** (which is the name "TestMethod2") that is a child node of a **MethodDeclaration** which is a child node of a **ClassDeclaration** which is a child node of a **NamespaceDeclaration**, which is a child node of a **CompilationUnit**. You can click on any of these nodes in the Syntax Visualiser to inspect some of the properties of the node and you can open further branches to inspect more - for example, there is a "Block" node that will appear shortly after the **IdentifierToken** that you may click to reveal the nodes that represent the statements within the method.
+
+![The Syntax Visualizer](/Content/Images/Posts/SyntaxVisualizer.png)
+
+### Writing a real analyser
+
+I'm going to walk through an analyser that I created recently - starting from scratch and, hopefully, encountering the same problems that I did last time so that I can illustrate how to find out how to solve them.
+
+The analyser is part of my [Bridge.React](https://www.nuget.org/packages/Bridge.React) library but you won't need to know anything about React or Bridge to follow along.
+
+The root of the problem relates to the rendering of html "select" elements. There are three related properties to consider when rendering a "select" element; "Multiple", "Value" and "Values". Multiple is a boolean that indicates whether the elements supports only single selections (false) or zero, one or more selections (true). If rendering an element with pre-selected items then the "Value" or "Values" properties must be used. "Value" is a string while "Values" is a string array. If "Multiple" is false and "Values" is set then React will display a warning at runtime and ignore the value, similarly if "Multiple" is true and "Value" is set.
+
+I wanted an analyser that handled these simple cases -
+
+    // This is fine
+	return DOM.Select(new SelectAttributes { Multiple = false, Value = "x" };
+    
+    // This is fine
+	return DOM.Select(new SelectAttributes { Multiple = true, Values = new [] { "x", "y" } };
+    
+	// Wrong (shouldn't use "Value" when "Multiple" is true)
+	return DOM.Select(new SelectAttributes { Multiple = true, Value = "x" };
+    
+	// Wrong (shouldn't use "Values" when "Multiple" is false)
+    return DOM.Select(new SelectAttributes { Multiple = false, Values = new [] { "x", "y" } };
+    
+	// Wrong (shouldn't use "Values" when "Multiple" defaults to false)
+    return DOM.Select(new SelectAttributes { Values = new [] { "x", "y" } };
+
+It's worth mentioning that I'm *only* considering these simple cases so this analyser won't be "perfect". If "Multiple" is set according to a variable then I'm not going to try to follow all possible code paths to ensure that it is never true/false if Values/Value is set. I'm also not going to cater for the technically-valid case where someone instantiates a **SelectAttributes** and sets "Values" on it initially (but leaves "Multiple" as false) and then sets "Multiple" to true on a later line of code. While this would be valid (there would be no runtime warning), I think that it would be clearer to set "Multiple" *and* "Values" together. In this case, I'm imposing what I believe to be a best practice on the consumer of my library - some analysers do this, some don't.
+
+To keep things as simple as possible for now, instead of trying to pull in the real Bridge.React library, we'll just create another class library project in the solution to work against - call it "Bridge.React" and rename the "Class1.cs" file that is automatically created as part of a class library project to "SelectAttributes.cs". Change its contents to the following:
+
+	namespace Bridge.React
+	{
+		public sealed class SelectAttributes
+		{
+			public bool Multiple { private get; set; }
+			public string Value { private get; set; }
+			public string[] Values { private get; set; }
+		}
+	}
+
+This will be enough to start writing the analyser.
+
+What I want to do is to take the example analyser from the "Analyzer with Code Fix (NuGet + VSIX)" and change it to ensure that **SelectAttributes** properties are always configured according to the rule outlined above. Before getting started on that, though, it seems like a good time to formalise the rules by decribing them with unit tests. We get many bonuses here - writing individual tests may help guide us through fixing them up one at a time and so help us focus on individual problems that the analyser has to solve. It will also provide us with a way to exercise the analyser and step through it with the debugger (which I find invaluable when I'm not very familiar with a library or object model - when I *do* have a good grasp on code then stepping through a debugger can feel very time-consuming but it can be helpful in cases like this, as I'll demonstrate shortly). Finally, the tests will help avoid regressions creeping in if I decide to refactor the analyser or extend its functionality in the future.
+
+So, replace the contents of "UnitTest.cs" with the following:
+
+	using Microsoft.CodeAnalysis;
+	using Microsoft.CodeAnalysis.Diagnostics;
+	using Microsoft.VisualStudio.TestTools.UnitTesting;
+	using TestHelper;
+
+	namespace ExampleAnalyser.Test
+	{
+		[TestClass]
+		public class UnitTest : DiagnosticVerifier
+		{
+			[TestMethod]
+			public void DoNotUseValueWhenMultipleIsTrue()
+			{
+				var testContent = @"
+					using Bridge.React;
+
+					namespace TestCase
+					{
+						public class Example
+						{
+							public void Go()
+							{
+								new SelectAttributes { Multiple = true, Value = ""1"" };
+							}
+						}
+					}";
+
+				var expected = new DiagnosticResult
+				{
+					Id = ExampleAnalyserAnalyzer.DiagnosticId,
+					Message = "If 'Multiple' is true then the 'Values' property should be used instead of 'Value'",
+					Severity = DiagnosticSeverity.Warning,
+					Locations = new[]
+					{
+						new DiagnosticResultLocation("Test0.cs", 10, 29)
+					}
+				};
+
+				VerifyCSharpDiagnostic(testContent, expected);
+			}
+
+			[TestMethod]
+			public void DoNotUseValuesWhenMultipleIsFalse()
+			{
+				var testContent = @"
+					using Bridge.React;
+
+					namespace TestCase
+					{
+						public class Example
+						{
+							public void Go()
+							{
+								new SelectAttributes { Multiple = false, Values = new[] { ""1"" } };
+							}
+						}
+					}";
+
+				var expected = new DiagnosticResult
+				{
+					Id = ExampleAnalyserAnalyzer.DiagnosticId,
+					Message = "If 'Multiple' is false then the 'Value' property should be used instead of 'Values'",
+					Severity = DiagnosticSeverity.Warning,
+					Locations = new[]
+					{
+						new DiagnosticResultLocation("Test0.cs", 10, 29)
+					}
+				};
+
+				VerifyCSharpDiagnostic(testContent, expected);
+			}
+
+			[TestMethod]
+			public void DoNotUseValueWhenMultipleDefaultsToFalse()
+			{
+				var testContent = @"
+					using Bridge.React;
+
+					namespace TestCase
+					{
+						public class Example
+						{
+							public void Go()
+							{
+								var x = new SelectAttributes { Values = new[] { ""1"" } };
+								x.Multiple = True;
+							}
+						}
+					}";
+
+				var expected = new DiagnosticResult
+				{
+					Id = ExampleAnalyserAnalyzer.DiagnosticId,
+					Message = "If 'Multiple' is false then the 'Value' property should be used instead of 'Values'",
+					Severity = DiagnosticSeverity.Warning,
+					Locations = new[]
+					{
+						new DiagnosticResultLocation("Test0.cs", 10, 37)
+					}
+				};
+
+				VerifyCSharpDiagnostic(testContent, expected);
+			}
+
+			protected override DiagnosticAnalyzer GetCSharpDiagnosticAnalyzer()
+			{
+				return new ExampleAnalyserAnalyzer();
+			}
+		}
+	}
+
+Now there's one more important thing to do before actually writing the analyser. When those unit tests run, the ".NET Compiler Platform" (referred to as "Roslyn") will parse and compile those code snippets in memory. This means that the code snippets need to actually be able to compile! Currently they won't because Roslyn won't know how to resolve the "Bridge.React" namespace that is referenced.
+
+This is quite easily fixed - the **DiagnosticVerifier** class (which is part of the template that we started with) configures some environment options. That's why each test checks a file called "Test0.cs" - because Roslyn wants a filename to work with and that's what the **DiagnosticVerifier** tells it to use. It also specifies what assemblies to include when building the project. So, if the code snippets referenced "System" or "Sytem.Collections.Generic" then those references will work fine. However, it doesn't initially know about the "Bridge.React" project, so we need to tell it to support it.
+
+1. Add a reference to the "Bridge.React" project to the "ExampleAnalayser.Test" project
+1. Edit the file "Helpers/DiagnosticVerifier.Helper.cs" in the "ExampleAnalayser.Test" project and add the following near the top, where other **MetadataReference** instances are created:
+
+        private static readonly MetadataReference CSharpBridgeReactReference
+			= MetadataReference.CreateFromFile(typeof(Bridge.React.SelectAttributes).Assembly.Location);
+
+3. Open all of the code regions in that file and add pass "CSharpBridgeReactReference" into the solution by adding an additional "AddMetadataReference" call. The "CreateProject" method should now look like this:
+
+        private static Project CreateProject(string[] sources, string language = LanguageNames.CSharp)
+        {
+            string fileNamePrefix = DefaultFilePathPrefix;
+            string fileExt = language == LanguageNames.CSharp
+			    ? CSharpDefaultFileExt
+				: VisualBasicDefaultExt;
+            var projectId = ProjectId.CreateNewId(debugName: TestProjectName);
+			var solution = new AdhocWorkspace()
+			.CurrentSolution
+				.AddProject(projectId, TestProjectName, TestProjectName, language)
+				.AddMetadataReference(projectId, CorlibReference)
+				.AddMetadataReference(projectId, SystemCoreReference)
+				.AddMetadataReference(projectId, CSharpSymbolsReference)
+				.AddMetadataReference(projectId, CodeAnalysisReference)
+				.AddMetadataReference(projectId, CSharpBridgeReactReference);
+			int count = 0;
+			foreach (var source in sources)
+			{
+				var newFileName = fileNamePrefix + count + "." + fileExt;
+				var documentId = DocumentId.CreateNewId(projectId, debugName: newFileName);
+				solution = solution.AddDocument(documentId, newFileName, SourceText.From(source));
+				count++;
+			}
+			return solution.GetProject(projectId);
+        }
+
+### *Really* writing the analyser
+
+Now that the groundwork is done and we've decided what precisely needs doing (and documented it with tests), we need to write the actual code.
+
+Although I can use the debugger to inspect the syntax tree for the code snippets in the unit tests, at this point I think even that would be information overload. To begin with, just add the following line to one of the unit test methods - it doesn't matter which one because it will be deleted very shortly, it's just to have a bit of a poke around with the Syntax Visualizer:
+
+    var x = new Bridge.React.SelectAttributes { Multiple = true, Value = "x" };
+
+Ensuring that the Syntax Visualizer is visible (View / Other Windows / Syntax Visualizer), clicking on "Multiple" shows the following:
+
+![ObjectInitializerExpression](/Content/Images/Posts/ObjectInitializerExpression.png)
+
+The **IdentifierToken** is the "Multiple" property, which is part of a **SimpleAssignment** (ie. "Multiple = 1") which is a child of an **ObjectInitializerExpression** (which is the curly brackets around the two properties being set) which is a child of an **ObjectCreationExpression** (which is the entire statement that includes "new Bridge.React.SelectAttributes" *and* the setting of the two properties) and that itself is part of a **VariableDeclaration** (which sets "x" to be the result of the object creation). With the Syntax Visualizer, we could go all the way up to the top of the method and then to the class and then to the namespace and then to the top-level CompilationUnit. However, what we're most interested in is the **ObjectInitializerExpression**, since that contains the properties that we want to verify.
+
+So, how do we alter the analyser class that we currently have in order to identify object initialisers such as this?
+
+Currently the example analyser class has an "Initialize" method that looks like this:
+
+	public override void Initialize(AnalysisContext context)
+	{
+		context.RegisterSymbolAction(AnalyzeSymbol, SymbolKind.NamedType);
+	}
+
+The first thing to try would be to see what other options are in the "SymbolKind" enum. However, this contains things like "Alias", "Event", "Method", "NamedType", "Property" which don't bear much resemblance to **ObjectInitializerExpression**. Without any better plan, I recommend turning to Google. If "SymbolKind" doesn't seem to have what we want, maybe there's something else that we can extract from the **AnalysisContext** instance that the "Initialize" method has.
+
+Googling for ["AnalysisContext ObjectInitializerExpression"](https://www.google.co.uk/search?q=AnalysisContext+ObjectInitializerExpression) doesn't actually return that many results. However, the second one [RoslynClrHeapAllocationAnalyzer/ExplicitAllocationAnalyzer.cs](https://github.com/mjsabby/RoslynClrHeapAllocationAnalyzer/blob/master/ClrHeapAllocationsAnalyzer/ExplicitAllocationAnalyzer.cs) has some code that looks promising:
+
+	public override void Initialize(AnalysisContext context)
+	{
+		var kinds = new[]
+		{
+			SyntaxKind.ObjectCreationExpression,
+			SyntaxKind.AnonymousObjectCreationExpression,
+			SyntaxKind.ArrayInitializerExpression,
+			SyntaxKind.CollectionInitializerExpression,
+			SyntaxKind.ComplexElementInitializerExpression,
+			SyntaxKind.ObjectInitializerExpression,
+			SyntaxKind.ArrayCreationExpression,
+			SyntaxKind.ImplicitArrayCreationExpression,
+			SyntaxKind.LetClause
+		};
+		context.RegisterSyntaxNodeAction(AnalyzeNode, kinds);
+	}
+
+Instead of calling "RegisterSymbolAction" and passing a "SymbolKind" value, we can call "RegisterSyntaxNodeAction" and pass it an array of "SyntaxKind" values - where "SyntaxKind" is an enum that has an "ObjectInitializerExpression" value.
+
+Actually, by starting to change the "Initialize" method to
+
+	public override void Initialize(AnalysisContext context)
+	{
+		context.RegisterSyntaxNodeAction(AnalyzeSymbol,
+
+.. it becomes clear that the method actually takes a params array and so it will be perfectly happy for us to specify only a single "SyntaxKind" value. "Initialize" now becomes:
+
+	public override void Initialize(AnalysisContext context)
+	{
+		context.RegisterSyntaxNodeAction(
+			AnalyzeSymbol,
+			SyntaxKind.ObjectInitializerExpression
+		);
+	}
+	
+But the analyser project doesn't compile now - it complains about the type of one of the arguments of the call to "SymbolAnalysisContext". It definitely takes a "SyntaxKind" enum as its second argument so it must be the first that is wrong. Intellisense indicates that it wants the first argument to be of type **Action&lt;SymbolAnalysisContext&gt;** but the "AnalyzeSymbol" method currently takes a **SyntaxNodeAnalysisContext** (and so is an **Action&lt;SymbolAnalysisContext&gt;**, rather than an **Action&lt;SyntaxNodeAnalysisContext&gt;**).
+
+This is easily fixed by changing the argument of the "AnalyzeSymbol" method. Doing so, however, will mean that *it* causes a compile error because the example code was expecting a **SymbolAnalysisContext** and we want to give it a **SyntaxNodeAnalysisContext**. No matter, that code doesn't do what we want anyway! So change the method argument, delete its body and - while we're making changes - rename it to something better than "AnalyzeSymbol", such as "LookForInvalidSelectAttributeProperties" -
+
+	public override void Initialize(AnalysisContext context)
+	{
+		context.RegisterSyntaxNodeAction(
+			LookForInvalidSelectAttributeProperties,
+			SyntaxKind.ObjectInitializerExpression
+		);
+	}
+
+	private static void LookForInvalidSelectAttributeProperties(SyntaxNodeAnalysisContext context)
+	{
+	}
+
+Now that the basic structure is there, we can start work on the new "LookForInvalidSelectAttributeProperties" implementation. The "context" reference that is passed in has a "Node" property and this will match the SyntaxKind value that we passed to "RegisterSyntaxNodeAction". So "context.Node" will be a reference to a node that represents an "object initialisation".
+
+*Sanity check: The **SyntaxNode** class (which is the base node class) has a "Kind()" method that will return the "SyntaxKind" enum value that applies to the current node - so calling "Kind()" on "context.Node" here will return the "ObjectInitializerExpression" option from the "SyntaxKind" enum.*
+
+Now that we have a reference to an object initialisation node, we can go one of two ways. We want to ensure that the type being initialised is the **SelectAttributes** class from the "Bridge.React" assembly and we want to check whether any invalid property combinations are being specified. The first task will involve getting the type name and then doing a lookup in the rest of the solution to work out where that type name comes from (to ensure that it is actually the "Bridge.React" **SelectAttributes** class and not another class that exists somewhere with the same name). The second task only requires us to look at what properties are set by code in the syntax tree that we already have. This means that the first task is more expensive to perform than the second task and so we should try to deal with "step two" first since we will be able to avoid "step one" altogether if no invalid property combinations appear.
+
+So, to look for invalid property combinations first.. The Syntax Visualizer (as seen in the last image) shows that each individual property-setting is represented by a "SimpleAssignmentExpression" and that each of these is a direct child of the object initialisation. The **SyntaxNode** class has a ChildNodes() method that will return all of the children, which seems like a good place to start. So, we might be able to do something like this:
+
+    // This doesn't work,SimpleAssignmentExpressionSyntax isn't a real class :(
+	var propertyInitialisers = context.Node.ChildNodes()
+		.OfType<SimpleAssignmentExpressionSyntax>();
+
+.. however, "SimpleAssignmentExpressionSyntax" is not a real type. I tried starting to type  out "Simple" to see if intellisense would pick up what the correct name was - but that didn't get me anywhere.
+
+Next, I resorted to deleting those last few lines (since they don't compile) and to just putting a breakpoint at the top of "LookForInvalidSelectAttributeProperties". I then used Debug Tests on "DoNotUseValueWhenMultipleIsTrue". The breakpoint is hit.. but I can't see the child nodes with QuickWatch because "ChildNodes()" is a method, not a property, and QuickWatch only shows you property values (it doesn't offter to execute methods and show you what is returned). So I go to the Immediate Window (Debug / Windows / Immediate), type the following and hit [Enter] -
+
+	context.Node.ChildNodes().First().GetType().Name
+	
+This displays "AssignmentExpressionSyntax".
+
+This clue is enough to stop the debugger and go back to trying to populate the "LookForInvalidSelectAttributeProperties". It may now start with:
+
+	var propertyInitialisers = context.Node.ChildNodes()
+		.OfType<AssignmentExpressionSyntax>();
+
+Using Go To Definition on **AssignmentExpressionSyntax** shows that it has a "Left" and a "Right" property. These are the expressions that come either side of the operator, which is always an Equals sign when considering object property initialisations.
+
+The Syntax Visualizer shows that each "SimpleAssignmentExpression" has an "IdentifierName" on the left, so we should be able to get the property name from that.
+
+To try to work out what type "IdentifierName" relates to, I start typing "Identifier" and intellisense suggests **IdentifierNameSyntax** (if it hadn't suggested anything helpful then I would have resorted to using Debug Tests again and inspecting types in the debugger). Having a poke around the **IdentifierNameSyntax** class, I see that it has a property "Identifier" and that has a string property "ValueText". This looks like the name of the property being set. Things are coming together. The start of the "LookForInvalidSelectAttributeProperties" can now look like this:
+
+	var propertyInitialisers = context.Node.ChildNodes()
+		.OfType<AssignmentExpressionSyntax>()
+		.Select(propertyInitialiser => new
+		{
+			PropertyName = ((IdentifierNameSyntax)propertyInitialiser.Left).Identifier.ValueText,
+			ValueExpression = propertyInitialiser.Right
+		});
+
+It's worth noting that we don't have to worry about the "Left" property ever being anything other than a simple identifier because assignments in object initialisers are only ever allow to be simple assignments. For example, the following would not compile:
+
+	var x = new MyClass { Name.Value = "Ted };
+
+.. because attempting to set nested properties in object initialisers does not compile in C#. Because it's not valid C#, we don't have to worry about it being passed through the analyser.
+
+Maybe it's worth adding another unit test around this - to ensure that invalid C# can't result in a load of edge cases that we need to be concerned about:
+
+	[TestMethod]
+	public void IgnoreInvalidPropertySetting()
+	{
+		var testContent = @"
+			using Bridge.React;
+
+			namespace TestCase
+			{
+				public class Example
+				{
+					public void Go()
+					{
+						new SelectAttributes { Nested.Multiple = true };
+					}
+				}
+			}";
+
+		VerifyCSharpDiagnostic(testContent);
+	}
+
+*Note: Calling the "VerifyCSharpDiagnostic" with no "expected" value means that the test expects that the analyser will not report any violated rules.*
+
+Now we can really move things along. We're interested in property initialisers where "Multiple" is clearly true or false (meaning it is set specifically to true or false *or* it's not specified at all, leaving it with its default value of false). So, again using the Syntax Visualizer to work out how to tell whether an expression means a "true" constant or a "false" constant, I've come up with this:
+
+	var propertyInitialisers = context.Node.ChildNodes()
+		.OfType<AssignmentExpressionSyntax>()
+		.Select(propertyInitialiser => new
+		{
+			PropertyName = ((IdentifierNameSyntax)propertyInitialiser.Left).Identifier.ValueText,
+			ValueExpression = propertyInitialiser.Right
+		});
+
+	var multiplePropertyInitialiser = propertyInitialisers.FirstOrDefault(
+		propertyInitialiser => propertyInitialiser.PropertyName == "Multiple"
+	);
+	bool multiplePropertyValue;
+	if (multiplePropertyInitialiser == null)
+		multiplePropertyValue = false; // Defaults to false if not explicitlt set
+	else
+	{
+        var multiplePropertyValueKind = multiplePropertyInitialiser.ValueExpression.Kind();
+        if (multiplePropertyValueKind == SyntaxKind.TrueLiteralExpression)
+            multiplePropertyValue = true;
+        else if (multiplePropertyValueKind == SyntaxKind.FalseLiteralExpression)
+            multiplePropertyValue = false;	
+		else
+		{
+			// Only looking for very simple cases - where explicitly set to true or to false or not set at
+			// all (defaulting to false). If it's set according to a method return value or a variable then
+			// give up (this is just intended to catch obvious mistakes, not to perform deep and complex
+			// analysis)
+			return;
+		}
+	}
+
+The next thing to do is to look for a "Value" or "Values" property being specified that is not appropriate for the "Multiple" value that we've found.
+
+From the above code, it should be fairly clear that the way to do this is the following:
+
+	var valuePropertyIsSpecified = propertyInitialisers.Any(
+		propertyInitialiser => propertyInitialiser.PropertyName == "Value"
+	);
+	var valuesPropertyIsSpecified = propertyInitialisers.Any(
+		propertyInitialiser => propertyInitialiser.PropertyName == "Values"
+	);
+	if (!valuePropertyIsSpecified && !valuesPropertyIsSpecified)
+		return;
+
+The final step is to ensure that the object initialisation that we're looking at is indeed for a **SelectAttributes** instance. This is the bit that requires a lookup into the "SemanticModel" and which is more expensive than just looking at the current syntax tree because it needs the project to compile and to then work out what references to external code there may be.
+
+Knowing that I'm going to be dealing with the full semantic model, I'll start by looking through the methods available on "context.SemanticModel" to see what might help me. Using the intellisense / documentation, it doesn't take long to find a "GetTypeInfo" method that takes an **ObjectCreationExpression** instance - this is ideal because we have an **ObjectInitializerExpressionSyntax** and we know that an **ObjectInitializerExpressionSyntax** is a child of an **ObjectCreationExpressionSyntax**, so it's easy for us to get an **ObjectCreationExpression** (it's just the parent of **ObjectInitializerExpressionSyntax** that we have).
+
+"GetTypeInfo" returns a **TypeInfo** instance which has two properties; "Type" and "ConvertedType". "ConvertedType" is (taken from the xml summary documentation):
+
+> The type of the expression after it has undergone an implicit conversion
+
+which shouldn't apply here, so we'll just look at "Type". Note, though, that the documentation for "Type" says that:
+
+> For expressions that do not have a type, null is returned. If the type could not be determined due to an error, than an IErrorTypeSymbol is returned.
+
+Since this is an object creation expression, there should *always* be a type returned (the type of the object being instantiated) but we do need to be careful about the error response. Here, it's fine to stop processing if there's an error - it might mean that there is a "new SelectAttributes" statements in the code being analysed but no "Using Bridge.React;" at the top of the file. We'll ignore these error cases and plan to only analyse valid code.
+
+This is the code that needs adding to ensure that the properties that we're looking at are for a Bridge.React.SelectAttributes -
+
+	var objectCreation = (ObjectCreationExpressionSyntax)context.Node.Parent;
+	var objectCreationTypeInfo = context.SemanticModel.GetTypeInfo(objectCreation);
+	if ((objectCreationTypeInfo.Type is IErrorTypeSymbol)
+	|| (objectCreationTypeInfo.Type.ContainingAssembly.Identity.Name != "Bridge.React")
+	|| (objectCreationTypeInfo.Type.Name != "SelectAttributes"))
+		return;
+
+Having written this code, it strikes me as a good idea to add another test - one that ensures that we don't raise false positives about "Multiple" and "Value" / "Values" in cases where it's a different **SelectAttributes** class, that is declared somewhere other than in "Bridge.React".
+
+	/// <summary>
+	/// Don't analyse a SelectAttributes initialisation that is for a different SelectAttributes class
+	/// (only target the SelectAttributes class that is part of the Bridge.React library)
+	/// </summary>
+	[TestMethod]
+	public void OnlyTargetBridgeReactSelectAttributes()
+	{
+		var testContent = @"
+			namespace TestCase
+			{
+				public class Example
+				{
+					public void Go()
+					{
+						new SelectAttributes { Multiple = true, Value = ""x"" };
+					}
+				}
+
+				public class SelectAttributes
+				{
+					public bool Multiple { get; set; }
+					public string Value { get; set; }
+				}
+			}";
+
+		VerifyCSharpDiagnostic(testContent);
+	}
+	
+Now we have all of the required information to display a warning for invalid "Multiple" / "Value" / "Values" combinations. What we *don't* have is appropriate message content to display - we've only got the warning content from the example analyser in the project template.
+
+So delete all of the code at the top of the analyser - the const and static strings, the "Rule" reference and the "SupportedDiagnostics" property and replace them with this:
+
+	public const string DiagnosticId = "Bridge.React";
+	private static readonly LocalizableString Title
+		= "Be careful to use the appropriate 'Value' or 'Values' property for the 'Multiple' setting";
+	private static readonly LocalizableString MultipleWithValueMessage
+		= "If 'Multiple' is true then the 'Values' property should be used instead of 'Value'";
+	private static readonly LocalizableString NoMultipleWithValuesMessage
+		= "If 'Multiple' is false then the 'Value' property should be used instead of 'Values'";
+	private const string Category = "Configuration";
+
+	private static DiagnosticDescriptor MultipleWithValueRule = new DiagnosticDescriptor(
+		DiagnosticId,
+		Title,
+		MultipleWithValueMessage,
+		Category,
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true
+	);
+	private static DiagnosticDescriptor NoMultipleWithValuesRule = new DiagnosticDescriptor(
+		DiagnosticId,
+		Title,
+		NoMultipleWithValuesMessage,
+		Category,
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true
+	);
+
+	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
+	{
+		get { return ImmutableArray.Create(MultipleWithValueRule, NoMultipleWithValuesRule); }
+	}
+
+The final step, then, is to report rules when they are broken. The following needs adding to the end of the "LookForInvalidSelectAttributeProperties" method in order to complete it:
+
+	if ((multiplePropertyValue == true) && valuePropertyIsSpecified)
+	{
+		context.ReportDiagnostic(Diagnostic.Create(
+			MultipleWithValueRule,
+			context.Node.GetLocation()
+		));
+	}
+	else if ((multiplePropertyValue == false) && valuesPropertyIsSpecified)
+	{
+		context.ReportDiagnostic(Diagnostic.Create(
+			NoMultipleWithValuesRule,
+			context.Node.GetLocation()
+		));
+	}
+
+### Localisation support
+
+There's just one final thing to do now, which is more of a good practice than an essential - that is to replace the hard-coded strings in the analyser class with resources (that may potentially be translated into different languages one day). The project template includes a "Resources.resx" file, which is where we should move these strings to. Edit that file in Visual Studio and delete the existing entries and then add the following Name and Value pairs:
+
+> **Name:** SelectAttributesAnalyserTitle
+
+> **Value:** Be careful to use the appropriate 'Value' or 'Values' property for the 'Multiple' setting
+ 
+> **Name:** SelectAttributesAnalyserMultipleWithValueMessage
+
+> **Value:** If 'Multiple' is true then the 'Values' property should be used instead of 'Value'
+
+> **Name:** SelectAttributesAnalyserNoMultipleWithValuesTitle
+
+> **Value:** If 'Multiple' is false then the 'Value' property should be used instead of 'Values'
+
+To make accessing these resources a little easier, add the following method to the bottom of the analyser class:
+
+	private static LocalizableString GetLocalizableString(string nameOfLocalizableResource)
+	{
+		return new LocalizableResourceString(
+			nameOfLocalizableResource,
+			Resources.ResourceManager,
+			typeof(Resources)
+		);
+	}
+
+Finally, replace the three hard-coded string property initialisers with the following:
+
+		private static readonly LocalizableString Title = GetLocalizableString(
+			nameof(Resources.SelectAttributesAnalyserTitle)
+		);
+		private static readonly LocalizableString MultipleWithValueTitle = GetLocalizableString(
+			nameof(Resources.SelectAttributesAnalyserMultipleWithValueMessage)
+		);
+		private static readonly LocalizableString NoMultipleWithValuesTitle = GetLocalizableString(
+			nameof(Resources.SelectAttributesAnalyserNoMultipleWithValuesTitle)
+		);
+
+### Summary
+
+That completes the analyser. I've included the complete source code for the final implementation below - now that it's written it doesn't look like much, which hopefully illustrates how powerful and complete the Roslyn library is. And, hopefully, it's shown that this powerful library doesn't need to be daunting because there's many resources out there for helping you understand how to use it; people have written a lot about it and so Googling for terms relating to what you want to do often yields helpful results, people have answered a lot of questions about it on Stack Overflow and so you will often find example and sample code there.
+
+If you're not sure what terms to use to try to search for help then using the Syntax Visualizer to explore your code can set you on the right path, as can writing a test or two and then examining the "context.Node" reference in the debugger (if you do this then ensure that you are building your project in Debug mode since Release builds may prevent your breakpoints from being hit and may optimise some of the variable references away, which will mean that you won't be able to use QuickWatch on them). Finally, don't forget that there is a lot of helpful information in the xml summary documentation that's available in Visual Studio when you examine the Roslyn classes and their methods - often the names of methods are descriptive enough to help you choose the appropriate one or, at least, give you a clue as to what direction to go in.
+
+This has really only scraped the surface of what analysers are capable of, it's a technology with huge capability and potential. I might talk about other uses for analysers (or talk about how particular analysers may be implemented) another day but two topics that I definitely *will* talk about soon are "code fixes" and how to get analysers to work with [Bridge.NET](http://bridge.net/) libraries.
+
+Code fixes are interesting because they allow you to go beyond just saying "this is wrong" to saying "this is how it may be fixed (automatically, by the IDE)". For example, if someone changed a **SelectAttributes** instantiation to enable multiple selections - eg. started with:
+
+    DOM.Select(
+		new SelectAttributes { Value = selectedId },
+		options
+	)
+	
+.. and changed it to:
+
+    DOM.Select(
+		new SelectAttributes { Multiple = true, Value = selectedId },
+		options
+	)
+
+.. then the analyser could point out that the "Value" property should not be used now that "Multiple" is true but it could also offer to fix it up to the following *automatically*:
+
+    DOM.Select(
+		new SelectAttributes { Multiple = true, Values = new[] { selectedId } },
+		options
+	)
+
+There will be times that the warning from an analyser will require manual intervention to correct but there will also be times where the computer could easily correct it, so it's great having the ability to explain to the computer *how* to do so and thus make life that bit easier for the person consuming your library.
+
+The reason that I also want to spend a little bit of time talking about making analysers work with Bridge.NET libraries soon is that it's something of a special case since Bridge projects don't have references to the standard .net System, System.Collections, etc.. assemblies because they are replaced by special versions of those libraries that have JavaScript translations. This means that you can't reference a Bridge library from a project that relies on the standard .net assemblies, which is a bit of a problem when you want to write a Roslyn analyser for types in a Bridge library (since the analyser project will rely on standard .net assemblies and the analyser will want to reference the Bridge library whose rules are to be applied by the analyser). But there are ways to get around it and I'll go through that another time.
+
+### The complete analyser
+
+	using System.Collections.Immutable;
+	using System.Linq;
+	using System.Reflection;
+	using Microsoft.CodeAnalysis;
+	using Microsoft.CodeAnalysis.CSharp;
+	using Microsoft.CodeAnalysis.CSharp.Syntax;
+	using Microsoft.CodeAnalysis.Diagnostics;
+
+	namespace ExampleAnalyser
+	{
+		[DiagnosticAnalyzer(LanguageNames.CSharp)]
+		public sealed class ExampleAnalyserAnalyzer : DiagnosticAnalyzer
+		{
+			public const string DiagnosticId = "Bridge.React";
+			private static readonly LocalizableString Title = GetLocalizableString(
+				nameof(Resources.SelectAttributesAnalyserTitle)
+			);
+			private static readonly LocalizableString MultipleWithValueTitle = GetLocalizableString(
+				nameof(Resources.SelectAttributesAnalyserMultipleWithValueMessage)
+			);
+			private static readonly LocalizableString NoMultipleWithValuesTitle = GetLocalizableString(
+				nameof(Resources.SelectAttributesAnalyserNoMultipleWithValuesTitle)
+			);
+			private const string Category = "Configuration";
+
+			private static DiagnosticDescriptor MultipleWithValueRule = new DiagnosticDescriptor(
+				DiagnosticId,
+				Title,
+				MultipleWithValueTitle,
+				Category,
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true
+			);
+			private static DiagnosticDescriptor NoMultipleWithValuesRule = new DiagnosticDescriptor(
+				DiagnosticId,
+				Title,
+				NoMultipleWithValuesTitle,
+				Category,
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true
+			);
+
+			public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
+			{
+				get { return ImmutableArray.Create(MultipleWithValueRule, NoMultipleWithValuesRule); }
+			}
+
+			public override void Initialize(AnalysisContext context)
+			{
+				context.RegisterSyntaxNodeAction(
+					LookForInvalidSelectAttributeProperties,
+					SyntaxKind.ObjectInitializerExpression
+				);
+			}
+
+			private static void LookForInvalidSelectAttributeProperties(SyntaxNodeAnalysisContext context)
+			{
+				var propertyInitialisers = context.Node.ChildNodes()
+					.OfType<AssignmentExpressionSyntax>()
+					.Select(propertyInitialiser => new
+					{
+						PropertyName = ((IdentifierNameSyntax)propertyInitialiser.Left).Identifier.ValueText,
+						ValueExpression = propertyInitialiser.Right
+					});
+
+				var multiplePropertyInitialiser = propertyInitialisers.FirstOrDefault(
+					propertyInitialiser => propertyInitialiser.PropertyName == "Multiple"
+				);
+				bool multiplePropertyValue;
+				if (multiplePropertyInitialiser == null)
+					multiplePropertyValue = false; // Defaults to false if not explicitlt set
+				else
+				{
+					var multiplePropertyValueKind = multiplePropertyInitialiser.ValueExpression.Kind();
+					if (multiplePropertyValueKind == SyntaxKind.TrueLiteralExpression)
+						multiplePropertyValue = true;
+					else if (multiplePropertyValueKind == SyntaxKind.FalseLiteralExpression)
+						multiplePropertyValue = false;
+					else
+					{
+						// Only looking for very simple cases - where explicitly set to true or to false or
+						// not set at all (defaulting to false). If it's set according to a method return
+						// value or a variable then give up (this is just intended to catch obvious
+						// mistakes, not to perform deep and complex analysis)
+						return;
+					}
+				}
+
+				var valuePropertyIsSpecified = propertyInitialisers.Any(
+					propertyInitialiser => propertyInitialiser.PropertyName == "Value"
+				);
+				var valuesPropertyIsSpecified = propertyInitialisers.Any(
+					propertyInitialiser => propertyInitialiser.PropertyName == "Values"
+				);
+				if (!valuePropertyIsSpecified && !valuesPropertyIsSpecified)
+					return;
+
+				var objectCreation = (ObjectCreationExpressionSyntax)context.Node.Parent;
+				var objectCreationTypeInfo = context.SemanticModel.GetTypeInfo(objectCreation);
+				if ((objectCreationTypeInfo.Type is IErrorTypeSymbol)
+				|| (objectCreationTypeInfo.Type.ContainingAssembly.Identity.Name != "Bridge.React")
+				|| (objectCreationTypeInfo.Type.Name != "SelectAttributes"))
+					return;
+
+				if ((multiplePropertyValue == true) && valuePropertyIsSpecified)
+				{
+					context.ReportDiagnostic(Diagnostic.Create(
+						MultipleWithValueRule,
+						context.Node.GetLocation()
+					));
+				}
+				else if ((multiplePropertyValue == false) && valuesPropertyIsSpecified)
+				{
+					context.ReportDiagnostic(Diagnostic.Create(
+						NoMultipleWithValuesRule,
+						context.Node.GetLocation()
+					));
+				}
+			}
+
+			private static LocalizableString GetLocalizableString(string nameOfLocalizableResource)
+			{
+				return new LocalizableResourceString(
+					nameOfLocalizableResource,
+					Resources.ResourceManager,
+					typeof(Resources)
+				);
+			}
+		}
+	}
