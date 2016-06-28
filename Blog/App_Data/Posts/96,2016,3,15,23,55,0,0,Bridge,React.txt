@@ -145,7 +145,7 @@ I have some more recommendations on how to decide what to put into props and wha
 
 ### Let's start coding then!
 
-Open up Visual Studio (the version isn't too important, but if you're using 2015 then bear in mind that Bridge.NET doesn't yet support C# 6 syntax). Create a new "Class Library" project. Using NuGet, add the "Bridge.React" package. This will bring in bindings for React as well as pulling in Bridge itself - the Bridge package removes the usual System, System.Collections, etc.. references and replaces them with a single "Bridge" reference, which re-implements those framework methods in code that has JavaScript translations.
+Open up Visual Studio (the version isn't too important, but if you're using 2015 then bear in mind that Bridge.NET doesn't yet support C# 6 syntax). Create a new "Class Library" project. Using NuGet, add the "Bridge" and the "Bridge.React" packages. This will bring in bindings for React as well as pulling in Bridge itself - the Bridge package removes the usual System, System.Collections, etc.. references and replaces them with a single "Bridge" reference, which re-implements those framework methods in code that has JavaScript translations.
 
 The Bridge package also adds some README files and a bridge.json file (under the Bridge folder in the project), which instructs Bridge how to compile your C# code into JavaScript. Change bridge.json's content to:
 
