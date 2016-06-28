@@ -61,15 +61,9 @@ namespace Blog.Factories
 			if (requestContext == null)
 				throw new ArgumentNullException("requestContext");
 
-			return new LayeredCache(
-				new ASPNetCacheCache(
-					requestContext.HttpContext.Cache,
-					TimeSpan.FromDays(1)
-				),
-				new JsonSerialisingDiskCache(
-					new DirectoryInfo(requestContext.HttpContext.Server.MapPath("~/App_Data/Cache")),
-					swallowAnyFileAccessExceptions: true
-				)
+			return new ASPNetCacheCache(
+				requestContext.HttpContext.Cache,
+				TimeSpan.FromDays(1)
 			);
 		}
 
