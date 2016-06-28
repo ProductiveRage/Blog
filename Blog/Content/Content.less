@@ -62,24 +62,15 @@ body
 			font-family: Consolas, Courier New, Courier, monospace;
 			font-size: 12px;
 			line-height: 18px;
+            clear: both; // Don't allow code alongside an image, ensure it goes underneath in order to allow the full width of the post to be used
 
-			// Even if "pre" tags are given a 100% width to limit them to their container, they don't seem to go for it - so we'll just
-			// force them down to particular widths for given breakpoints and forego a fully-flexible solution
-			overflow-x: auto;
-			@media screen and (min-width: 65em) and (max-width: 70em) { width: 60em; }
-			@media screen and (min-width: 60em) and (max-width: 65em) { width: 55em; }
-			@media screen and (min-width: 55em) and (max-width: 60em) { width: 50em; }
-			@media screen and (min-width: 50em) and (max-width: 55em) { width: 45em; }
-			@media screen and (min-width: 45em) and (max-width: 50em) { width: 40em; }
-			@media screen and (min-width: 40em) and (max-width: 45em) { width: 35em; }
-			@media screen and (min-width: 30em) and (max-width: 40em) { width: 30em; }
-			@media screen and (min-width: 20em) and (max-width: 30em) { width: 20em; }
+            box-sizing: border-box; // Allow us to combine padding with width: 100%
+            width: 100%;
 
 			> code
 			{
 				display: block;
-				width: 745px;
-				@media screen and (max-width: 70em) { width: 100%; }
+				width: 100%;
 			}
 		}
 
