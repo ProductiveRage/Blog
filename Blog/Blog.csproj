@@ -294,7 +294,7 @@
     <Content Include="Content\PrettyPrint.less" />
     <Content Include="Content\Theme.less" />
     <Content Include="Content\Layout.less" />
-    <Content Include="Content\Styles.less" />
+    <Content Include="Content\Styles.css" />
     <Content Include="Content\IEBefore9.css" />
     <Content Include="Content\Images\Background-Repeat.jpg" />
     <Content Include="Content\Images\Background.jpg" />
