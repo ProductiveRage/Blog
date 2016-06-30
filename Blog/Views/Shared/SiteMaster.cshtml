@@ -16,8 +16,9 @@
 	<link rel="stylesheet" type="text/css" media="print" href="@Url.Content("~/Content/PrintOverrides.css")" />
 @if ((Model != null) && Model.MarkPageAsFollowNoIndex)
 {
-	<meta name="robots" content="noindex, follow" />}
-@if ((Model != null) && (Model.OptionalCanonicalLinkBase != null))
+	<meta name="robots" content="noindex, follow" />
+}
+@if ((Model != null) && (Model.OptionalCanonicalLinkBase != null) && !Model.MarkPageAsFollowNoIndex)
 {
 	<link rel="canonical" href="@Html.AttributeEncode(Model.OptionalCanonicalLinkBase + Request.Url.PathAndQuery)" />
 }
