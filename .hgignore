@@ -38,3 +38,5 @@ _ReSharper*/
 SearchIndex.dat
 
 Cache/
+Blog/Properties/PublishProfiles/
+Deploy/
