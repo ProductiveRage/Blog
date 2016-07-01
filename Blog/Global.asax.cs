@@ -39,7 +39,7 @@ namespace Blog
             );
             routes.MapRoute(
               "ArchiveByTitle",
-              "Archive",
+              "Archive/All",
               new { controller = "ViewPost", action = "ArchiveByTitle" }
             );
 
