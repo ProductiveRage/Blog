@@ -1,0 +1,27 @@
+## Why is saving Performance Monitor (PerfMon) settings so difficult these days?!
+
+I've been measuring and optimising a busy service recently at work and PerfMon is an invaluable tool in doing things like this - the service records its own performance counters about requests/second, cache-hits-and-misses/second and many other useful metrics, while Windows and .net also report on many helpful statistics such as CPU time per process, memory usage, bytes-allocated/second and frequency of garbage collections.
+
+Performance Monitor makes it really easy to add a set of counters and format their lines so that some are bold and thick (and, so, clear at a glance) while other may be made less obtrusive, so as not to confuse the graph too much.
+
+![Performance Monitor](/Content/Images/Posts/PerfMon.png)
+
+However, over the years the interface to this tool has had some changes made to it that I'm not convinced are improvements. Back on Windows Server 2003, I'm pretty sure that you could configure your view how you wanted it and then simply use File/Save to write an ".mmc" configuration file. Whenever you wanted, you could double-click that file and all of the counters would be there, configured just as you left them, quietly capturing data and displaying it how you want it. Unfortunately, that day has gone and it's not quite so easy.
+
+Never mind, I move with the times.
+
+There are a few options available to do the same sort of thing today. The first, and most obvious, is to right-click on the graph and choose "Save Settings As". This saves a web page version of the current view that uses an ActiveX plugin (and so requires IE to display it and requires you to "Allow blocked content"). With this plugin you can do much of what you can in PerfMon - add or remove counters, highlight the currently-selected counter, change the formatting of the current counter, etc.. This option isn't terrible but it doesn't feel quite as solid as *real* PerfMon.
+
+The second option sounds like a pretty reasonable idea; you can copy the current configuration to the clipboard, save it and then paste it back into a fresh PerfMon instance in the future (the content saved to the clipboard is basically the same content as is written away when you use "Save Settings As" to create the web page version). My biggest problem with this is that it doesn't work! I've tried on several machines now (Windows Server 2012 and Windows 8.1) and I can successfully copy the content (I can verify this by pasting it into notepad) but when I click on the paste icon in PerfMon nothing happens. No error, no nothing. Maybe I'm doing something stupid here, but I don't know what.
+
+There is a third option, I think, involving the "Data Collector Sets" section of the PerfMon tree view. However, I tried to remember what it was earlier today by playing around with the interface and I didn't get anywhere quickly.
+
+I use a fourth option these days, which is to start PerfMon using "perfmon /sys" (this works from the command line or from [Win]-[R]). This starts PerfMon in a kind of streamlined interface (the treeview down the left hand side of the application is notable by its absence, for example). But the really good bit about this mode is that the File menu now has two options - "Save Settings As" and "LoadSettings". These work with ".PerfMonCfg" files and essentially make simple what I used to do in the old days; configure everything just so, save to the desktop for another day, open from the desktop on that day in the future and find everything just how I want it.
+
+Success!
+
+### Another little tweak
+
+There is one thing that still annoys me, though. There doesn't seem to be any way to manually control the split between how much space is dedicated to the lower part of the display (that contains the names of the counters) and the upper half (the graph). If you add more than a couple of counters then the interface forces a vertical scroll bar onto the lower section - if you could manually make that section taller then the scroll bar would not be necessary.. but, alas, it appears that you can not.
+
+There is one trick to make it *slightly* better, though. If the window is too narrow to show all of the information in that lower area then the horizontal scrollbar always appears on top of the last counter. If you can make the PerfMon window wide enough that you don't need the horizontal scrollbar then you can get one more counter to fit into view before the vertical scrollbar forces its way into play. This seems to allow up to nine counters to be displayed in the lower area with no scrolling required - if you need ten or more, though, then it seems like vertical scrolling is unavoidable :(
