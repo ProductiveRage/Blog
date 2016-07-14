@@ -165,6 +165,7 @@
     <Content Include="App_Data\Posts\101,2016,5,31,21,34,0,0.txt" />
     <Content Include="App_Data\Posts\100,2016,5,31,21,33,0,0.txt" />
     <Content Include="App_Data\Posts\102,2016,6,28,7,49,0,0.txt" />
+    <Content Include="App_Data\Posts\103,2016,7,14,19,36,0,0.txt" />
     <Content Include="App_Data\Posts\11,2011,12,6,18,11,0,0.txt" />
     <Content Include="App_Data\Posts\12,2011,12,8,20,50,0,0,Mercurial.txt" />
     <Content Include="App_Data\Posts\13,2011,12,8,23,46,0,0,ASP.Net,MVC.txt" />
@@ -270,6 +271,7 @@
     <Content Include="Content\Images\Posts\FluxDiagram.png" />
     <Content Include="Content\Images\Posts\FluxDiagramSimple.png" />
     <Content Include="Content\Images\Posts\ObjectInitializerExpression.png" />
+    <Content Include="Content\Images\Posts\PerfMon.png" />
     <Content Include="Content\Images\Posts\ProductiveRageImmutableAnalyserCodeFix1.png" />
     <Content Include="Content\Images\Posts\ProductiveRageImmutableAnalyserCodeFix2.png" />
     <Content Include="Content\Images\Posts\ProductiveRageImmutableAnalyserError1.png" />
