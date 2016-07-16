@@ -723,7 +723,20 @@ In the new **MessageApi** code above, two actions were referenced that haven't b
 
 *(Note: A **MessageHistoryUpdated** will be emitted after a "GetMessages" call is made but one will also be emitted every time that a new Chuck Norris fact arrives)*.
 
-So, now, *finally*, we can look at how to create a Store.
+While we're adding actions, we're going to need a **StoreInitialised** action class (I'll talk about this more later on, for now just add the following class to the "Actions" folder):
+
+	using Bridge.React;
+	using BridgeReactTutorial.API;
+
+	namespace BridgeReactTutorial.Actions
+	{
+	  public class StoreInitialised : IDispatcherAction
+	  {
+		public object Store;
+	  }
+	}
+
+Now, *finally*, we can look at how to create a Store.
 
 Create a new folder in the project root called "Stores" and add a new class file to it; "MessageWriterStore.cs" -
 
@@ -1333,10 +1346,12 @@ And the **MessageApi**:
 		  // ToArray is used to return a clone of the message set - otherwise, the caller would
 		  // end up with a list that is updated when the internal reference within this class
 		  // is updated (which sounds convenient but it's not the behaviour that would be
-		  // exhibited if this was really persisting messages to a server somewhere)
+		  // exhibited if this was really persisting messages to a server somewhere).. and
+		  // then ToEnumerable() is required since the store checks for an action of type
+		  // DataUpdated<IEnumerable<Tuple<int, MessageDetails>>>>
 		  var requestId = new RequestId();
 		  Window.SetTimeout(
-			() => _dispatcher.HandleServerAction(DataUpdated.For(requestId, _messages.ToArray())),
+			() => _dispatcher.HandleServerAction(DataUpdated.For(requestId, _messages.ToArray().AsEnumerable())),
 			1000 // Simulate a roundtrip to the server
 		  );
 		  return requestId;
