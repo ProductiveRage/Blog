@@ -28,7 +28,7 @@ namespace Blog.Helpers.Posts
 
             var content = new StringBuilder();
             content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
-            content.AppendFormat("<h2><a href=\"{0}\">{1}</a></h2>", HttpUtility.HtmlAttributeEncode(post.Slug), HttpUtility.HtmlEncode(post.Title));
+            content.AppendFormat("<h2><a href=\"/{0}\">{1}</a></h2>", HttpUtility.HtmlAttributeEncode(post.Slug), HttpUtility.HtmlEncode(post.Title));
             content.Append(GetTagLinksContent(helper, post.Tags));
             return (IHtmlString)MvcHtmlString.Create(content.ToString());
         }
