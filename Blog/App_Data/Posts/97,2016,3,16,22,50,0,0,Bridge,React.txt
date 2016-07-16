@@ -1347,7 +1347,7 @@ And the **MessageApi**:
 		  // end up with a list that is updated when the internal reference within this class
 		  // is updated (which sounds convenient but it's not the behaviour that would be
 		  // exhibited if this was really persisting messages to a server somewhere).. and
-		  // then ToEnumerable() is required since the store checks for an action of type
+		  // then AsEnumerable() is required since the store checks for an action of type
 		  // DataUpdated<IEnumerable<Tuple<int, MessageDetails>>>>
 		  var requestId = new RequestId();
 		  Window.SetTimeout(
