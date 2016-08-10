@@ -1,0 +1,532 @@
+## Retrieving Performance Counter from a remote PC using C#
+
+[PerfMon](Post103) can be an invaluable tool for monitoring performance counters on the local or remote computer. It allows you to graph the information live and it allows you to write the data away to disk for future analysis.
+
+However, for some performance investigation that I was doing, I wanted something slightly different to what PerfMon offers. I was testing a service under load, a service that was being hosted on a dedicated box for the performance investigation - and I was testing it by generating the load from another dedicated server. Since nothing else would be hitting the service host box, what I wanted to do for each test run was to restart the service on the host, hit it with the sample load and record the processor time, % time in GC, number of garbage collections at each generation and some other metrics until the work was fully processed - at that point, there would be no more information to gather for that particular run. The experiment could be repeated a few times and the results filed away, brought back out to compare to the same load being run after some performance tweaks had been made to the code.
+
+It wouldn't be the end of the world if I had to do this manually - configure PerfMon to write the counter data to disk somewhere, restart the service before each run and then extract the data from the PerfMon logs that relate to the time period that just passed.. but it's tedious work that I don't want to bother with; I want to deploy a change then run-test-and-gather-data with a single button press. Better than that, I want to be able to perform multiple runs without any manual intervention - I want to deploy the new code then have the test harness restart the service, replay the test load, record the counter data in a file and then repeat as many times as desired.
+
+### Restarting the service
+
+This part is easy, we can use a method such as this -
+
+	private static void Restart(string server, string serviceName)
+	{
+	  if (string.IsNullOrWhiteSpace(server))
+	    throw new ArgumentException($"Null/blank {nameof(server)} specified");
+	  if (string.IsNullOrWhiteSpace(serviceName))
+	    throw new ArgumentException($"Null/blank {nameof(serviceName)} specified");
+		
+	  // Add a reference to System.ServiceProcess to make ServiceController available
+	  using (var serviceController = new ServiceController(serviceName, server))
+	  {
+	    serviceController.Stop();
+	    serviceController.WaitForStatus(ServiceControllerStatus.Stopped);
+	    serviceController.Start();
+	    serviceController.WaitForStatus(ServiceControllerStatus.Running);
+	  }
+	}
+
+### Querying a performance counter remotely
+
+This bit is a little trickier.. I started with code from an article [TIY – Collect remote performance counters using C#](http://haishibai.blogspot.co.uk/2010/02/tiy-collect-remote-performance-counters.html) which sounded *exactly* like what I wanted. Unfortunately, I was getting an error with the lines
+
+	IntPtr userHandle = new IntPtr(0);
+	LogonUser(
+	  "UserA",
+	  "DomainA",
+	  "PasswordA",
+	  LOGON32_LOGON_INTERACTIVE,
+	  LOGON32_PROVIDER_DEFAULT,
+	  ref userHandle
+	);
+	WindowsIdentity identity = new WindowsIdentity(userHandle);
+	
+> Token can not be zero
+
+This essentially meant that LogonUser had failed and so the "userHandle" reference had not been set (and left as a zero pointer). The code should really have checked the LogonUser return value -
+	
+	var logonSuccess = LogonUser(
+	  "UserA",
+	  "DomainA",
+	  "PasswordA",
+	  LOGON32_LOGON_INTERACTIVE,
+	  LOGON32_PROVIDER_DEFAULT,
+	  ref userHandle
+	);
+	if (!logonSuccess)
+	  throw new Exception("LogonUser failed");
+	  
+.. but that wouldn't actually fix the failure.
+
+The underlying problem was explained by another article [.NET (C#) Impersonation with Network Credentials](https://platinumdogs.me/2008/10/30/net-c-impersonation-with-network-credentials/) that explains that
+
+> If you require the impersonated logon to have network credentials, you must select LOGON32\_LOGON_NEW\_CREDENTIALS as your logon type, which requires that you select LOGON32\_PROVIDER\_WINNT50 as the logon provider type
+
+Once I got the proof-of-concept working from these two articles, I fleshed things out into the following:
+
+	using System;
+	using System.Collections.Generic;
+	using System.Diagnostics;
+	using System.Linq;
+	using System.Runtime.InteropServices;
+	using System.Security.Principal;
+
+	namespace PerformanceCounterCapture
+	{
+	  public sealed class PerformanceCounterRetriever : IDisposable
+	  {
+		private const int LOGON32_LOGON_NEW_CREDENTIALS = 9;
+		private const int LOGON32_PROVIDER_WINNT50 = 3;
+
+		[DllImport("advapi32.dll", CharSet = CharSet.Auto)]
+		private static extern bool LogonUser(
+		  string lpszUserName,
+		  string lpszDomain,
+		  string lpszPassword,
+		  int dwLogonType,
+		  int dwLogonProvider,
+		  ref IntPtr phToken);
+
+		private WindowsIdentity _identity;
+		private WindowsImpersonationContext _context;
+		private bool _disposed;
+		private readonly string _server;
+		public PerformanceCounterRetriever(string server, string domain, string user, string password)
+		{
+          if (string.IsNullOrWhiteSpace(server))
+            throw new ArgumentException($"Null/blank {nameof(server)} specified");
+          if (string.IsNullOrWhiteSpace(domain))
+            throw new ArgumentException($"Null/blank {nameof(domain)} specified");
+          if (string.IsNullOrWhiteSpace(user))
+            throw new ArgumentException($"Null/blank {nameof(user)} specified");
+		  if (password == null)
+			throw new ArgumentNullException(nameof(password));
+
+		  try
+		  {
+			var userHandle = new IntPtr(0);
+			var logonSuccess = LogonUser(
+			  user,
+			  domain,
+			  password,
+			  LOGON32_LOGON_NEW_CREDENTIALS,
+			  LOGON32_PROVIDER_WINNT50,
+			  ref userHandle
+			);
+			if (!logonSuccess)
+			  throw new Exception("LogonUser failed");
+			_identity = new WindowsIdentity(userHandle);
+			_context = _identity.Impersonate();
+			_server = server;
+			_disposed = false;
+		  }
+		  finally
+		  {
+			Dispose();
+		  }
+		}
+		~PerformanceCounterRetriever()
+		{
+		  Dispose(false);
+		}
+
+		public IEnumerable<float> Get(
+		  string categoryName,
+		  string counterName,
+		  string optionalInstanceName = null)
+		{
+		  if (string.IsNullOrWhiteSpace(categoryName))
+            throw new ArgumentException($"Null/blank {nameof(categoryName)} specified");
+		  if (string.IsNullOrWhiteSpace(counterName))
+            throw new ArgumentException($"Null/blank {nameof(counterName)} specified");
+
+		  var counters = new List<PerformanceCounter>();
+		  var category = new PerformanceCounterCategory(categoryName, _server);
+		  foreach (var instanceName in category.GetInstanceNames())
+		  {
+			if ((optionalInstanceName == null) || (instanceName == optionalInstanceName))
+			  counters.Add(new PerformanceCounter(categoryName, counterName, instanceName, _server));
+		  }
+		  if (!counters.Any())
+			yield break;
+
+		  while (true)
+		  {
+			foreach (var c in counters)
+			  yield return c.NextValue();
+		  }
+		}
+
+		public void Dispose()
+		{
+		  Dispose(true);
+		  GC.SuppressFinalize(this);
+		}
+
+		private void Dispose(bool disposing)
+		{
+		  if (_disposed)
+			return;
+
+		  if (_identity != null)
+		  {
+			_identity.Dispose();
+			_identity = null;
+		  }
+
+		  if (_context != null)
+		  {
+			_context.Undo();
+			_context.Dispose();
+			_context = null;
+		  }
+
+		  _disposed = true;
+		}
+	  }
+	}
+
+This class may be used in the following way:
+
+	using (var counterRetriever = new PerformanceCounterRetriever("TestBox", "Home", "Dan", "password"))
+	{
+	  foreach (var value in counterRetriever.Get("Process", "% Processor Time", "TestService"))
+	  {
+	    Console.WriteLine(
+	      "[{0}] TestService: % Processor Time = {1}",
+	      DateTime.Now.ToString("HH:mm:ss.fff"),
+	      value
+	    );
+	    Thread.Sleep(1000);
+	  }
+	}
+
+The "counterRetriever.Get" call returns an **IEnumerable&lt;float&gt;** which retrieves a new value every time that a new value is requested from the enumerable reference. The code above (very roughly) imitates PerfMon in that it reads a new "% Processor Time" value every second.
+
+*(Note: The code above never terminates since nothing breaks it out of the loop, which is not useful in many scenarios.. but I'll talk about dealing with that shortly)*
+
+This is a good first step. However, when I'm analysing the results of my test runs, I want to know more than just how much processor time is being used by the service.
+
+### Querying multiple performance counters remotely
+
+If I want to collect the data from multiple performance counters then I need to get multiple **IEnumerable&lt;float&gt;** instances from multiple "counterRetriever.Get" calls and then retrieve a value from each before pausing and repeating.
+
+	using (var counterRetriever = new PerformanceCounterRetriever("TestBox", "Home", "Dan", "password"))
+	{
+	  var processorTime = counterRetriever
+	    .Get("Process", "% Processor Time", "TestService")
+		.GetEnumerator();
+	  var percentageTimeInGC = counterRetriever
+	    .Get(".NET CLR Memory", "% Time in GC", "TestService")
+		.GetEnumerator();
+	  while (true)
+	  {
+		processorTime.MoveNext();
+		Console.WriteLine(
+		  "[{0}] TestService: % Processor Time = {1}",
+		  DateTime.Now.ToString("HH:mm:ss.fff"),
+		  processorTime.Current
+		);
+		percentageTimeInGC.MoveNext();
+		Console.WriteLine(
+		  "[{0}] TestService: % Time in GC = {1}",
+		  DateTime.Now.ToString("HH:mm:ss.fff"),
+		  percentageTimeInGC.Current
+		);
+		Thread.Sleep(1000);
+	  }
+	}
+
+This could be extended to do the job (in my case, there are seven counters that I'm interested in so the above could be chopped and changed to record them all) but the code will get a bit verbose and "noisy" quite quickly.
+
+### Troublesome counters
+
+There is also a problem with writing code like the above and presuming that you can track all performance counters in the same way. For example, I also want to track the number of garbage collections that have occurred at generations 0, 1 and 2 since the service was restarted. It probably doesn't make much sense to record the values of these every second; I don't really care if there had been a single gen 0 garbage collection after 1s and after 2s and after 3s and after 4s, I'd much rather see that at 1s there had been a single gen 0 collection and then, at 4s, there had been a second. I want to know when these kinds of values change and I'm not interested in the repeated values between the changes.
+
+As another example, I'm also interested in capturing information about the rate at which bytes are allocated by the service, for which I can consult the "Allocated Bytes/sec" counter. However, this counter is only updated after a GC event and will report zero the result of the time. This doesn't mean that zero bytes per second really were being allocated each time that the counter reports zero, it's just that there is nothing that can accurately report a value for this counter *except* immediately following a collection. For this counter, it's probably best for me to exclude zero values - particularly while a performance test is underway, since it is basically impossible that the service will ever be allocating *zero* bytes per second while it's deserialising requests and processing them. As with the "number of collections at gen {x}" counters, it will be worth ignoring some of the counter values but it will be important to know *when* the values that we do pay attention to were recorded (since, for the "Allocated Bytes/sec" counter, it should be possible to use this information to approximate the allocation rate at any given time).
+
+### A complete solution
+
+To try to address all of these problems, I've come up with the following. It's not the smallest code sample in the world but it should be easy to follow and understand if you need to extend it for your own purposes -
+
+	using System;
+	using System.Collections.Generic;
+	using System.Linq;
+	using System.Threading;
+
+	namespace PerformanceCounterCapture
+	{
+	  public static class PerformanceCounterLogger
+	  {
+		/// <summary>
+		/// This will capture useful performance counter data until the specified cancellation token
+		/// is set, at which point it will return the data (as such, it makes sense to call this from
+		/// a background thread)
+		/// </summary>
+		public static Results Log(
+		  string server,
+		  string domain,
+		  string user,
+		  string password,
+		  string serviceName,
+		  CancellationToken cancellationToken,
+		  TimeSpan timeBetweenCaptures)
+		{
+		  if (string.IsNullOrWhiteSpace(server))
+			throw new ArgumentException($"Null/blank {nameof(server)} specified");
+		  if (string.IsNullOrWhiteSpace(domain))
+			throw new ArgumentException($"Null/blank {nameof(domain)} specified");
+		  if (string.IsNullOrWhiteSpace(user))
+			throw new ArgumentException($"Null/blank {nameof(user)} specified");
+		  if (password == null)
+			throw new ArgumentNullException(nameof(password));
+		  if (string.IsNullOrWhiteSpace(serviceName))
+			throw new ArgumentException($"Null/blank {nameof(serviceName)} specified");
+		  if (cancellationToken == null)
+			throw new ArgumentNullException(nameof(cancellationToken));
+		  if (timeBetweenCaptures.Ticks < 0)
+			throw new ArgumentOutOfRangeException($"{timeBetweenCaptures} must be a non-negative duration");
+
+		  // These lists will be populated periodically (according to timeBetweenCaptures) and, when the
+		  // cancellation token is set, they will all be included in the returned data for analysis
+		  var processorTimes = new List<Tuple<DateTime, float>>();
+		  var percentageGarbageCollectorTimes = new List<Tuple<DateTime, float>>();
+		  var numberOfGen0Collections = new List<Tuple<DateTime, float>>();
+		  var numberOfGen1Collections = new List<Tuple<DateTime, float>>();
+		  var numberOfGen2Collections = new List<Tuple<DateTime, float>>();
+		  var largeObjectHeapSize = new List<Tuple<DateTime, float>>();
+		  var allocatedBytesPerSeconds = new List<Tuple<DateTime, float>>();
+		  using (var performanceCounterRetriever = new PerformanceCounterRetriever(
+		                                            server, domain, user, password))
+		  {
+			var performanceCountersToRecord = new[]
+			{
+			  new PerformanceCounterDetails(
+			    "Process",
+			    "% Processor Time",
+			    serviceName,
+			    value => processorTimes.Add(Tuple.Create(DateTime.Now, value))
+			  ),
+			  new PerformanceCounterDetails(
+			    ".NET CLR Memory",
+			    "% Time in GC",
+			    serviceName,
+			    value => percentageGarbageCollectorTimes.Add(Tuple.Create(DateTime.Now, value))
+			  ),
+			  new PerformanceCounterDetails(
+			    ".NET CLR Memory",
+			    "# Gen 0 Collections",
+			    serviceName,
+			    value => AddValueToListIfNew(numberOfGen0Collections, value)
+			  ),
+			  new PerformanceCounterDetails(
+			    ".NET CLR Memory",
+			    "# Gen 1 Collections",
+			    serviceName,
+			    value => AddValueToListIfNew(numberOfGen1Collections, value)
+			  ),
+			  new PerformanceCounterDetails(
+			    ".NET CLR Memory",
+			    "# Gen 2 Collections",
+			    serviceName,
+			    value => AddValueToListIfNew(numberOfGen2Collections, value)
+			  ),
+			  new PerformanceCounterDetails(
+			    ".NET CLR Memory",
+			    "Large Object Heap size",
+			    serviceName,
+			    value => AddValueToListIfNew(largeObjectHeapSize, value)
+			  ),
+			  new PerformanceCounterDetails(
+				".NET CLR Memory",
+				"Allocated Bytes/sec",
+				serviceName,
+				value =>
+				{
+				  // This is only set after a GC event so there are lots of spurious zeroes that we
+				  // want to ignore (this value-ignoring is the main reason that the date that the
+				  // value was recorded is included in the result data, so that it's possible to
+				  // approximate values during the missing periods - which may be of variable
+				  // duration since the useful values recorded for this are related to GC events)
+				  if (value == 0)
+					return;
+				  allocatedBytesPerSeconds.Add(Tuple.Create(DateTime.Now, value));
+				}
+			  )
+			};
+
+			var allCounterEnumerators = performanceCountersToRecord
+			  .Select(counterDetails => new {
+				Feed =
+				  performanceCounterRetriever.Get(
+				    counterDetails.CategoryName,
+				    counterDetails.CounterName,
+				    counterDetails.OptionalInstanceName
+			      )
+				  .GetEnumerator(),
+				ValueLogger = counterDetails.ValueLogger
+			  })
+			  .ToArray(); // Don't call GetFeed every time that we enumerate the set
+
+			// Keep looping and populating the lists until the cancellation token is set - at that
+			// point, return a result object that contains all of the data
+			while (!cancellationToken.IsCancellationRequested)
+			{
+			  foreach (var counterEnumerator in allCounterEnumerators)
+			  {
+				counterEnumerator.Feed.MoveNext();
+				var value = counterEnumerator.Feed.Current;
+				counterEnumerator.ValueLogger(value);
+			  }
+			  if (!cancellationToken.IsCancellationRequested)
+				Thread.Sleep(timeBetweenCaptures);
+			}
+			return new Results(
+			  processorTimes,
+			  percentageGarbageCollectorTimes,
+			  numberOfGen0Collections,
+			  numberOfGen1Collections,
+			  numberOfGen2Collections,
+			  largeObjectHeapSize,
+			  allocatedBytesPerSeconds
+			);
+		  }
+		}
+
+		private static void AddValueToListIfNew(List<Tuple<DateTime, float>> values, float value)
+		{
+		  if (values == null)
+			throw new ArgumentNullException(nameof(value));
+
+		  if (!values.Any() || (values.Last().Item2 != value))
+			values.Add(Tuple.Create(DateTime.Now, value));
+		}
+	  }
+	}
+
+It also needs the following two classes for its internal initialisation and for returning results -
+
+	public sealed class PerformanceCounterDetails
+	{
+	  public PerformanceCounterDetails(
+		string categoryName,
+		string counterName,
+		string optionalInstanceName,
+		Action<float> valueLogger)
+	  {
+		if (string.IsNullOrWhiteSpace(categoryName))
+		  throw new ArgumentException($"Null/blank {nameof(categoryName)} specified");
+		if (string.IsNullOrWhiteSpace(counterName))
+		  throw new ArgumentException($"Null/blank {nameof(counterName)} specified");
+		if (valueLogger == null)
+		  throw new ArgumentNullException(nameof(valueLogger));
+
+		CategoryName = categoryName;
+		CounterName = counterName;
+		OptionalInstanceName = optionalInstanceName;
+		ValueLogger = valueLogger;
+	  }
+
+	  public string CategoryName { get; }
+	  public string CounterName { get; }
+	  public string OptionalInstanceName { get; }
+	  public Action<float> ValueLogger { get; }
+	}
+
+	public sealed class Results
+	{
+	  public Results(
+		IEnumerable<Tuple<DateTime, float>> processorTimes,
+		IEnumerable<Tuple<DateTime, float>> percentageGarbageCollectorTimes,
+		IEnumerable<Tuple<DateTime, float>> numberOfGen0Collections,
+		IEnumerable<Tuple<DateTime, float>> numberOfGen1Collections,
+		IEnumerable<Tuple<DateTime, float>> numberOfGen2Collections,
+		IEnumerable<Tuple<DateTime, float>> largeObjectHeapSize,
+		IEnumerable<Tuple<DateTime, float>> allocatedBytesPerSeconds)
+	  {
+		if (processorTimes == null)
+		  throw new ArgumentNullException(nameof(processorTimes));
+		if (percentageGarbageCollectorTimes == null)
+		  throw new ArgumentNullException(nameof(percentageGarbageCollectorTimes));
+		if (numberOfGen0Collections == null)
+		  throw new ArgumentNullException(nameof(numberOfGen0Collections));
+		if (numberOfGen1Collections == null)
+		  throw new ArgumentNullException(nameof(numberOfGen1Collections));
+		if (numberOfGen2Collections == null)
+		  throw new ArgumentNullException(nameof(numberOfGen2Collections));
+		if (largeObjectHeapSize == null)
+		  throw new ArgumentNullException(nameof(largeObjectHeapSize));
+		if (allocatedBytesPerSeconds == null)
+		  throw new ArgumentNullException(nameof(allocatedBytesPerSeconds));
+
+		ProcessorTimes = processorTimes;
+		PercentageGarbageCollectorTimes = percentageGarbageCollectorTimes;
+		NumberOfGen0Collections = numberOfGen0Collections;
+		NumberOfGen1Collections = numberOfGen1Collections;
+		NumberOfGen2Collections = numberOfGen2Collections;
+		LargeObjectHeapSize = largeObjectHeapSize;
+		AllocatedBytesPerSeconds = allocatedBytesPerSeconds;
+	  }
+
+	  public IEnumerable<Tuple<DateTime, float>> ProcessorTimes { get; }
+	  public IEnumerable<Tuple<DateTime, float>> PercentageGarbageCollectorTimes { get; }
+	  public IEnumerable<Tuple<DateTime, float>> NumberOfGen0Collections { get; }
+	  public IEnumerable<Tuple<DateTime, float>> NumberOfGen1Collections { get; }
+	  public IEnumerable<Tuple<DateTime, float>> NumberOfGen2Collections { get; }
+	  public IEnumerable<Tuple<DateTime, float>> LargeObjectHeapSize { get; }
+	  public IEnumerable<Tuple<DateTime, float>> AllocatedBytesPerSeconds { get; }
+	}
+
+I don't think that there's a great deal that requires explaining in depth - the **PerformanceCounterLogger** will periodically capture values from all of the counters that I'm interested in, dealing with the special cases described earlier (garbage collection frequency, allocated bytes / sec, etc..) in a blocking manner. It continues to capture counter data until the cancellation token passed to it is set.
+
+That means that it makes sense to capture the performance counter data on a seperate thread. Something like the following (which is basically what I'm using in my test runs) -
+
+    // Restart the service on the test server
+	Restart("TestBox", "TestService");
+
+    // Start recording performance counters on a separate thread
+	Results performanceCounterResults = null;
+	var cancellationTokenSource = new CancellationTokenSource();
+	var resultsReadyIndicator = new ManualResetEvent(initialState: false);
+	ThreadPool.QueueUserWorkItem(state =>
+	{
+	  performanceCounterResults = PerformanceCounterLogger.Log(
+	    "TestBox",
+	    "Home",
+	    "Dan",
+	    "password",
+		"TestService",
+	    cancellationTokenSource.Token,
+		TimeSpan.FromSeconds(1)
+	  );
+	  resultsReadyIndicator.Set();
+	});
+	
+	// TODO: Fire load at the server...........
+	
+	// Tell the performance counters that it's time to stop capturing and wait for it to acknowledge
+	cancellationTokenSource.Cancel();
+	resultsReadyIndicator.WaitOne();
+
+    // TODO: Write the "performanceCounterResults" data away to analyse later...........
+
+There are two big TODOs in the above code - somehow the request payload needs to be fired at the remote server that is being measured and somehow the performance counter results need to be compared between one run and the next. Obviously, these will vary from one project to the next and so they will be very dependent upon what kind of service that you're testing (and what performance counters you're interested in). In my case, I already had a decent system available for replaying old requests so that changes to the system could be examined, all I needed on top of that was a way to capture some performance counters to bring some *cold hard numbers* into proceedings - if you're in a similar position then hopefully this post will be helpful!
+
+### Shameless plug
+
+Although I had a system in place to replay historical requests in order to simulate load, there was a slight problem with this in that the service would read from a database and it was totally feasible that the data persisted there could vary from hour to hour (if not more frequently). This could mean that one performance run would not be directly comparable to the next - one run may return more or less results for a particular query, for example, or have to process some of those results in a different (ie. more or less expensive) manner.
+
+This would make meaningful comparisons difficult - really, each run should return precisely the same data as the next.
+
+For this particular service, a few things were in my favour on this front; the service was read only, its job is only to deliver data for rendering on various web sites and it does not have to perform any write operations. It also only specifies a database connection in a fairly limited number of places. This allowed me to add a config option to the service that would (when in a particular test mode) create database connections that get their data from a proxy service instead of going directly to the SQL database.
+
+The proxy service can be run in either "record" or "replay" mode. First, the service that is under test should have the batch of requests that the processing performance is being measured for replayed while the database proxy service is in "record" mode - this allows the proxy service to populate a cache on disk that contains all of the result sets for all of the database queries performed. After this, all subsequent performance runs are made with the proxy service in "replay" mode - in this configuration, the service will never hit the database and will always return data from its cache. This ensures that the data retrieved during each performance run is consistent, which makes it much easier to reach useful conclusions and make meaningful comparisons.
+
+The library that I wrote for this database proxy service is called [SqlProxyAndReplay](https://github.com/ProductiveRage/SqlProxyAndReplay) and is available on GitHub and via NuGet (the client needs [ProductiveRage.SqlProxyAndReplay.Client](https://www.nuget.org/packages/ProductiveRage.SqlProxyAndReplay.Client) and the server needs [ProductiveRage.SqlProxyAndReplay.Service](https://www.nuget.org/packages/ProductiveRage.SqlProxyAndReplay.Service) and [ProductiveRage.SqlProxyAndReplay.Service.Example](https://www.nuget.org/packages/ProductiveRage.SqlProxyAndReplay.Service.Example)).
+
+There are some caveats - under the hood, this uses a WCF (binary endpoint) service and it won't be as fast as hitting a database directly. And, as a .net library, there will be some garbage collection overhead since it will result in additional allocations. However, for testing how the *internals* of a service (and not, say, tweaking individual SQL queries to try to eke out more performance) then this shouldn't be a huge problem since the overhead should be consistent from one run to the next. So long as you are measuring changes in performance runs *before* you deploy an update and performance runs *after* an update (hopefully improvements!) then the overhead of the database proxy shouldn't matter.
+
+Sometimes, of course, the database *is* your bottle neck and so you want to capture real queries as they hit it so that you can performance tune them. There are already lot of good tools for this (you can get a long way by attaching SQL Profiler and looking for the most expensive or most frequent quite-expensive queries) but I hadn't found something useful for my use case, where I wanted to optimise what happened *after* any database access and just wanted the database access layer to magically return consistent data time after time. At least, I couldn't find one that didn't entail significant work in writing some sort of mock / cached database access layer.
+
+While the [SqlProxyAndReplay](https://github.com/ProductiveRage/SqlProxyAndReplay) service / library may not be as useful if you have to test a service or application that needs to persist changes made to the backing store, I imagine that it's common for a lot of large scale applications to want to cache and optimise read operations and so this may well be useful for other people. The [linked GitHub](https://github.com/ProductiveRage/SqlProxyAndReplay) repo has more information in its README and there's a "Tester" console application to demonstrate it in action.
