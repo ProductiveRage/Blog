@@ -1,24 +1,35 @@
-﻿## Entity Framework projections to Immutable Types (IEnumerable vs IQueryable)
+## Entity Framework projections to Immutable Types (IEnumerable vs IQueryable)
 
-Last month I was looking back into one of my old projects that was inspired by AutoMapper but for mapping to immutable types - those that are initialised by a single constructor call, rather than by setting properties on a mutable type (see [Bonus provocative headline: Like AutoMapper, but 100x faster](Post67)). I had a fairly good idea of what scenarios I wanted to use it in and  had no intention of replicating the entire wide range of functionality that AutoMapper supports. However, something I *was* particularly taken with was the recently(ish) added support for LINQ auto-projections.
+Last month I was looking back into one of my old projects that was inspired by AutoMapper but for mapping to immutable types, rather than mapping to mutable types (that typically have a parameterless constructor and are initialised by setting individual properties)\* - see [Bonus provocative headline: Like AutoMapper, but 100x faster](Post67).
 
-Projections are when data is retrieved from an **IQueryable** source by translating the required properties onto either a particular class or an anonymous type - eg.
+When I was working on it, I had a fairly good idea of what scenarios I wanted to use it in and  had no intention of trying to replicate the entire range of functionality that AutoMapper supports. However,  something I *was* particularly taken with was the recently(ish) added support to AutoMapper for LINQ auto-projections.
+
+\* *Note from the future: There was a time when AutoMapper didn't have good support for mapping to immutable types, it wouldn't apply automatic its name / type matching logic to the case where property values are read from the source type and used to provide constructor arguments on the destination type (and it was to fill that feature gap that I started writing the [Compilable Type Converter](https://bitbucket.org/DanRoberts/compilabletypeconverter)). However, that situation changed at some point and now AutoMapper does have good support for mapping to immutable types - though I wasn't able to track down from the release notes when precisely that was.*
+
+Projections are when data is retrieved from an **IQueryable** source and mapped onto either a named class or an anonymous type - eg.
 
     using (var context = new AlbumDataEntities())
     {
-      var albums = context.Albums
-        .Select(album => new {
-          Key = album.AlbumKey,
-          Name = album.Name
-        });
+      var albums = context.Albums.Select(album => new {
+        Key = album.AlbumKey,
+        Name = album.Name
+      });
 
-The clever thing about **IQueryable** and these projections is that the data source (Entity Framework, for example) can construct a query to retrieve only the data required; only the data that is needed to map those projected properties.
+The clever thing about **IQueryable** and these projections is that the data source (Entity Framework, for example) can construct a query to retrieve only the data required. Without projections, the database querying and the mapping are completely separate steps and so it is very common for the ORM to have to retrieve much more data than is strictly necessary (and often to introduce the dreaded N+1 SELECT problem). Projections allows the mapping to directly affect how the database query is constructed so that precisely the right amount of data may be requested (and all in one query, *not* in N+1).
 
-*Auto-projection* means that, if the mappings follow naming conventions, AutoMapper will pull over all of the properties' values by magic. Meaning you don't have to write the boring Key = album.AlbumKey, Name = album.Name code for each property in a mapping.
+The code shown above could be referred to as a manual projection (where the the properties - "Key" and "Name" in that example - are explicitly mapped). *Auto-projection* is the utilisation of a mapping library to automatically create this projection / mapping. This means that you don't have to write the boring "Key = album.AlbumKey, Name = album.Name" code for each property in a mapping. In essence, something like:
+
+	using (var context = new AlbumDataEntities())
+	{
+	  var albums = context.Albums.MapTo<ImmutableAlbum>();
+  
+When you've only got a couple of properties (like Key and Name in the earlier code), it's not too bad but it's still the sort of manual work that gets boring (and error prone) very quickly.
 
 ### IQueryable vs IEnumerable
 
-The **IEnumerable** type in .net allows for lazy initialisation such that data is only processed as it is requested. For a really simple example, the following code starts off with a data "source" that will generate up to ten million objects, returned as an enumerable set. On this we call Take(5), which returns another enumerable set that will only enumerate the first five items. Until ToArray is called, none of the data is actually delivered and none of the objects are createad. Even when ToArray *is* called, only five of the source objects are actually initialised as that is how many are actually required - the remaining 9,999,995 objects that *could* have been created are not since they are not required. Lazy evaulation in action!
+Allow me to briefly go off on a tangent..
+
+The **IEnumerable** type in .net allows for lazy initialisation such that data is only processed as it is requested. For a really simple example, the following code starts off with a data "source" that will generate up to ten million objects, returned as an enumerable set. On this we call Take(5), which returns another enumerable set that will only enumerate the first five items. Until ToArray is called, none of the data is actually delivered and none of the objects are created. Even when ToArray *is* called, only five of the source objects are actually initialised as that is how many are actually required - the remaining 9,999,995 objects that *could* have been created are not since they are not required (this is lazy evaluation in action).
 
     var fiveItemsFromLargeEnumerableRange =
       Enumerable.Range(1, 10000000).Select(i => new { Name = "Item" + i })
@@ -29,7 +40,7 @@ The **IEnumerable** type in .net allows for lazy initialisation such that data i
 
 It's worth noting at this point that many ORMs (including Entity Framework) support "lazy loading" of data for child properties to try to address this very point; the data for the properties of the returned objects is not loaded until the properties are accessed. At this point the database (or whatever data source is being used) is hit *again* to retrieve this information. The downside to this is that the data that *is* accessed may require multiple database hits for each entity when only a single query may have been required if "eagerly" loading all of the data for the entity. But if "eager loading" is used and only a subset of the data is required then *too much* data was being pulled down!
 
-**IQueryable** sets have similar intentions to **IEnumerable** but a different approach, they are more tightly tied to the data source. Where **IEnumerable** sets may be considered to be in-memory (for each entity), **IQueryable** sets are all prepared in the data source and only the data that is required for each entity is returned.
+**IQueryable** sets have similar intentions to **IEnumerable** but a different approach, they are more tightly tied to the data source. Where **IEnumerable** sets may be considered to be in-memory (for each entity), **IQueryable** sets are all prepared in the data source and filtering may be applied there to prevent too much data from being sent.
 
 To illustrate with an example, say we have data about albums. There's an Albums table with AlbumKey, Name, Year and ArtistKey fields. There's a Tracks table with TrackKey, AlbumKey, TrackNumber and Name fields. And there's an Artists table with fields ArtistKey and Name.
 
@@ -61,7 +72,7 @@ This shows that the SQL executed was
       FROM [dbo].[Albums] AS [Extent1]
       ORDER BY [Extent1].[Name] ASC
 
-Which is pretty much what you would hope for.. but clever when you think about it. It's done some analysis of the request we've described and realised that it only needs to consider one particular column from that one table, even though it's all configured to do so much more.
+Which is pretty much what you would hope for.. but clever when you think about it. It's done some analysis of the request we've described and realised that it only needs to consider one particular column from that one table, even though it's all configured to potentially do so much more.
 
 If instead we request 
 
@@ -89,7 +100,7 @@ then the following SQL is executed:
       )  AS [Project1]
       ORDER BY [Project1].[Name] ASC, [Project1].[TrackNumber] ASC
 
-This was not such a simple translation to make - this query got mapped into an interim anonymous type, there are multiple sorts and the final values are constructucted by concatenating two of the fields in the interim type.
+This was not such a simple translation to make - this query got mapped into an interim anonymous type, there are multiple sorts and the final values are constructucted by concatenating two of the fields in the interim type. Nonetheless, the SQL that was generated was very efficient and a good reflection of the data that was requested.
 
 One more, for fun..
 
@@ -112,9 +123,9 @@ results in:
       )  AS [Project1]
       ORDER BY [Project1].[C1] DESC
 
-This has not only performed an aggregate operation (by considering the number of Tracks per Album) but has also incorporated the "Take(5)" into the query. It is not possible for this query to return more than five results from the database. This is another example of how the request is translated into something handled by the data source that ensures that it can deliver the bare minimum data. Were the "Take(5)" call not translated into part of the query then potentially more data would be returned than necessary. The first five results could be isolated in a similar "in-memory" operation to that in the 1,000,000 item **IEnumerable** example earlier, but it wouldn't be as efficient to do so.
+This not only performed an aggregate operation (by considering the number of Tracks per Album) but also incorporated the "Take(5)" into the query. This is an example of how a request may be translated into something handled by the data source that ensures that it can deliver the bare minimum data; if the "Take(5)" call had not been translated into part of the query then more rows might have been returned than we cared about. (If the "Take(5)" call could not have been translated into part of the database query then the first five results could have been isolated by a similar "in-memory" operation to that illustrated by the 1,000,000 item **IEnumerable** example earlier, but it wouldn't be as efficient to do so since the additional rows would have had to have been delivered from the database and then filtered out.. which would have been wasteful).
 
-So *all* of these demonstrate various ways in which **IQueryable** ensures that the minimum amount of data required is transmitted from the data source. None of them even touch the Artists table since none of the requests asked for Artist data! The **IQueryable** implementation is what performs this magic, whether that be Entity Framework, NHibernate, SubSonic or whatever - it is responsible for translating expressions into SQL (or whatever language the backing data source uses; it could be another SQL-like database or it could be a document database such as [MongoDB](http://www.mongodb.org/)).
+These examples demonstrate some of the ways in which use of **IQueryable** can ensure that the minimum amount of data required is transmitted from the data source. None of them even touch the Artists table since none of the requests asked for Artist data! The **IQueryable** implementation is what performs this magic, whether that be provided by Entity Framework, NHibernate, SubSonic or whatever - *it* is responsible for translating expressions into SQL (or whatever language the backing data source uses; it could be another SQL-like database or it could be a document database such as [MongoDB](http://www.mongodb.org/)).
 
 ### Applying this to mappings
 
