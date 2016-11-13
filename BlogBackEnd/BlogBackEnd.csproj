@@ -34,25 +34,21 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="FullTextIndexer">
-      <HintPath>..\packages\FullTextIndexer.1.0.0\lib\net452\FullTextIndexer.dll</HintPath>
-    </Reference>
     <Reference Include="FullTextIndexer.Common, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\FullTextIndexer.Common.1.0.0\lib\net452\FullTextIndexer.Common.dll</HintPath>
     </Reference>
-    <Reference Include="FullTextIndexer.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\FullTextIndexer.Core.1.0.0\lib\net452\FullTextIndexer.Core.dll</HintPath>
+    <Reference Include="FullTextIndexer.Core, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\FullTextIndexer.Core.1.0.1\lib\net452\FullTextIndexer.Core.dll</HintPath>
+      <Private>True</Private>
     </Reference>
-    <Reference Include="FullTextIndexer.Helpers">
-      <HintPath>..\packages\FullTextIndexer.Helpers.1.0.0\lib\net452\FullTextIndexer.Helpers.dll</HintPath>
+    <Reference Include="FullTextIndexer.Helpers, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\FullTextIndexer.Helpers.1.0.1\lib\net452\FullTextIndexer.Helpers.dll</HintPath>
+      <Private>True</Private>
     </Reference>
-    <Reference Include="FullTextIndexer.Querier">
-      <HintPath>..\packages\FullTextIndexer.Querier.1.0.0\lib\net452\FullTextIndexer.Querier.dll</HintPath>
-    </Reference>
-    <Reference Include="FullTextIndexer.Serialisation.Json">
-      <HintPath>..\packages\FullTextIndexer.Serialisation.Json.1.0.0\lib\net452\FullTextIndexer.Serialisation.Json.dll</HintPath>
+    <Reference Include="FullTextIndexer.Querier, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\FullTextIndexer.Querier.1.0.1\lib\net452\FullTextIndexer.Querier.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="HtmlAgilityPack">
       <HintPath>..\External Dependencies\HtmlAgilityPack\HtmlAgilityPack.dll</HintPath>
