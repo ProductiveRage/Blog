@@ -165,7 +165,7 @@
     <Content Include="App_Data\Posts\101,2016,5,31,21,34,0,0.txt" />
     <Content Include="App_Data\Posts\100,2016,5,31,21,33,0,0.txt" />
     <Content Include="App_Data\Posts\102,2016,6,28,7,49,0,1,Roslyn.txt" />
-    <Content Include="App_Data\Posts\107,2016,11,19,8,25,0,1,FullTextIndexer.txt" />
+    <Content Include="App_Data\Posts\107,2016,11,13,13,38,0,0,FullTextIndexer.txt" />
     <Content Include="App_Data\Posts\106,2016,9,21,20,12,0,1,Performance.txt" />
     <Content Include="App_Data\Posts\105,2016,9,6,22,04,0,1,Bridge,Performance.txt" />
     <Content Include="App_Data\Posts\104,2016,8,10,21,01,0,0.txt" />
