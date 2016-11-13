@@ -36,7 +36,7 @@ namespace BlogBackEnd.FullTextIndexing
 			{
 				using (var memoryStream = new MemoryStream(searchIndexData))
 				{
-					_searchIndex = (IIndexData<int>)IndexDataSerialiser<int>.Deserialise(memoryStream);
+					_searchIndex = IndexDataSerialiser<int>.Deserialise(memoryStream);
 				}
 			}
 			else
