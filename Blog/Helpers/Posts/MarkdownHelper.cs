@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Web;
 using System.Web.Mvc;
-using MarkdownSharp;
+using HeyRed.MarkdownSharp;
 
 namespace Blog.Helpers.Posts
 {
