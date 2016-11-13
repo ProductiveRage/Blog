@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -10,8 +10,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>BlogBackEnd</RootNamespace>
     <AssemblyName>BlogBackEnd</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,6 +22,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -29,22 +31,38 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="FullTextIndexer.Common">
-      <HintPath>..\External Dependencies\FullTextIndexer\FullTextIndexer.Common.dll</HintPath>
+    <Reference Include="FullTextIndexer">
+      <HintPath>..\packages\FullTextIndexer.1.0.0\lib\net452\FullTextIndexer.dll</HintPath>
     </Reference>
-    <Reference Include="FullTextIndexer.Core">
-      <HintPath>..\External Dependencies\FullTextIndexer\FullTextIndexer.Core.dll</HintPath>
+    <Reference Include="FullTextIndexer.Common, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\FullTextIndexer.Common.1.0.0\lib\net452\FullTextIndexer.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="FullTextIndexer.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\FullTextIndexer.Core.1.0.0\lib\net452\FullTextIndexer.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="FullTextIndexer.Helpers">
+      <HintPath>..\packages\FullTextIndexer.Helpers.1.0.0\lib\net452\FullTextIndexer.Helpers.dll</HintPath>
+    </Reference>
+    <Reference Include="FullTextIndexer.Querier">
+      <HintPath>..\packages\FullTextIndexer.Querier.1.0.0\lib\net452\FullTextIndexer.Querier.dll</HintPath>
+    </Reference>
+    <Reference Include="FullTextIndexer.Serialisation.Json">
+      <HintPath>..\packages\FullTextIndexer.Serialisation.Json.1.0.0\lib\net452\FullTextIndexer.Serialisation.Json.dll</HintPath>
     </Reference>
     <Reference Include="HtmlAgilityPack">
       <HintPath>..\External Dependencies\HtmlAgilityPack\HtmlAgilityPack.dll</HintPath>
     </Reference>
-    <Reference Include="MarkdownSharp">
-      <HintPath>..\External Dependencies\MarkDown\MarkdownSharp.dll</HintPath>
+    <Reference Include="Markdown">
+      <HintPath>..\packages\Markdown.2.2.0\lib\net451\Markdown.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>..\packages\Newtonsoft.Json.8.0.3\lib\net40\Newtonsoft.Json.dll</HintPath>
+    <Reference Include="Newtonsoft.Json, Version=9.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Newtonsoft.Json.9.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Web" />
