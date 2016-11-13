@@ -1,0 +1,353 @@
+## Migrating my Full Text Indexer to .NET Core (supporting multi-target NuGet packages)
+
+So it looks increasingly like .NET Core is going to be an important technology in the near future, in part because Microsoft is developing much of it in the open (in a significant break from their past approach to software), in part because some popular projects support it ([Dapper](https://github.com/StackExchange/dapper-dot-net), [AutoMapper](http://automapper.org/), [Json.NET](http://www.newtonsoft.com/json)) and in part because of excitement from blog posts such as [ASP.NET Core – 2300% More Requests Served Per Second](http://web.ageofascent.com/asp-net-core-exeeds-1-15-million-requests-12-6-gbps/).
+
+All I really knew about it was that it was a cut-down version of the .NET framework which should be able to run on platforms other than Windows, which *might* be faster in some cases and which may still undergo some important changes in the near future (such as moving away from the new "project.json" project files and back to something more traditional in terms of Visual Studio projects - see [The Future of project.json in ASP.NET Core](https://wildermuth.com/2016/05/12/The-Future-of-project-json-in-ASP-NET-Core)).
+
+To try to find out more, I've taken a codebase that I wrote years ago and have migrated it to .NET Core. It's not enormous but it spans multiple projects, has a (small-but-better-than-nothing) test suite and supports serialising search indexes to and from disk for caching purposes. My hope was that I would be able to probe some of the limitations of .NET Core with this non-trivial project but that it wouldn't be such a large task that it take more than a few sessions spaced over a few days to complete.
+
+#### Spoilers
+
+**Would I be able to migrate one project at a time within the solution to .NET Core and still have the whole project building successfully (while some of the other projects were still targeting the "full fat" .NET framework)?** Yes, but some hacks are required.
+
+**Would it be easy (or even possible) to create a NuGet package that would work on both .NET Core and .NET 4.5?** Yes.
+
+**Would the functionality that is no longer present in .NET Core cause me problems?** Largely, no. The restricted reflection capabilities, no - if I pull in an extra dependency. The restricted serialisation facilities, *yes* (but I'm fairly happy with the solution and compromises that I ended up with).
+
+### What, really, is .NET Core (and what is the Full Text Indexer)?
+
+Essentially,
+
+> .NET Core is a new cross-platform .NET Product .. [and] is composed of the following parts: A .NET runtime .. A set of framework libraries .. A set of SDK tools and language compilers .. The 'dotnet' app host, which is used to launch .NET Core apps
+
+*(from Scott Hanselman's "[.NET Core 1.0 is now released!.NET Core 1.0 is now released!](http://www.hanselman.com/blog/NETCore10IsNowReleased.aspx)" post)*
+
+What .NET Core means in the context of this migration is that there are new project types in Visual Studio to use that target new .NET frameworks. Instead of .NET 4.6.1, for example, there is "netstandard1.6" for class libraries and "netcoreapp1.0" for console applications.
+
+The new Visual Studio project types become available after you install the [Visual Studio Tooling](https://www.microsoft.com/net/core#windows) - alternatively, the "dotnet" command line tool makes things very easy so you can could create projects using nothing more than notepad and "dotnet" if you want to! Since I was just getting started, I chose to stick in my Visual Studio comfort zone.
+
+The Full Text Indexer code that I'm migrating was something that I wrote a few years ago while I was working with a Lucene integration ("this full text indexing lark.. *how hard could it really be!*"). It's a set of class libraries; "Common" (which has no dependencies other than the .NET framework), "Core" (which depends upon Common), "Helpers" (which depends upon both Common and Core), and "Querier" (which also depends upon Common and Core). Then there is a "UnitTests" project and a "Tester" console application, which loads some data from a Sqlite database file, constructs an index and then performs a search or two (just to demonstrate how it works end-to-end).
+
+My plan was to try migrating one project at a time over to .NET Core, to move in baby steps so that I could be confident that everything would remain in a working state for most of the time.
+
+### Creating the first .NET Core project
+
+The first thing I did was delete the "Common" project entirely (deleted it from Visual Studio and then manually deleted all of the files) and then created a brand new .NET Core class library called "Common". I then used my source control client to revert the deletions of the class files so that they appeared within the new project's folder structure. I expected to then have to "Show All Files" and explicitly include these files in the project but it turns out that .NET Core project files don't specify files to include, it's presumed that all files in the folder will be included. Makes sense!
+
+It wouldn't compile, though, because some of the classes have the **[Serializable]** attribute on them and this doesn't exist in .NET Core. As I understand it, that's because the framework's serialisation mechanisms have been stripped right back with the intention of the framework being able to specialise at framework-y core competencies and for there to be an increased reliance on external libraries for other functionality.
+
+This attribute is used through my library because there is an **IndexDataSerialiser** that allows an index to be persisted to disk for caching purposes. It uses the **BinaryFormatter** to do this, which requires that the types that you need to be serialised be decorated with the **[Serializable]** attribute or they implement the **ISerializable** interface. Neither the **BinaryFormatter** nor the **ISerializable** interface are available within .NET Core. I will need to decide what to do about this later - ideally, I'd like to continue to be able to support reading and writing to the same format as I have done before (if only to see if it's possible when migrating to Core). For now, though, I'll just remove the **[Serializable]** attributes and worry about it later.
+
+So, with very little work, the Common project was compiling for the "netstandard1.6" target framework.
+
+Unfortunately, the projects that rely on Common weren't compiling because their references to it were removed when I removed the project from the VS solution. And, if I try to add references to the new Common project I'm greeted with this:
+
+> A reference to 'Common' could not be added. An assembly must have a 'dll' or 'exe' extension in order to be referenced.
+
+The problem is that Common is being built for "netstandard1.6" but *only* that framework. I also want it to support a "full fat" .NET framework, like 4.5.2 - in order to do this I need to edit the project.json file so that the build process creates multiple versions of the project, one .NET 4.5.2 as well as the one for netstandard. That means changing it from this:
+
+	{
+	  "version": "1.0.0-*",
+
+	  "dependencies": {
+		"NETStandard.Library": "1.6.0"
+	  },
+
+	  "frameworks": {
+		"netstandard1.6": {
+		  "imports": "dnxcore50"
+		}
+	  }
+	}
+
+to this:
+
+	{
+	  "version": "1.0.0-*",
+
+	  "dependencies": {},
+
+	  "frameworks": {
+		"netstandard1.6": {
+		  "imports": "dnxcore50",
+		  "dependencies": {
+			"NETStandard.Library": "1.6.0"
+		  }
+		},
+		"net452": {}
+	  }
+	}
+
+Two things have happened - an additional entry has been added to the "frameworks" section ("net452" joins "netstandard1.6") and the "NETStandard.Library" dependency has moved from being something that is always required by the project to something that is only required by the project when it's being built for netstandard.
+
+Now, Common may be added as a reference to the other projects.
+
+However.. they won't compile. Visual Studio will be full of errors that required classes do not exist in the current context.
+
+### Adding a reference to a .NET Core project from a .NET 4.5.2 project in the same solution
+
+Although the project.json configuration does mean that two version of the Common library are being produced (looking in the bin/Debug folder, there are two sub-folders "net452" and "netstandard1.6" and each have their own binaries in), it seems that the "Add Reference" functionality in Visual Studio doesn't (currently) support adding references. There is an issue on GitHub about this; [Allow "Add Reference" to .NET Core class library that uses .NET Framework from a traditional class library](https://github.com/dotnet/core/issues/231) but it seems like the conclusion is that this will be fixed in the future, when the changes have been completed that move away from .NET Core projects having a project.json file and towards a new kind of ".csproj" file.
+
+There is a workaround, though. Instead of selecting the project from the Add Reference dialog, you click "Browse" and then select that file in the "Common/bin/Debug/net452" folder. Then the project *will* build. This isn't a perfect solution, though, since it will *always* reference the Debug build. When building in Release configuration, you also want the referenced binaries from other projects to be built in Release configuration. To do that, I had to open each ".csproj" file notepad and change
+
+    <Reference Include="Common">
+      <HintPath>..\Common\bin\Debug\net452\Common.dll</HintPath>
+    </Reference>
+
+to
+
+    <Reference Include="Common">
+      <HintPath>..\Common\bin\$(Configuration)\net452\Common.dll</HintPath>
+    </Reference>
+
+A little bit annoying but not the end of the world (credit for this fix, btw, goes to this Stack Overflow answer to [Attach unit tests to ASP.NET Core project](http://stackoverflow.com/a/37323585/3813189)).
+
+What makes it even more annoying is the link from the referencing project (say, the Core project) to the *referenced* project (the Common project) is not as tightly integrated as when a project reference is normally added through Visual Studio. For example, while you can set breakpoints on the Common project and they will be hit when the Core project calls into that code, using "Go To Definition" to navigate from code in the Core project into code in the referenced Common project *doesn't* work (it takes you to a "from metadata" view rather than taking you to the actual file). On top of this, the referencing project doesn't know that it needs to be rebuilt if the referenced project is rebuilt - so, if the Common library is changed and rebuilt then the Core library may continue to work against an old version of the Common binary unless you explicitly rebuild Core as well.
+
+These are frustrations that I would not want to live with long term. However, the plan here is to migrate all of the projects over to .NET Core and so I think that I can put up with these limitations so long as they only affect me as I migrate the projects over one-by-one.
+
+### The second project (additional dependencies required)
+
+I repeated the procedure for second project; "Core". This also contained files with types marked as **[Serializable]** (which I just removed for now) and there was the **IndexDataSerialiser** class that used the **BinaryFormatter** to allow data to be persisted to disk - this also had to go, since there was no support for it in .NET Core (I'll talk about what I did with serialisation later on). I needed to add a reference to the Common project - thankfully adding a reference to a .NET Core project *from* a .NET Core project works perfectly, so the workaround that I had to apply before (when the Core project was still .NET 4.5.2) wasn't necessary.
+
+However, it still didn't compile.
+
+In the "Core" project lives the **EnglishPluralityStringNormaliser** class, which
+is used to adjust tokens (ie. words) so that the singular and plural versions of the same word are considered equivalent (eg. "cat" and "cats", "category" and "categories"). Internally, it generates a compiled LINQ expression to try to perform its work as efficiently as possible and it requires reflection to do that. Calling "GetMethod" and "GetProperty" on a **Type** is not supported in netstandard, though, and an additional dependency is required. So the Core project.json file needed to be changed to look like this:
+
+	{
+	  "version": "1.0.0-*",
+
+	  "dependencies": {
+		"Common": "1.0.0-*"
+	  },
+
+	  "frameworks": {
+		"netstandard1.6": {
+		  "imports": "dnxcore50",
+		  "dependencies": {
+			"NETStandard.Library": "1.6.0"
+        	"System.Reflection.TypeExtensions": "4.1.0"
+		  }
+		},
+		"net452": {}
+	  }
+	}
+
+The Common project is a dependency regardless of what the target framework is during the build process but the "System.Reflection.TypeExtensions" package is also required when building for netstandard (but not .NET 4.5.2), as this includes extensions methods for **Type** such as "GetMethod" and "GetProperty".
+
+*Note: Since these are extension methods in netstandard, a "using System.Reflection;" statement is required at the top of the class - this is not required when building for .NET 4.5.2 because "GetMethod" and "GetProperty" are instance methods on **Type**.*
+
+There was one other dependency that was required for Core to build - "System.Globalization.Extensions". This was because the **DefaultStringNormaliser** class includes the line
+
+	var normalisedValue = value.Normalize(NormalizationForm.FormKD);
+	
+which resulted in the error
+
+> 'string' does not contain a definition for 'Normalize' and no extension method 'Normalize' accepting a first argument of type 'string' could be found (are you missing a using directive or an assembly reference?)
+
+This is another case of functionality that is in .NET 4.5.2 but that is an optional package for .NET Core. Thankfully, it's easy to find out what additional package needs to be included - the "lightbulb" code fix options will try to look for a package to resolve the problem and it correctly identifies that "System.Globalization.Extensions" contains a relevant extension method (as illustrated below).
+
+<img alt="TODO" src="/Content/Images/Posts/SystemGlobalizationExtensionsDependency.png" class="AlwaysFullWidth NoBorder" />
+
+*Note: Selecting the "Add package System.Globalization.Extensions 4.0.1" option will add the package as a dependecy for netstandard in the project.json file and it will add the required "using System.Globalization;" statement to the class - which is very helpful of it!*
+
+All that remained now was to use the workaround from before to add the .NET Core version of the "Core" project as a reference to the projects that required it.
+
+### The third and fourth projects (both class libraries)
+
+The process for the "Helpers" and "Querier" class libraries was simple. Neither required anything that wasn't included in netstandard1.6 and so it was just a case of going through the motions.
+
+### The "Tester" Console Application
+
+At this point, all of the projects that constituted the actual "Full Text Indexer" were building for both the netstandard1.6 framework and .NET 4.5.2 - so I could have stopped here, really (aside from the serialisation issues I had been putting off). But I thought I might as well go all the way and see if there were any interesting differences in migrating Console Applications and xUnit test suite projects.
+
+For the Tester project; no, not much was different. It has an end-to-end example integration where it loads data from a Sqlite database file of Blog posts using Dapper and then creates a search index. The posts contain markdown content and so three NuGet packages were required - [Dapper](https://www.nuget.org/packages/Dapper), [System.Data.Sqlite](https://www.nuget.org/packages/System.Data.Sqlite) and [MarkdownSharp](https://www.nuget.org/packages/MarkdownSharp).
+
+Dapper supports .NET Core and so that was no problem but the other two did not. Thankfully, though, there were alternatives that *did* support netstandard - [Microsoft.Data.Sqlite](https://www.nuget.org/packages/Microsoft.Data.Sqlite) and [Markdown](https://www.nuget.org/packages/Markdown). Using Microsoft.Data.Sqlite required some (very minor) code changes while Markdown exposed exactly the same interface as MarkdownSharp.
+
+### The xUnit Test Suite Project
+
+The "UnitTests" project didn't require anything *very* different but there are a few gotchas to watch out for..
+
+The first is that you need to create a "Console Application (.NET Core)" project since xUnit works with the "netcoreapp1.0" framework (which console applications target) and not "netstandard1.6" (which is what class libraries target).
+
+The second is that, presuming you want the Visual Studio test runner integration (which, surely, you do!) you need to not only add the "xunit" NuGet package but also the "dotnet-test-xunit" package. Thirdly, you need to enable the "Include prerelease" option in the NuGet Package Manager to locate versions of these packages that work with .NET Core (this will, of course, change with time - but as of November 2016 these packages are only available as "prereleases").
+
+Fourthly, you need to add a line
+
+	"testRunner": "xunit",
+
+to the project.json file.
+
+Having done all of this, the project should compile *and* the tests should appear in the Test Explorer window.
+
+*Note: I wanted to fully understand each step required to create an xUnit test project but you could also just follow the instructions at [Getting started with xUnit.net (.NET Core / ASP.NET Core)](https://xunit.github.io/docs/getting-started-dotnet-core.html) which provides you a complete project.json to paste in - one of the nice things about .NET Core projects is that changing (and saving) the project.json is all it takes to change from being a class library (and targeting netstandard) to being a console application (and targeting netcoreapp). Similarly, references to other projects and to NuGet packges are all specified there and saving changes to that project file results in those reference immediately being resolved and any specified packages being downloaded.*
+
+In the class library projects, I made them all target both netstandard and net452. With the test suite project, if the project.json file is changed to target both .NET Core ("netcoreapp1.0", since it's a console app) and full fat .NET ("net452") then two different versions of the suite will be built. The clever thing about this is that if you use the command line to run the tests -
+
+    dotnet test
+
+.. then it will run the tests in both versions. Since there are going to be some differences between the different frameworks and, quite feasibly, between different versions of dependencies then it's a very handy tool to be able to run the tests against all of the versions of .NET that your libraries target.
+
+There is a "but" here, though. While the command line test process will target both frameworks, the Visual Studio Test Explorer doesn't. I *think* that it only targets the first framework that is specified in the project.json file but I'm not completely sure. I just know that it doesn't run them both. Which is a pity. On the bright side, I do like that .NET Core is putting the command line first - not only because I'm a command line junkie but also because it makes it very easy to integrate into build servers and continuous integration  processes. I do hope that one day (soon) that the VS integration will be as thorough as the command line tester, though.
+
+### Building NuGet packages
+
+So, now, there are no errors and everything is building for .NET Core *and* for "classic"\* .NET.
+
+\* *I'm still not sure what the accepted terminology is for non-.NET-Core projects, I don't really think that "full fat framework" is the official designation :)*
+
+There are no nasty workarounds required for the references (like when the not-yet-migrated .NET 4.5.2 projects were referencing the .NET Core projects). It's worth mentioning that that workaround was only required when the .NET 4.5.2 project wanted to reference a .NET Core project *from within the same solution* - if the project that targeted both "netstandard1.6" and "net452" was built into a NuGet package then that package could be added to a .NET Core project *or* to a .NET 4.5.2 project *without any workarounds*. Which makes me think that now is a good time to talk about building NuGet packages from .NET Core projects..
+
+The project.json file has enough information that the "dotnet" command line can create a NuGet package from it. So, if you run the following command (you need to be in the root of the project that you're interested in to do this) -
+
+    dotnet pack
+	
+.. then you will get a NuGet package built, ready to distribute! This is very handy, it makes things very simple. And if the project.json targets both netstandard1.6 and net452 then you will get a NuGet package that may be added to either a .NET Core project or a .NET 4.5.2 (or later) project.
+
+I hadn't created the Full Text Indexer as a NuGet package before now, so this seemed like a good time to think about how exactly I wanted to do it.
+
+There were a few things that I wanted to change with what "dotnet pack" gave me at this point -
+
+1. The name and ID of the package comes from the project name, so the Core project resulted into a package named "Core", which is too vague
+1. I wanted to include additional metadata in the packages such as a description, project link and icon url
+1. If each project would be built into a separate package then it might not be clear to someone what packages are required and how they work together, so it probably makes sense to have a combined package that pulls in everything
+
+For points one and two, the "[project.json reference](https://docs.microsoft.com/en-us/dotnet/articles/core/tools/project-json)" documentation has a lot of useful information. It describes the "name" attribute -
+
+> The name of the project, used for the assembly name as well as the name of the package. The top level folder name is used if this property is not specified.
+
+So, it sounds like I could add a line to the Common project -
+
+    "name": "FullTextIndexer.Common",
+	
+.. which would result in the NuGet package for "Common" having the ID "FullTextIndexer.Common". And it does!
+
+However, there is a problem with doing this.
+
+The "Common" project is going to be built into a NuGet package called "FullTextIndexer.Common" so the projects that depend upon it will need updating - their project.json files need to change the dependency from "Common" to "FullTextIndexer.Common". If the Core project, for example, wasn't updated to state "FullTextIndexer.Common" as a dependency then the "Core" NuGet package would have a dependency on a package called "Common", which wouldn't exist (because I want to publish it as "FullTextIndexer.Common"). The issue is that if Core's project.json is updated to specify "FullTextIndexer.Common" as a dependency then the following errors are reported:
+
+> NuGet Package Restore failed for one or more packages. See details in the Output window.
+>
+> The dependency FullTextIndexer.Common >= 1.0.0-* could not be resolved.
+>
+> The given key was not present in the dictionary.
+
+To cut a long story short, after some trial and error experimenting (and having been unable to find any documentation about this or reports of anyone having the same problem) it seems that the problem is that .NET Core dependencies within a solution depend upon the project folders having the same name as the package name - so my problem was that I had a project folder called "Common" that was building a NuGet package called "FullTextIndexer.Common". Renaming the "Common" folder to "FullTextIndexer.Common" fixed it. It probably makes sense to keep the project name, package name and folder name consistent in general, I just wish that the error messages had been more helpful because the process of discovering this was very frustrating!
+
+*Note: Since I renamed the project folder to "FullTextIndexer.Common", I didn't need the "name" option in the project.json file and so I removed it (the default behaviour of using the top level folder name is fine).*
+
+The [project.json reference](https://docs.microsoft.com/en-us/dotnet/articles/core/tools/project-json) made the second task simple, though, by documenting the "[packOptions](https://docs.microsoft.com/en-us/dotnet/articles/core/tools/project-json#packoptions)" section. To cut to the chase, I changed the Common's project.json to the following:
+
+	{
+	  "version": "1.0.0-*",
+
+	  "packOptions": {
+		"iconUrl": "https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200",
+		"projectUrl": "https://bitbucket.org/DanRoberts/full-text-indexer",
+		"tags": [ "C#", "full text index", "search" ]
+	  },
+	  "authors": [ "ProductiveRage" ],
+	  "copyright": "Copyright 2016 ProductiveRage",
+
+	  "dependencies": {},
+
+	  "frameworks": {
+		"netstandard1.6": {
+		  "imports": "dnxcore50",
+		  "dependencies": {
+			"NETStandard.Library": "1.6.0"
+		  }
+		},
+		"net452": {}
+	  }
+	}
+
+I updated the other class library projects similarly and updated the dependency names on all of the projects in the solution so that everything was consistent and compiling.
+
+Finally, I created an additional project named simply "FullTextIndexer" whose only role in life is to generate a NuGet package that includes all of the others (it doesn't have any code of its own). Its project.json file looks like this:
+
+	{
+	  "version": "1.0.0-*",
+
+	  "packOptions": {
+		"summary": "A project to try implementing a full text index service from scratch in C# and .NET Core",
+		"iconUrl": "https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200",
+		"projectUrl": "https://bitbucket.org/DanRoberts/full-text-indexer",
+		"tags": [ "C#", "full text index", "search" ]
+	  },
+	  "authors": [ "ProductiveRage" ],
+	  "copyright": "Copyright 2016 ProductiveRage",
+
+	  "dependencies": {
+		"FullTextIndexer.Common": "1.0.0-*",
+		"FullTextIndexer.Core": "1.0.0-*",
+		"FullTextIndexer.Helpers": "1.0.0-*",
+		"FullTextIndexer.Querier": "1.0.0-*"
+	  },
+
+	  "frameworks": {
+		"netstandard1.6": {
+		  "imports": "dnxcore50",
+		  "dependencies": {
+			"NETStandard.Library": "1.6.0"
+		  }
+		},
+		"net452": {}
+	  }
+	}
+
+One final note about NuGet packages before I move on - the default behaviour of "dotnet pack" is to build the project in Debug configuration. If you want to build in release mode then you can use the following:
+
+	dotnet pack --configuration Release
+
+### "Fixing" the serialisation problem
+
+Serialisation in .NET Core seems to a bone of contention - the Microsoft Team are sticking to their guns in terms of not supporting it and, instead, promoting other solutions:
+
+> Binary Serialization
+>
+> Justification. After a decade of servicing we've learned that serialization is incredibly complicated and a huge compatibility burden for the types supporting it. Thus, we made the decision that serialization should be a protocol implemented on top of the available public APIs. However, binary serialization requires intimate knowledge of the types as it allows to serialize object graphs including private state.
+>
+> Replacement. Choose the serialization technology that fits your goals for formatting and footprint. Popular choices include data contract serialization, XML serialization, JSON.NET, and protobuf-net.
+
+*(from "[Porting to .NET Core](https://github.com/dotnet/corefx/blob/2b15de70c1cf9f585c4878a722de4dbe42b4940b/Documentation/project-docs/porting.md#binary-serialization)")*
+
+Meanwhile, people have voiced their disagreement in GitHub issues such as "[Question: Serialization support going forward from .Net Core 1.0](https://github.com/dotnet/corefx/issues/6564)".
+
+The problem with recommendations such as [Json.NET](http://www.newtonsoft.com/json)) and [protobuf-net](https://github.com/mgravell/protobuf-net) is that they require changes to code that previously worked with BinaryFormatter - there is no simple switchover. Another consideration is that I wanted to see if it was possible to migrate my code over to supporting .NET Core while still making it compatible with any existing installation, such that it could still deserialise any disk-cached data that had been persisted in the past (the chances of this being a realistic use case are exceedingly slim - I doubt that anyone but me has used the Full Text Indexer - I just wanted to see if it seemed feasible).
+
+For the sake of this post, I'm going to cheat a little. While I have come up with a way to serialise index data that works with netstandard, it would probably best be covered another day (and it isn't compatible with historical data, unfortunately). A good-enough-for-now approach was to use "[conditional directives](https://msdn.microsoft.com/en-us/library/4y6tbswk.aspx)", which are basically a way to say "if you're building in this configuration then include this code (and if you're not, then don't)". This allowed me the restore all of the **[Serializable]** attributes that I removed earlier - but only if building for .NET 4.5.2 (and not for .NET Core). For example:
+
+	#if NET452
+		[Serializable]
+	#endif
+		public class Whatever
+		{
+		
+The **[Serializable]** attribute will be included in the binaries for .NET 4.5.2 and not for .NET Core.
+
+You need to be careful with precisely what conditions you specify, though. When I first tried this, I used the line "if #net452" (where the string "net452" is consistent with the framework target string in the project.json files) but the attribute wasn't being included in the .NET 4.5.2 builds. There was no error reported, it just wasn't getting included. I had to look up the supported values to see if I'd made a silly mistake and it was the casing - it needs to be "NET452" and not "net452".
+
+I used the same approach to restore the **ISerializable** implementations that some classes had and I used it to conditionally compile the entirety of the **IndexDataSerialiser** (which I got back out of my source control history, having deleted it earlier).
+
+This meant that if the "FullTextIndexer" package is added to a project building for the "classic" .NET framework then all of the serialisation options that were previously available still will be - any disk-cached data may be read back using the **IndexDataSerialiser**. It *wouldn't* be possible if the package is added to a .NET Core project but this compromise felt much better than nothing.
+
+### Final tweaks and parting thoughts
+
+The migration is almost complete at this point. There's one minor thing I've noticed while experimenting with .NET Core projects; if a new solution is created whose first project is a .NET Core class library or console application, the project files aren't put into the root of the solution - instead, they are in a "src" folder. Also, there is a "global.json" file in the solution root that enables.. *magic special things*. If I'm being honest, I haven't quite wrapped my head around all of the potential benefits of global.json (though there is an explanation of one of the benefits here; [The power of the global.json](https://ievangelist.github.io/blog/the-global-json/)). What I'm getting around to saying is that I want my now-.NET-Core solution to look like a "native" .NET Core solution, so I tweaked the folder structure and the .sln file to be consistent with a solution that had been .NET Core from the start. I'm a fan of consistency and I think it makes sense to have my .NET Core solution follow the same arrangement as everyone else's .NET Core solutions.
+
+Having gone through this whole process, I think that there's an important question to answer: **Will I now switch to defaulting to supporting .NET Core for all new projects?**
+
+.. and the answer is, today, if I'm being honest.. no.
+
+There are just a few too many rough edges and question marks. The biggest one is the change that's going to happen away from "project.json" and to a variation of the ".csproj" format. I'm sure that there will be some sort of simple migration tool but I'd rather know *for sure* what the implications are going to be around this change before I commit too much to .NET Core.
+
+I'm also a bit annoyed that the Productivity Power Tools remove-and-sort-usings-on-save doesn't work with .NET Core projects (there's an [issue on GitHub](https://github.com/Microsoft/VS-PPT/issues/40) about this but it hasn't bee responded to since August 2016, so I'm not sure if it will get fixed).
+
+Finally, I'm sure I read an issue around analysers being included in NuGet packages for .NET Core - that they weren't getting loaded correctly. I can't find the issue now so I've done some tests to try to confirm or deny the rumour.. I've got a very simple project that includes an analyser and whose package targets both .NET 4.5 and netstandard1.6 and the analyser *does* seem to install correctly and be included in the build process (see [ProductiveRage.SealedClassVerification](https://github.com/ProductiveRage/ProductiveRage.SealedClassVerification)) but I still have a few concerns; in .csproj files, analyser are all explicitly referenced (and may be enabled or disabled in the Solution Explorer by going into References/Analyzers) but I can't see how they're referenced in .NET Core projects (and they don't appear in the Solution Explorer). Another (minor) thing is that, while the analyser does get executed and any warnings displayed in the Error List in Visual Studio, there are no squigglies underlining the offending code. I don't know why that is and it makes me worry that the integration is perhaps a bit flakey. I'm a big fan of analysers and so I want to be sure that they are fully supported. Maybe this will get tidied up when the new project format comes about.. whenever that will be.
+
+I think that things are *close* (and I like that Microsoft is making this all available early on and accepting feedback on it) but I don't think that it's quite ready enough for me to switch to it full time yet.
+
+Finally, should you be curious at all about the Full Text Indexer project that I've been talking about, the source code is available here: [bitbucket.org/DanRoberts/full-text-indexer](https://bitbucket.org/DanRoberts/full-text-indexer) and there are a range of old posts that I wrote about how it works (see "[The Full Text Indexer Post Round-up](http://www.productiverage.com/the-full-text-indexer-post-roundup)").
