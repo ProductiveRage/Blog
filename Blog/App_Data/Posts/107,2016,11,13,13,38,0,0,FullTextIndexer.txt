@@ -1,4 +1,4 @@
-## Migrating my Full Text Indexer to .NET Core (supporting multi-target NuGet packages)
+﻿## Migrating my Full Text Indexer to .NET Core (supporting multi-target NuGet packages)
 
 So it looks increasingly like .NET Core is going to be an important technology in the near future, in part because Microsoft is developing much of it in the open (in a significant break from their past approach to software), in part because some popular projects support it ([Dapper](https://github.com/StackExchange/dapper-dot-net), [AutoMapper](http://automapper.org/), [Json.NET](http://www.newtonsoft.com/json)) and in part because of excitement from blog posts such as [ASP.NET Core – 2300% More Requests Served Per Second](http://web.ageofascent.com/asp-net-core-exeeds-1-15-million-requests-12-6-gbps/).
 
@@ -348,45 +348,8 @@ I'm also a bit annoyed that the Productivity Power Tools remove-and-sort-usings-
 
 Finally, I'm sure I read an issue around analysers being included in NuGet packages for .NET Core - that they weren't getting loaded correctly. I can't find the issue now so I've done some tests to try to confirm or deny the rumour.. I've got a very simple project that includes an analyser and whose package targets both .NET 4.5 and netstandard1.6 and the analyser *does* seem to install correctly and be included in the build process (see [ProductiveRage.SealedClassVerification](https://github.com/ProductiveRage/ProductiveRage.SealedClassVerification)) but I still have a few concerns; in .csproj files, analyser are all explicitly referenced (and may be enabled or disabled in the Solution Explorer by going into References/Analyzers) but I can't see how they're referenced in .NET Core projects (and they don't appear in the Solution Explorer). Another (minor) thing is that, while the analyser does get executed and any warnings displayed in the Error List in Visual Studio, there are no squigglies underlining the offending code. I don't know why that is and it makes me worry that the integration is perhaps a bit flakey. I'm a big fan of analysers and so I want to be sure that they are fully supported\*. Maybe this will get tidied up when the new project format comes about.. whenever that will be.
 
-\* *(**Update:** Having since added a code fix to the "SealedClassVerification" analyser, I've realised that the no-squigglies-in-editor problem is worse than I first thought - it means that the lightbulb for the code fix does not appear in the editor and so the code fix can not be used. I also found the GitHub issue that I mentioned: "[Analyzers fail on .NET Core projects](https://github.com/dotnet/roslyn-analyzers/issues/1028), it says that improvements are on the way "in .NET Core 1.1" which should be released sometime this year.. maybe that will improve things)*
+\* *(**Update:** Having since added a code fix to the "SealedClassVerification" analyser, I've realised that the no-squigglies-in-editor problem is worse than I first thought - it means that the lightbulb for the code fix does not appear in the editor and so the code fix can not be used. I also found the GitHub issue that I mentioned: "[Analyzers fail on .NET Core projects](https://github.com/dotnet/roslyn-analyzers/issues/1028)", it says that improvements are on the way "in .NET Core 1.1" which should be released sometime this year.. maybe then will improve things)*
 
 I think that things are *close* (and I like that Microsoft is making this all available early on and accepting feedback on it) but I don't think that it's quite ready enough for me to switch to it full time yet.
 
 Finally, should you be curious at all about the Full Text Indexer project that I've been talking about, the source code is available here: [bitbucket.org/DanRoberts/full-text-indexer](https://bitbucket.org/DanRoberts/full-text-indexer) and there are a range of old posts that I wrote about how it works (see "[The Full Text Indexer Post Round-up](http://www.productiverage.com/the-full-text-indexer-post-roundup)").
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
