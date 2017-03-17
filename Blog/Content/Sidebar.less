@@ -2,8 +2,7 @@ body
 {
 	.SidebarContainer()
 	{
-		border: 3px solid #bf7c52;
-		.RounderBorders(8px);
+		border: 1px solid #bf7c52;
 		background: url("../Content/Images/SidebarBackground.jpg") top right repeat-x #595959;
 		padding: 8px;
 		margin: 8px 0;
@@ -26,12 +25,12 @@ body
 		}
 	}
 
-    .SidebarLink()
-    {
+	.SidebarLink()
+	{
 		color: #f1f1f1;
 		display: block;
 		&:hover { color: #c0c0c0; }
-    }
+	}
 
 	.SidebarContainerWithLinkListItems()
 	{
@@ -55,8 +54,8 @@ body
 		{
 			font-weight: bold;
 			color: white;
-            font-size: 14px; // I can't get work-breaking to word properly around the @ symbol in address (in IE, at least) so I've resorted to shrinking the font size slightly
-        	@media screen and (max-width: 70em) { font-size: inherit; } // The above isn't required on smaller form factors since the sidebars become full-width, below the main content
+			font-size: 14px; // I can't get work-breaking to word properly around the @ symbol in address (in IE, at least) so I've resorted to shrinking the font size slightly
+			@media screen and (max-width: 70em) { font-size: inherit; } // The above isn't required on smaller form factors since the sidebars become full-width, below the main content
 		}
 	}
 	
@@ -70,20 +69,20 @@ body
 			padding: 8px 0 0 0;
 			> a
 			{
-                .SidebarLink();
-                font-weight: bold;
+				.SidebarLink();
+				font-weight: bold;
 				background: url("../Content/Images/RSSFeedIcon.png") 0 1px no-repeat;
 				padding: 1px 0 3px 20px;
 				&:hover { background-position: 0 -47px; }
-        		@media screen and (max-width: 70em) { background-position-y: 4px; }
+				@media screen and (max-width: 70em) { background-position-y: 4px; }
 			}
 		}
 		@media screen and (max-width: 35em)
-        {
+		{
 			> ul > li
-            {
-                padding: 0 0 16px 0;
-                line-height: 24px;
+			{
+				padding: 0 0 16px 0;
+				line-height: 24px;
 			}
 		}
 	}
@@ -91,14 +90,14 @@ body
 	div.History
 	{
 		.SidebarContainerWithLinkListItems();
-        div.EveryTitle {
-            padding-top: 8px;
-            > a
-            {
-                .SidebarLink();
-                font-weight: bold;
-            }
-        }
+		div.EveryTitle {
+			padding-top: 8px;
+			> a
+			{
+				.SidebarLink();
+				font-weight: bold;
+			}
+		}
 		@media screen and (max-width: 35em) { > ul > li { padding: 0 0 16px 0; } }
 	}
 
@@ -110,12 +109,12 @@ body
 		input.SiteSearch
 		{
 			font-size: 12px;
-			width: 147px;
+			width: 100%;
 		}
 		input.SiteSearchSubmit
 		{
 			font-size: 12px;
-			margin: 0 3px 0 0;
+			margin: 4px 0 0 0;
 			padding: 3px 6px;
 		}
 	}
