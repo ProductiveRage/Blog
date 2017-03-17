@@ -4,8 +4,7 @@ body
 	{
 		margin: 0 auto 16px auto;
 		width: 1030px;
-		position: relative;
-		left: -19px;
+
 		@media screen and (max-width: 70em)
 		{
 			margin: 0 0 16px 0;
@@ -18,7 +17,7 @@ body
 	div.WrapperOuter
 	{
 		margin: 0 auto;
-		width: 1014px;
+		width: 1060px; // This needs to be wider than the header since we pull the side bar back over a bit to overlap the main content
 		@media screen and (max-width: 70em)
 		{
 			width: 100%;
@@ -29,7 +28,13 @@ body
 		{
 			float: left;
 			width: 100%;
-			@media screen and (max-width: 70em) { float: none; }
+
+			margin: 0 0 0 15px;
+
+			@media screen and (max-width: 70em) {
+                float: none;
+                margin: 0;
+			}
 
 			div.Main
 			{
@@ -51,8 +56,8 @@ body
 				float: right;
 				clear: right;
 				position: relative;
-				left: -40px;
-				width: 173px;
+				left: -30px;
+				width: 210px;
 				@media screen and (max-width: 70em)
 				{
 					clear: both;
