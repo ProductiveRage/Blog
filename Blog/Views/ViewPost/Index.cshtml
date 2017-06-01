@@ -46,7 +46,7 @@
 							(function () {
 							    whenjQueryIsAvailable(
 									function () {
-										$(function () {
+									    $(function () {
 											loadCommentsIfHalfwayDownAndNotAlreadyLoaded();
 											$(window).scroll(loadCommentsIfHalfwayDownAndNotAlreadyLoaded);
 										});
@@ -55,14 +55,20 @@
 
 								var bStartedLoadingComments = false;
 								function loadCommentsIfHalfwayDownAndNotAlreadyLoaded() {
-									if (!bStartedLoadingComments && ($(window).scrollTop() >= ($(document).height() / 2))) {
+								    if (bStartedLoadingComments) {
+								        return;
+								    }
+								    var $post = $("div.Content.SinglePost");
+								    var bottomOfPost = $post.position().top + $post.height();
+								    var $window = $(window);
+								    if (($window.scrollTop() + $window.height()) >= (bottomOfPost / 2)) {
 										bStartedLoadingComments = true;
 										loadComments();
 									}
 								}
 
 								function loadComments() {
-									var dsq = document.createElement("script");
+								    var dsq = document.createElement("script");
 									dsq.type = "text/javascript";
 									dsq.async = true;
 									dsq.src = "https://" + disqus_shortname + ".disqus.com/embed.js";
