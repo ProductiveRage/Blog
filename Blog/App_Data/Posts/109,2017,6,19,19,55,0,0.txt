@@ -1,0 +1,100 @@
+## Revisiting .NET Core tooling (Visual Studio 2017)
+
+In November last year, I migrated a fairly small but non-trivial project to .NET Core to see what I thought about the process and whether I was happy to make .NET Core projects my default. At that point I wasn't happy to, there were too many rough edges.
+
+Since then, things have changed. The project.json format has been replaced with a .csproj format that is supported by the now-available Visual Studio 2017 and various other aspects of .NET Core development have had a chance to mature. So I thought that it was worth revisiting.
+
+### TL;DR
+
+Things have come on a long way since the end of last year. But you don't get the level of consistency and stability with Visual Studio when you use it to develop .NET Core applications that you do when you use it to develop .NET Framework applications. To avoid frustration (and because I don't currently have use cases that would benefit from multi-platform support), I'm still not going to jump to .NET Core for my day-to-day professional development tasks. I will probably dabble with it for personal projects.
+
+### The Good
+
+First off, I'm a huge fan of the new .csproj format. The "legacy" .csproj is huge and borderline-incomprehensible. Just what do the "ProjectTypeGuids" values mean and what are the acceptable choices? An incorrect one will mean that VS won't load the project and it won't readily give you information as to why. The new format is streamlined and beautiful. They took the best parts of project.json and made it into a format that would play better with MSBuild (and avoiding frightening developers who see "project.json" and get worried they're working on a frontend project that may have a terrifying Babel configuration hidden somewhere). I like that files in the folder structure are included by default, it makes sense (the legacy format required that every file explicitly be "opted in" to the project).
+
+Next big win: Last time I tried .NET Core, one of the things that I wanted to examine was how it easy it would be to migrate a solution with multiple projects. Could I change one project from being .NET Framework to .NET Core and then reference that project from the .NET Framework projects? It was possible but only with an ugly hack (where you had to edit the legacy .NET Framework .csproj files and manually create the references). That wasn't the end of it, though, since this hack confused VS and using "Go To Definition" on a reference that lead into a .NET Core dependency would take you to a "from metadata" view instead of the file in the Core project. Worse, the .NET Framework project wouldn't know that it had to be rebuilt if the Core project that it referenced was rebuilt. All very clumsy. The good news is that VS2017 makes this all work perfectly!
+
+Shared projects may also now be referenced from .NET Core projects. This didn't work in VS2015. There were workarounds but, again, they were a bit ugly (see the Stack Overflow question [How do I reference a Visual Studio Shared Project in a .NET Core Class Library](https://stackoverflow.com/questions/38523457/how-do-i-reference-a-visual-studio-shared-project-in-a-net-core-class-library)). With 2017, everything works as you would expect.
+
+The final positive isn't something that's changed since last year but I think that it's worth shouting out again - the command line experience with .NET Core is really good. Building projects, running tests and creating NuGet packages are all really simple. In many of my older projects, I've had some sort of custom NuGet-package-creating scripts but any .NET Core projects going forward won't need them. (One thing that I particularly like is that if you have a unit test project that builds for multiple frameworks - eg. .NET Core 1.1 and .NET Framework 4.5.2 - then the tests will all be run against both frameworks when "dotnet test" is executed).
+
+### The Bad
+
+Let's look at the not-so-good stuff. Firstly, I still find some of the terminology around .NET Core confusing. And, reading around, I'm not the only one. When I create a new project, I can choose a ".NET Core Class Library" and I can also choose a ".NET Standard Class Library". Now, as I understand it, the basic explanation is that .NET Standard is a baseline "standard" that may have multiple implementations - all of them have to provide the full API that .NET Standard specifies. And .NET Core is one of the implementations of .NET Standard, so that means that a .NET Core class library has access to everything that .NET Standard dictates must be available.. plus (potentially) a bit more. Now, what that "bit more" might entail isn't 100% clear to me. I guess that the short answer is the you would need to create a ".NET Core Class Library" if you want to reference something that uses APIs that only .NET Core (and not .NET Standard) surface.
+
+Another way to look at it is that it's best to start with a ".NET Standard Class Library" (rather than a ".NET Core Class Library") unless you have a really compelling reason not to because more people / platforms / frameworks will be able to use the library that you use; .NET Standard assemblies may be referenced by .NET Core project and .NET Framework projects (and, if I have this right, Mono or Xamarin projects as well).
+
+I've [stolen](http://quoteinvestigator.com/2013/03/06/artists-steal/) the following from an MSDN post by [Immo Landwerth](https://social.msdn.microsoft.com/profile/Immo+Landwerth+[MSFT]) that relates to this:
+
+<img alt="Unnecessary Optional instantiation" src="/Content/Images/Posts/NETStandard.png" class="NoBorder FullWidth" />
+
+However, this still leaves another problem. If you want access to more APIs then you might have to change from .NET Standard to .NET Core. *Or* you might have be able to stick with .NET Standard but use a later version. If you create a .NET Standard Class Library then you can tell it what version of .NET Standard that you want to support by going to the project properties and changing the Target Framework. In general, if you're building a library for use by other people then you probably want to build it against the lowest version of .NET Standard possible. Maybe it's better to say the "most accessible" version of .NET Standard. If your library might be referenced by a project that targets .NET Standard 1.6 then it won't work if your library requires .NET Standard 2.0 (you'll force the consumer to require the later version or they'll decide not to use your library).
+
+Currently, .NET Core 1.1 and .NET Framework 4.6 implement .NET Standard 1.6 and so it's probably not the end of the world to take 1.6 as an acceptable minimum for .NET Standard libraries. But .NET Standard 2.0 [is in beta](https://blogs.msdn.microsoft.com/dotnet/2017/05/10/announcing-net-core-2-0-preview-1/) and I'm not really sure what that will run on (will .NET Framework 4.6 be able to reference .NET Standard 2.0 or will we need 4.7?).. my point is that this is still quite confusing. That's not the fault of the tooling but it's still something you'll have to butt up against if you start going down the .NET Core / .NET Standard path.
+
+My final whinge about .NET Standard versions is that it's often hard to know *when* to change version. While doing research for this post, I re-created one of my projects *again* and tried to start with the minimum framework version each time. I had some reflection code that uses BindingFlags.GetField and it was refusing to compile. Because I was using .NET Standard 1.3. If I changed to .NET Standard 1.6 then it compiled fine. The problem is that it's hard to know what to do, it feels like a lot of guess work - do I need to change the .NET Standard version or do I need to switch to a .NET Core Class Library?
+
+Let me try and get more tightly focused on the tooling again. Earlier, I said that one of the plusses is that it's so easy to create NuGet packages with "dotnet pack". One of the *problems* (maybe "mixed blessing" would be more accurate) with this is that the packages are built entirely from metadata in the .csproj file. So you need to add any extra NuGet-specific information there. This actually works great - for example, here is one of my project files:
+
+	<Project Sdk="Microsoft.NET.Sdk">
+
+	  <PropertyGroup>
+		<TargetFrameworks>netstandard1.6;net45</TargetFrameworks>
+
+		<PackageId>FullTextIndexer.Serialisation.Json</PackageId>
+		<PackageVersion>1.1.0</PackageVersion>
+		<Authors>ProductiveRage</Authors>
+		<Copyright>Copyright 2017 Productive Rage</Copyright>
+		<PackageTags>C# full text index search</PackageTags>
+		<PackageIconUrl>https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200</PackageIconUrl>
+		<PackageProjectUrl>https://bitbucket.org/DanRoberts/full-text-indexer</PackageProjectUrl>
+	  </PropertyGroup>
+
+	  <ItemGroup>
+		<PackageReference Include="Newtonsoft.Json" Version="10.0.2" />
+	  </ItemGroup>
+
+	  <ItemGroup>
+		<ProjectReference Include="..\FullTextIndexer.Common\FullTextIndexer.Common.csproj" />
+		<ProjectReference Include="..\FullTextIndexer.Core\FullTextIndexer.Core.csproj" />
+	  </ItemGroup>
+
+	  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard1.6'">
+		<PackageReference Include="System.Reflection.TypeExtensions">
+		  <Version>4.3.0</Version>
+		</PackageReference>
+	  </ItemGroup>
+
+	</Project>
+
+I've got everything I need; package id, author, copyright, icon, tags, .. My issue isn't how this works, it's that this doesn't seem to well documented. Searching on Google presents articles such as [Create .NET standard packages with Visual Studio 2017](https://docs.microsoft.com/en-us/nuget/guides/create-net-standard-packages-vs2017) which is very helpful but *doesn't* link anywhere to a definitive list of what properties are and aren't supported. I came up with the above by hoping that it would work, calling "dotnet pack" and then examining the resulting .nupkg file in NuGet Package Explorer.
+
+My next beef is with unit testing. Earlier, I said that "dotnet test" is great because it executes the test against every framework that your project targets. And that *is* great. But getting your unit test project to that point can be hard work. I like xUnit and they have a great article about [Getting started with xUnit.net (.NET Core / ASP.NET Core)](http://xunit.github.io/docs/getting-started-dotnet-core) but I dislike that there's copy-pasting into the .csproj file required to make it work, I wish that the GUI tooling was mature enough to be up to the job for people who wish to take that avenue. But it isn't. There is no way to do this without manually hacking about your .csproj file. I like that the command line interface is so solid but I'm not sure that it's ok to *require* that the CLI / manual-file-editing be used - .NET is such a well-established and well-used technology that not everyone wants to have to rely upon the CLI. I suspect that 90% of .NET users want Visual Studio to be able to everything for them because it has historically been able to - and I don't think that anyone should judge those people and tell them they're wrong and should embrace the CLI.
+
+To make things worse, in order to use xunit with .NET Core (or .NET Standard) you need to use pre-release versions of the libraries. Why? They've been pre-release for a long time now, I find it hard to believe that they're not sufficiently stable / well-tested to make it to a "real" NuGet package release. Microsoft is suggesting that .NET Core is ready for mainstream use but other common dependencies aren't (this doesn't go for all major NuGet packages - AutoMapper, Json.NET and Dapper, for example, all work with .NET Standard without requiring pre-release versions).
+
+Oh, one more thing about unit tests (with xunit, at least) - after you follow the instructions and get the tests recognised in the VS Test Explorer, they only get run for one framework. I'm not sure which, if you specify multiple. Which is disappointing. Since the CLI is so good and runs tests for all supported frameworks, I wish that the Test Explorer integration would as well.
+
+Last bugbear: When I create a .NET Framework Web Project and run it and see the result in the browser, so long as I have disabled "Enable Edit and Continue" in the Project Properties / Web pane then I can make changes, rebuild and then refresh in the browser without "running" (ie. attaching the debugger). This often shortens the edit-build-retry cycle (sometimes only slightly but sometimes by a few valuable seconds) but it's something I can't reproduce with .NET Core Web Projects; once the project is stopped, I can't refresh the page in the browser until I tell VS to run again. Why can't it leave the site running in IIS Express??
+
+### The Ugly
+
+I've been trying to find succinct examples of this problem while writing this article and I've failed.. While looking into VS2017 tooling changes, I migrated my "[Full Text Indexer](https://bitbucket.org/DanRoberts/full-text-indexer)" code across. It's not a massive project by any means but it spans multiple projects within the same solution and builds NuGet packages for consumption by both .NET Standard and .NET Framework. Last year, I got it working with the VS2015 tooling and the project.json format. This year, I changed it to use the new .csproj format and got it building nicely in VS2017. One of the most annoying things that I found during this migration was that I would make change to projects (sometimes having to edit the project files directly) and the changes would refuse to apply themselves without me restarting VS (probably closing and re-opening the solution would have done it too). This was very frustrating. More frustrating at this very minute, frankly, is that I'm unable to start a clean project and come up with an example of having to restart VS to get a change applied. But the feeling that I was left with was that the Visual Studio tooling was flakey. If I built everything using the CLI then it was fine - another case where I felt that if you don't mind manual editing and the command line then you'll be fine; but that's not, in my mind, a .NET release that is ready for "prime time".
+
+Another flakey issue I had is that I have a "FullTextIndexer" project that doesn't have any code of its own, it only exists to generate a single NuGet package that pulls in the other five projects / packages in one umbrella add-this-and-you-get-everything package. When I first created the project and used "dotnet pack" then the resulting package only listed the five dependencies for .NET Standard and *not* for .NET Framework. I couldn't work out what was causing the problem.. then it went away! I couldn't put my finger on anything that had changed but it started emitting correct packages (with correct dependencies) at some point. I had another problem building my unit test project because one of the referenced projects needed the "System.Text.RegularExpressions" package when built as .NET Standard and it complained that it couldn't load version 4.1.1.0. One of the projects reference 4.3.1.0 but I could never find where the 4.1.1.0 requirement came in and I couldn't find any information about assembly binding like I'm used to in MVC projects (where the web.config will say "for versions x through y, just load y"). This problem, also, just disappeared and I couldn't work out what had happened to make it go away.
+
+In my multi-framework-targeting example solution, I have some conditional compilation statements. I use the Full Text Indexer to power the search on this blog and I serialise a search index using the BinaryFormatter. In order to do this, the search index classes have to have the [Serializable] attribute. But this attribute is not available in .NET Standard.. So the .NET Standard builds of the Full Text Indexer don't have [Serializable] attributes, while the .NET Framework builds *do* have it. That way I can produce nice, clean, new .NET Standard libraries without breaking backwards compatibility for .NET Framework consumers (like my Blog). To do this end, I have code like this:
+
+	#if NET45
+	  [Serializable]
+	#endif
+
+I have two problems with this. Firstly, the conditional compile strings are a little bit "magic" and are not statically analysed. If, for example, you change "#if NET45" to "#if net45" then the code would not be included in .NET Framwork 4.5 builds. You wouldn't get any warning or indication of this, it would happen silently. Similarly, if your project builds for "netstandard1.6" and "net45" and you include a conditional "#if NET452" then that condition will never be met because you should have used "NET45" and not "NET452". Considering the fact that I use languages like C# that are statically typed so that the compiler can identify silly mistakes like this that I might make, this is frustrating when I get it wrong. The second issue I have is that the conditional statement highlighting is misleading when the debugger steps through code. If I have a project that has target frameworks "netstandard1.6;net45" and I reference this from a .NET Framework Console Application and I step through into the library code, any "#if NET45" code will appear "disabled" in the IDE when, really, that code is in play. That's misleading and makes me sad.
+
+### To summarise..?
+
+I'm really impressed with how much better the experience has been in writing .NET Core / .NET Standard projects (or projects that build for .NET Core / Standard *and* "full fat" Framework). However.. I'm just still not that confident that the technology is mature yet. I've encountered too many things that work ok only 95% of the time - and this makes me think that if I tried to encourage everyone at work to adopt .NET Core / Standard today then I'd regret it. There would just be too many occurrences where someone would hit a "weird issue that may or may not go away.. and if it does then we're not sure why" problems.
+
+I think that the future is bright for .NET Core.. but it seems like the last two years have permanently had us feeling that "in just six months or so, .NET Core will be ready to rock'n'roll". And things like "[ASP.NET Core 2.0 won't be supported on .NET Framework](https://www.theregister.co.uk/2017/05/09/dot_net_compatibility/)" mix-ups don't help (TL;DR: It was said that "ASP.NET Core" wouldn't work on the "full fat" .NET Framework and that that was by design - but then it turned out that this was a miscommunication and that it would only be a temporary sitation and ASP.NET Core *would* work within .NET Framework as well).
+
+**To sumarise the summary:** I hope to move to .NET Core in the foreseeable future. But, professionally, I'm not going to today (personal projects maybe, but not at work).
