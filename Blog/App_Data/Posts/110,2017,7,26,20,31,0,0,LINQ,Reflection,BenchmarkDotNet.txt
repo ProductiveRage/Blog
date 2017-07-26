@@ -1,0 +1,493 @@
+## Trying to set a readonly auto-property value externally (plus, a little BenchmarkDotNet)
+
+If you're thinking that you should try changing a readonly property.. well, in short, you almost certainly shouldn't try.
+
+For example, the following class has a property that should *only* be set in its constructor and then never mutated again -
+
+	public sealed class Example
+	{
+	  public Example(int id)
+	  {
+	    Id = id;
+	  }
+	  public int Id { get; }
+	}
+
+*And it is a good thing* that we are able to write code so easily that communicates precisely when a property may (and may not) change.
+
+However..
+
+You might have some very particular scenario in mind where you really *do* want to try to write to a readonly auto-property's value for an instance that has already been created. It's possible that you are writing some interesting deserialisation code, I suppose. For something that I was looking at, I was curious to look into how feasible it is (or isn't) and I came up with the following three basic approaches.
+
+I think that each approach demonstrates something a little off the beaten track of .NET - granted, there's absolutely nothing here that's never been done before.. but sometimes it's fun to be reminded of how flexible .NET *can* be, if only to appreciate how hard it works to keep everything reliable and consistent.
+
+### TL;DR
+
+I'll show three approaches, in decreasing order of ease of writing. They all depend upon a particular naming conventions in .NET's internals that is not documented and should not be considered reliable (ie. a future version of C# and/or the compiler could break it). Even if you ignore this potential time bomb, only the first of the three methods will actually work. Like I said at the start, this is something that you almost certainly shouldn't be attempting anyway!
+
+### Approach 1: Reflection (with some guesswork)
+
+C# 6 introduced read-only auto-properties. Before thoses were available, you had two options to do something similar. You could use a private setter -
+
+	public sealed class Example
+	{
+	  public Example(int id)
+	  {
+	    Id = id;
+	  }
+	  public int Id { get; private set; }
+	}
+	
+.. or you could manually create a private readonly backing field for the property -
+
+	public sealed class Example
+	{
+	  private readonly int _id;
+	  public Example(int id)
+	  {
+	    _id = id;
+	  }
+	  public int Id { get { return _id; } }
+	}
+
+The first approach requires less code but the guarantees that it claims to make are less strict. When a field is readonly then it may *only* be set within a constructor but when it has a private setter then it could feasibly change *at any point* in the lifetime of the instance. In the class above, it's clear to see that it *is* only set in the constructor but there are no compiler assurances that someone won't come along and add a method to the **Example** class that mutates the private-setter "Id" property. If you have a readonly "_id" backing field then it would not be possible to write a method to mutate the value\*.
+
+\* *(Without resorting to the sort of shenanigans that we are going to look at here)*
+
+So the second class is more reliable and more accurately conveys the author's intentions for the code (that the "Id" property of an **Example** instance will never change during its lifetime). The disadvantage is that there is more code to write.
+
+The C# 6 syntax is the best of both worlds - as short (shorter, in fact, since there is *no* setter defined) as the first version but with the stronger guarantees of the second version.
+
+Interestingly, the compiler generates IL that is essentially identical to that which result from the C# 5 syntax where you manually define a property that backs onto a readonly field. The only real difference relates to the fact that it wants to be sure that it can inject a readonly backing field whose name won't clash with any other field that the human code writer may have added to the class. To do this, it uses characters in the generated field names that are not valid to appear in C#, such as "&lt;Id&gt;k__BackingField". The triangle brackets may not be used in C# code but they may be used in the IL code that the compiler generates. And, just to make things extra clear, it adds a **[CompilerGenerated]** attribute to the backing field.
+
+This is sufficient information for us to try to identify the compiler-generated backing field using reflection. Going back to this version of the class:
+
+	public sealed class Example
+	{
+	  public Example(int id)
+	  {
+	    Id = id;
+	  }
+	  public int Id { get; }
+	}
+
+.. we can identify the backing field for the "Id" property with the following code:
+
+	var type = typeof(Example);
+	var property = type.GetProperty("Id");
+	
+	var backingField = type
+	  .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+	  .FirstOrDefault(field =>
+		field.Attributes.HasFlag(FieldAttributes.Private) &&
+		field.Attributes.HasFlag(FieldAttributes.InitOnly) &&
+		field.CustomAttributes.Any(attr => attr.AttributeType == typeof(CompilerGeneratedAttribute)) &&
+		(field.DeclaringType == property.DeclaringType) &&
+		field.FieldType.IsAssignableFrom(property.PropertyType) &&
+		field.Name.StartsWith("<" + property.Name + ">")
+	  );	
+
+With this backingField reference, we can start doing devious things. Like this:
+
+	// Create an instance with a readonly auto-property
+	var x = new Example(123);
+	Console.WriteLine(x.Id); // Prints "123"
+
+	// Now change the value of that readonly auto-property!
+	backingField.SetValue(x, 456);
+	Console.WriteLine(x.Id); // Prints "456"
+
+We took an instance of a class that has a readonly property (meaning that it should never change after the instance has been constructed) and we *changed* that property. Evil.
+
+One more time, though: this relies upon the current convention that the compiler-generated backing fields follow a particular naming convention. If that changes one day then this code will fail.
+
+Enough with the boring warnings, though - let's get to the real nub of the matter; reflection is slooooooooow, isn't it? Surely we should never resort to such a clunky technology??
+
+### Approach 2: Using LINQ Expressions to generate fast code to set the field
+
+If **Example** had a regular private field that we wanted to set - eg.
+
+	public sealed class Example
+	{
+	  private int _somethingElse;
+	  public Example(int id, int somethingElse)
+	  {
+	    Id = id;
+		_somethingElse = somethingElse;
+	  }
+	  
+	  public int Id { get; }
+	  
+	  public int GetSomethingElse()
+	  {
+		return _somethingElse;
+	  }
+	}
+
+Then we could use reflection to get a reference to that field once and build a delegate using LINQ Expressions that would allow us to update that field value using something like this:
+
+	var field = typeof(Example).GetField("_somethingElse", BindingFlags.Instance | BindingFlags.NonPublic);
+
+	var sourceParameter = Expression.Parameter(typeof(Example), "source");
+	var valueParameter = Expression.Parameter(field.FieldType, "value");
+	var fieldSetter =
+	  Expression.Lambda<Action<Example, int>>(
+	    Expression.Assign(
+	      Expression.MakeMemberAccess(sourceParameter, field),
+	      valueParameter
+	    ),
+	    sourceParameter,
+	    valueParameter
+	  )
+	  .Compile();
+
+We could then cache that "fieldSetter" delegate and call it any time that we wanted to update the private "_somethingElse" field on an **Example** instance. There would be a one-off cost to the reflection that identifies the field and a one-off cost to generating that delegate initially but any subsequent call should be comparably quick to hand-written field-updating code (obviously it's not possible to hand-write code to update a private field from outside the class.. but you get the point).
+
+There's one big problem with this approach, though; it doesn't work for readonly fields. The "Expression.Assign" call will throw an **ArgumentException** if the specified member is readonly:
+
+> Expression must be writeable
+
+SAD FACE.
+
+This is quite unfortunate. It had been a little while since I'd played around with LINQ Expressions and I was feeling quite proud of myself getting the code to work.. only to fall at the last hurdle.
+
+Never mind.
+
+One bright side is that I also tried out this code in a .NET Core application and it worked to the same extent as the "full fat" .NET Framework - ie. I was able to generate a delegate using LINQ Expressions that would set a non-readonly private field on an instance. Considering that reflection capabilities were limited in the early days of .NET Standard, I found it a nice surprise that support seems so mature now.
+
+### Approach 3: Emitting IL
+
+Time to bring out the big guns!
+
+If the friendlier way of writing code that dynamically compiles other .NET code (ie. LINQ Expressions) wouldn't cut it, surely the old fashioned (and frankly intimidating) route of writing code to directly emit IL would do the job?
+
+It's been a long time since I've written any IL-generating code, so let's take it slow. If we're starting with the case that worked with LINQ Expressions then we want to create a method that will take an **Example** instance and an **int** value in order to set the "_somethingElse" field on the **Example** instance to that new number.
+
+The first thing to do is to create some scaffolding. The following code is almost enough to create a new method of type **Action&lt;Example, int&gt;** -
+
+	// Set restrictedSkipVisibility to true to avoid any pesky "visibility" checks being made (in other
+	// words, let the IL in the generated method access any private types or members that it tries to)
+	var method = new DynamicMethod(
+	  name: "SetSomethingElseField",
+	  returnType: null,
+	  parameterTypes: new[] { typeof(Example), typeof(int) },
+	  restrictedSkipVisibility: true
+	);
+
+	var gen = method.GetILGenerator();
+	
+	// TODO: Emit require IL op codes here..
+
+	var fieldSetter = (Action<Example, int>)method.CreateDelegate(typeof(Action<Example, int>));
+
+The only problem is that "TODO" section.. the bit where we have to know what IL to generate.
+
+There are basically two ways you can go about working out what to write here. You can learn enough about IL (and remember it again years after you learn some!) that you can just start hammering away at the keyboard.. or you can write some C# that basically does what you want, compile that using Visual Studio and then use a disassembler to see what IL is produced. I'm going for plan b. Handily, if you use Visual Studio then you probably already have a disassembler installed! It's called ildasm.exe and I found it on my computer in "C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.1 Tools" after reading this: "[Where are the SDK tools? Where is ildasm?](https://blogs.msdn.microsoft.com/lucian/2008/11/14/where-are-the-sdk-tools-where-is-ildasm/)".
+
+To make things as simple as possible, I created a new class in a C# project -
+
+	class SomethingWithPublicField
+	{
+	  public int Id;
+	}
+
+and then created a static method that I would want to look at the disassembly of:
+
+	static void MethodToCopy(SomethingWithPublicField source, int value)
+	{
+	  source.Id = value;
+	}
+	
+I compiled the console app, opened the exe in ildasm and located the method. Double-clicking it revealed this:
+
+	.method private hidebysig static void  MethodToCopy(class Test.Program/SomethingWithPublicField source,
+														int32 'value') cil managed
+	{
+	  // Code size         9 (0x9)
+	  .maxstack  8
+	  IL_0000:  nop
+	  IL_0001:  ldarg.0
+	  IL_0002:  ldarg.1
+	  IL_0003:  stfld      int32 Test.Program/SomethingWithPublicField::Id
+	  IL_0008:  ret
+	} // end of method Program::MethodToCopyTyped
+
+Ok. That actually couldn't be much simpler. The "ldarg.0" code means "load argument 0 onto the stack", "ldarg.1" means "load argument 1 onto the stack" and "stfld" means take the instance of the first object on the stack and set the specified field to be the second object on the stack. "ret" just means exit method (returning any value, if there is one - which there isn't in this case).
+
+This means that the "TODO" comment in my scaffolding code may be replaced with real content, resulting in the following:
+
+	var field = typeof(Example).GetField("_somethingElse", BindingFlags.Instance | BindingFlags.NonPublic);
+	
+	var method = new DynamicMethod(
+	  name: "SetSomethingElseField",
+	  returnType: null,
+	  parameterTypes: new[] { typeof(Example), typeof(int) },
+	  restrictedSkipVisibility: true
+	);
+	var gen = method.GetILGenerator();
+	gen.Emit(OpCodes.Ldarg_0);
+	gen.Emit(OpCodes.Ldarg_1);
+	gen.Emit(OpCodes.Stfld, field);
+	gen.Emit(OpCodes.Ret);
+	
+	var fieldSetter = (Action<Example, int>)method.CreateDelegate(typeof(Action<Example, int>));
+
+That's it! We now have a delegate that is a compiled method for writing a new **int** into the private field "_somethingElse" for any given instance of **Example**.
+
+Unfortunately, things go wrong at exactly the same point as they did with LINQ Expressions. The above code works fine for setting a regular private field but if we tried to set a *readonly* field using the same approach then we'd be rewarded with an error:
+
+> **System.Security.VerificationException**: 'Operation could destabilize the runtime.'
+
+Another disappointment!\*
+
+\* *(Though hopefully not a surprise if you're reading this article since I said right at the top that only the first of these three approaches would work!)*
+
+But, again, to try to find a silver lining, I also tried the non-readonly-private-field-setting-via-emitted-IL code in a .NET Core application and I was pleasantly surprised to find that it worked. It required the packages "System.Reflection.Emit.ILGeneration" and "System.Reflection.Emit.Lightweight" to be added through NuGet but nothing more difficult than that.
+
+Although I decided last month that [I'm still not convinced that .NET Core is ready for me to use in work](Post109), I *am* impressed by how much *does* work with it.
+
+### Performance comparison
+
+So we've ascertained that there is only one way\* to set a readonly field on an existing instance and, regrettably, it's also the slowest. I guess that a pertinent question to ask, though, is just *how much* slower is the slowest?
+
+\* *(As further evidence that there isn't another way around this, I've found an issue from EntityFramework's GitHub repo: "[Support readonly fields](https://github.com/aspnet/EntityFramework/issues/6202)" which says that it's possible to set a readonly property with reflection but that the issue-raiser encountered the same two failures that I've demonstrated above when he tried alternatives and no-one has proposed any other ways to tackle it)*
+
+Obviously we can't compare the readonly-field-setting performance of the three approaches above because only one of them is actually capable of doing that. But we *can* compare the performance of something similar; setting a private (but not readonly) field, since *all three* are able to achieve that.
+
+Ordinarily at this point, I would write some test methods and run them in a loop and time the loop and divide by the number of runs and then maybe repeat a few times for good measure and come up with a conclusion. Today, though, I thought that I might try something a bit different because I recently heard again about something called "[BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet)". It claims that:
+
+> Benchmarking is really hard (especially microbenchmarking), you can easily make a mistake during performance measurements. BenchmarkDotNet will protect you from the common pitfalls (even for experienced developers) because it does all the dirty work for you: it generates an isolated project per each benchmark method, does several launches of this project, run multiple iterations of the method (include warm-up), and so on. Usually, you even shouldn't care about a number of iterations because BenchmarkDotNet chooses it automatically to achieve the requested level of precision.
+
+This sounds ideal for my purposes!
+
+What I'm most interesting in is how reflection compares to compiled LINQ expressions and to emitted IL when it comes to setting a private field. If this is of any importance whatsoever then presumably the code will be run over and over again and so it should be the execution time of the compiled property-setting code that is of interest - the time taken to actually compile the LINQ expressions / emitted IL can probably be ignored as it should disappear into insignificance when the delegates are called enough times. But, for a sense of thoroughness (and because BenchmarkDotNet makes it so easy), I'll *also* measure the time that it takes to do the delegate compilation as well.
+
+To do this, I created a .NET Core Console application in VS2017, added the BenchmarkDotNet NuGet package and changed the .csproj file by hand to build for both .NET Core and .NET Framework 4.6.1 by changing
+
+    <TargetFramework>netcoreapp1.1</TargetFramework>
+
+to
+
+    <TargetFrameworks>netcoreapp1.1;net461</TargetFrameworks>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+
+(as described in the [BenchmarkDotNet FAQ](https://github.com/dotnet/BenchmarkDotNet/blob/master/docs/guide/FAQ.md)).
+
+Then I put the following together. There are six benchmarks in total; three to measure the creation of the different types of property-setting delegates and three to then measure the execution time of those delegates -
+
+	class Program
+	{
+		static void Main(string[] args)
+		{
+			BenchmarkRunner.Run<TimedSetter>();
+			Console.ReadLine();
+		}
+	}
+
+	[CoreJob, ClrJob]
+	public class TimedSetter
+	{
+		private SomethingWithPrivateField _target;
+		private FieldInfo _field;
+		private Action<SomethingWithPrivateField, int>
+			_reflectionSetter,
+			_linqExpressionSetter,
+			_emittedILSetter;
+
+		[GlobalSetup]
+		public void GlobalSetup()
+		{
+			_target = new SomethingWithPrivateField();
+
+			_field = typeof(SomethingWithPrivateField)
+				.GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
+				.FirstOrDefault(f => f.Name == "_id");
+
+			_reflectionSetter = ConstructReflectionSetter();
+			_linqExpressionSetter = ConstructLinqExpressionSetter();
+			_emittedILSetter = ConstructEmittedILSetter();
+		}
+
+		[Benchmark]
+		public Action<SomethingWithPrivateField, int> ConstructReflectionSetter()
+		{
+			return (source, value) => _field.SetValue(source, value);
+		}
+
+		[Benchmark]
+		public Action<SomethingWithPrivateField, int> ConstructLinqExpressionSetter()
+		{
+			var sourceParameter = Expression.Parameter(typeof(SomethingWithPrivateField), "source");
+			var valueParameter = Expression.Parameter(_field.FieldType, "value");
+			var fail = Expression.Assign(
+				Expression.MakeMemberAccess(sourceParameter, _field),
+				valueParameter
+			);
+			return Expression.Lambda<Action<SomethingWithPrivateField, int>>(
+					Expression.Assign(
+						Expression.MakeMemberAccess(sourceParameter, _field),
+						valueParameter
+					),
+					sourceParameter,
+					valueParameter
+				)
+				.Compile();
+		}
+
+		[Benchmark]
+		public Action<SomethingWithPrivateField, int> ConstructEmittedILSetter()
+		{
+			var method = new DynamicMethod(
+				name: "SetField",
+				returnType: null,
+				parameterTypes: new[] { typeof(SomethingWithPrivateField), typeof(int) },
+				restrictedSkipVisibility: true
+			);
+			var gen = method.GetILGenerator();
+			gen.Emit(OpCodes.Ldarg_0);
+			gen.Emit(OpCodes.Ldarg_1);
+			gen.Emit(OpCodes.Stfld, _field);
+			gen.Emit(OpCodes.Ret);
+			return (Action<SomethingWithPrivateField, int>)method.CreateDelegate(
+			  typeof(Action<SomethingWithPrivateField, int>)
+			);
+		}
+
+		[Benchmark]
+		public void SetUsingReflection()
+		{
+			_reflectionSetter(_target, 1);
+		}
+
+		[Benchmark]
+		public void SetUsingLinqExpressions()
+		{
+			_linqExpressionSetter(_target, 1);
+		}
+
+		[Benchmark]
+		public void SetUsingEmittedIL()
+		{
+			_emittedILSetter(_target, 1);
+		}
+	}
+	
+	public class SomethingWithPrivateField
+	{
+		private int _id;
+	}
+
+The "GlobalSetup" method will be run once and will construct the delegates for delegate-executing benchmark methods ("SetUsingReflection", "SetUsingLinqExpressions" and "SetUsingEmittedIL"). The time that it takes to execute the [GlobalSetup] method does not contribute to any of the benchmark method times - the benchmark methods will record *only* their own execution time.
+
+However, having delegate-creation benchmark methods ("ConstructReflectionSetter", "ConstructLinqExpressionSetter" and "ConstructEmittedILSetter") means that I'll have an idea how large the initial cost to construct each delegate is (or isn't), separate to the cost of executing each type of delegate.
+
+BenchmarkDotNet has capabilities beyond what I've taken advantage of. For example, it can also build for Mono (though I don't have Mono installed on my computer, so I didn't try this) and it can test 32-bit vs 64-bit builds.
+
+Aside from testing .NET Core 1.1 and .NET Framework 4.6.1, I've kept things fairly simple.
+
+After it has run, it emits the following summary about my computer:
+
+> BenchmarkDotNet=v0.10.8, OS=Windows 8.1 (6.3.9600)
+>
+> Processor=AMD FX(tm)-8350 Eight-Core Processor, ProcessorCount=8
+>
+> Frequency=14318180 Hz, Resolution=69.8413 ns, Timer=HPET
+>
+> dotnet cli version=1.0.4
+>
+>  [Host] : .NET Core 4.6.25211.01, 64bit RyuJIT [AttachedDebugger]
+>
+>  Clr    : Clr 4.0.30319.42000, 64bit RyuJIT-v4.6.1087.0
+>
+>  Core   : .NET Core 4.6.25211.01, 64bit RyuJIT
+
+And produces the following table:
+
+                            Method |  Job | Runtime |           Mean |         Error |        StdDev |
+    ------------------------------ |----- |-------- |----------------|---------------|---------------|
+         ConstructReflectionSetter |  Clr |     Clr |       9.980 ns |     0.2930 ns |     0.4895 ns |
+     ConstructLinqExpressionSetter |  Clr |     Clr | 149,552.853 ns | 1,752.4151 ns | 1,639.2100 ns |
+          ConstructEmittedILSetter |  Clr |     Clr | 126,454.797 ns | 1,143.9593 ns | 1,014.0900 ns |
+                SetUsingReflection |  Clr |     Clr |     158.784 ns |     3.1892 ns |     3.6727 ns |
+           SetUsingLinqExpressions |  Clr |     Clr |       1.139 ns |     0.0542 ns |     0.0742 ns |
+                 SetUsingEmittedIL |  Clr |     Clr |       1.832 ns |     0.0689 ns |     0.1132 ns |
+                                   |      |         |                |               |               |
+         ConstructReflectionSetter | Core |    Core |       9.465 ns |     0.1083 ns |     0.0904 ns |
+     ConstructLinqExpressionSetter | Core |    Core |  66,430.408 ns | 1,303.5243 ns | 2,104.9488 ns |
+          ConstructEmittedILSetter | Core |    Core |  38,483.764 ns |   605.3819 ns |   536.6553 ns |
+                SetUsingReflection | Core |    Core |   2,626.527 ns |    24.1110 ns |    22.5534 ns |
+           SetUsingLinqExpressions | Core |    Core |       1.063 ns |     0.0516 ns |     0.0688 ns |
+                 SetUsingEmittedIL | Core |    Core |       1.718 ns |     0.0599 ns |     0.0560 ns |
+
+The easiest thing to interpret is the "Mean" - BenchmarkDotNet did a few "pilot runs" to try to see how long the benchmark methods would take and then tries to decide what is an appropriate number of runs to do for real in order to get reliable results.
+
+The short version is that when delegates are compiled using LINQ Expressions and emitted-IL that they both execute *a lot* faster than reflection; over 85x faster for .NET Framework 4.6.1 and 1,500x faster for .NET Core 1.1!
+
+The huge difference between reflection and the other two approaches, though, may slightly overshadow the fact that the LINQ Expression delegates are actually about 1.6x faster than the emitted-IL delegates. I hadn't expected this at all, I would have thought that they would be almost identical - in fact, I'm still surprised and don't currently have any explanation for it.
+
+The mean value doesn't usually tell the whole story, though. When looking at the mean, it's also useful to look at the Standard Deviation ("StdDev" in the table above). The mean might be within a small spread of values or a very large spread of values. A small spread is better because it suggests that the single mean value that we're looking at is representative of behaviour in the real world and that values aren't likely to vary too wildly - a large standard deviation means that there was much more variation in the recorded values and so the times could be all over the place in the real world. (Along similar lines, the "Error" value is described as being "Half of 99.9% confidence interval" - again, the gist is that smaller values suggest that the mean is a more useful indicator of what we would see in the real world for any given request).
+
+What I've ignored until this point are the "ConstructReflectionSetter" / "ConstructLinqExpressionSetter" / "ConstructEmittedILSetter" methods. If we first look at the generation of the LINQ Expression delegate on .NET 4.6.1, we can see that the mean time to generate that delegate was around 150ms - compared to approx 10ms for the reflection delegate. Each time the LINQ Expressions delegate is used to set the field instead of the reflection delegate we save around 0.16ms. That means that we need to call the delegate around 950 times in order to pay of the cost of constructing it!
+
+As I suggested earlier, it would only make sense to investigate these sort of optimisations if you expect to execute the code over and over and over again (otherwise, why not just keep it simple and stick to using plain old reflection).. but it's still useful to have the information about just how much "upfront cost" there is to things like this, compared to how much you hope to save in the long run.
+
+It's also interesting to see the discrepancies between .NET Framework 4.6.1 and .NET Core 1.1 - the times to compile LINQ Expressions and emitted-IL delegates are noticeably shorter and the time to set the private field by reflection noticeably longer. In fact, these differences mean that you only need to set the field 25 times before you start to offset the cost of creating the LINQ Expressions delegate (when you compare it to updating the field using reflection) and only 14 times to offset the cost of creating the emitted-IL delegate!
+
+### BenchmarkDotNet is fun
+
+I'm really happy with how easy BenchmarkDotNet makes it to measure these sorts of very short operations. Whenever I've tried to do something similar in the past, I've felt niggling doubts that maybe I'm not running it enough times or maybe there are some factors that I should try to average out. Even when I get a result, I've sometimes just looked at the single average (ie. the mean) time taken, which is a bit sloppy since the spread of results can be of vital importance as well. That BenchmarkDotNet presents the final data in such a useful way and with so few decisions on my part is fantastic.
+
+### .NET Core upsets me again
+
+On the other hand, unfortunately .NET Core has been hard work for me again when it came to BenchmarkDotNet. I made it sound very easy earlier to get everything up and running because I didn't want dilute my enthusiasm for the benchmarking. However, I did have a myriad of problems before everything started working properly.
+
+When I was hand-editing the .csproj file to target multiple frameworks (I still don't know why this isn't possible within VS when editing project properties), Visual Studio would only seem to intermittently acknowledge that I'd changed it and offer to reload. This wasn't super-critical but it also didn't fill me with confidence.
+
+When it *was* ready to build and target both .NET Framework 4.6.1 and .NET Core 1.1, I got a cryptic warning:
+
+> Detected package downgrade: Microsoft.NETCore.App from 1.1.2 to 1.1.1 
+>
+>  CoreExeTest (>= 1.0.0) -> BenchmarkDotNet (>= 0.10.8) -> Microsoft.NETCore.App (>= 1.1.2) 
+>  CoreExeTest (>= 1.0.0) -> Microsoft.NETCore.App (>= 1.1.1)				
+
+Everything seemed to build alright but I didn't know if this was something to worry about or not (I like my projects to be zero-warning). It suggested to me that I was targeting .NET Core 1.1 and BenchmarkDotNet was expecting .NET Core 1.1.2 - sounds simple enough, surely I can upgrade? I first tried changing the .csproj to target "netcoreapp1.1.2" but that didn't work. In fact, it "didnt work" in a very unhelpful way; when I ran the project it would open in a window and immediately close, with no way to break and catch the exception in the debugger. I used "dotnet run"\* on the command line to try to see more information and was then able to see the error message:
+
+> The specified framework 'Microsoft.NETCore.App', version '1.1.2' was not found.
+>
+>  - Check application dependencies and target a framework version installed at:
+>
+>      C:\Program Files\dotnet\shared\Microsoft.NETCore.App
+>
+>  - The following versions are installed:
+>
+>      1.0.1
+>
+>      1.0.4
+>
+>      1.1.1
+>
+>  - Alternatively, install the framework version '1.1.2'.
+
+\* *(Before being able to use "dotnet run" I had to manually edit the .csproj file to only target .NET Core - if you target multiple frameworks and try to use "dotnet run" then you get an error "Unable to run your project. Please ensure you have a runnable project type and ensure 'dotnet run' supports this project")*
+
+I changed the .csproj file back from "netcoreapp1.1.2" to "netcoreapp1.1" and went to the NuGet UI to see if I could upgrade the "Microsoft.NETCore.App" package.. but the version dropdown wouldn't let me change it (stating that the other versions that it was aware of were "Blocked by project").
+
+I tried searching online for a way to download and install 1.1.2 but got nowhere.
+
+Finally, I saw that VS 2017 had an update pending entitled "Visual Studio 15.2 (26430.16)". The "15.2" caught me out for a minute because I initially presumed it was an update for VS *2015*. The update includes .NET Core 1.1.2 (see [this dotnet GitHub issue](https://github.com/dotnet/core/issues/622)) and, when I loaded my solution again, the warning above had gone. Looking at the installed packages for my project, I saw that "Microsoft.NETCore.App" was now on version 1.1.2 and that all other versions were "Blocked by project". This does not feel friendly and makes me worry about sharing code with others - if they don't have the latest version of Visual Studio then the code may cause them warnings like the above that don't happen on my PC. Yuck.
+
+After all this, I got the project compiling (without warnings) and running, only for it to intermittently fail as soon as it started:
+
+> Access to the path 'BDN.Generated.dll' is defined
+
+This relates to an output folder created by BenchmarkDotNet. Sometimes this folder would be locked and it would not be possible to overwrite the files on the next run. Windows wouldn't let me delete the folder directly but I could trick it by renaming the folder and *then* deleting it. I didn't encounter this problem if I created an old-style .NET Framework project and used BenchmarkDotNet there - this would prevent me from running tests against multiple frameworks but it might have also prevented me from teetering over the brink of insanity.
+
+This is not how I would expect mature tooling to behave. For now, I continue to consider .NET Core as the Top Gear boys (when they still *were* the Top Gear boys) described old Alfa Romeos; "you want to believe that it can be something wonderful but you couldn't, in all good conscience, recommend it to a friend".
+
+### Summary
+
+I suspect that, to some, this may seem like one of my more pointless blog posts. I tried to do something that .NET really doesn't want you to do (and that whoever wrote the code containing the readonly auto-properties really doesn't expect you to do) and then tried to optimise that naughty behaviour - then spent a lot more time explaining how it wasn't posible to do so!
+
+However, along the way I discovered BenchmarkDotNet and I'm counting that as a win - I'll be keeping that in my arsenal for future endeavours. And I also enjoyed revisiting what is and isn't possible with reflection and reminding myself of the ways that .NET allows you to write code that could make *my* code appear to work in surprising ways.
+
+Finally, it was interesting to see how the .NET Framework compared to .NET Core in terms of performance for these benchmarks *and* to see take another look at the question of how mature .NET Core and its tooling is (or isn't). And when you learn a few things, can it ever really count as a waste of time?
