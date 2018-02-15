@@ -213,13 +213,12 @@ The message bus is referred to as the "Dispatcher", messages are known as "Actio
 
 So... what's required to get from the current architecture that the example application has to a Flux-like one?
 
-Let's start with the Dispatcher and the messages that flow through it. The first good news is that the Bridge React bindings include a Dispatcher implementation; the **AppDispatcher**. This has three methods:
+Let's start with the Dispatcher and the messages that flow through it. The first good news is that the Bridge React bindings include a Dispatcher implementation; the **AppDispatcher**. This has two methods:
 
-	void Register(Action<DispatcherMessage> callback);
-	void HandleViewAction(IDispatcherAction action);
-	void HandleServerAction(IDispatcherAction action);
+	void Receive(Action<IDispatcherAction> callback);
+	void Dispatch(IDispatcherAction action);
 
-The **DispatcherMessage** is a class with two properties; a "Source" (either "Server" or "View") and "Action". In some scenarios it may be useful to know if an action has originated from the server (such as new data arriving via the API) or from the view. To be honest, I haven't found it to be very important very often, but you might theoretically bypass some complicated validation if you know that data has come from the server rather than the user - frankly, I think that this sort of information is better expressed through a rich object model (which I'll be talking about in part three) and so the most compelling reason for actions being identified as from-Server or from-User is that it's consistent with other Flux implementations out there. The **IDispatcherAction** interface is empty and is only used as a marker, to identify classes as being intended for use as a Dispatcher action.
+The **IDispatcherAction** interface is empty and is only used as a marker to identify classes as being intended for use as a Dispatcher action.
 
 When writing in JavaScript, actions tend to be simple objects with a "type" or "actionType" property that identifies what sort of action it is. It will then have further properties, depending upon what action it needs to describe. I've taken the below example from an article (that wasn't written by me); [A (little more) complex react and flux example](http://spapas.github.io/2015/09/08/more-complex-react-flux-example/) -
 
@@ -277,7 +276,7 @@ Previously, the **AppContainer**'s Render method contained logic about dealing w
 
 But, if all that it needs to do when a save-request bubbles up to it is send an appropriate action through the Dispatcher, then it becomes much simpler -
 
-	OnSave = () => props.Dispatcher.HandleViewAction(
+	OnSave = () => props.Dispatcher.Dispatch(
 	   new MessageSaveRequested { Message = state.Message }
 	)
 
@@ -431,10 +430,10 @@ Now the **AppContainer** becomes *much* simpler -
 			{
 			  ClassName = "message",
 			  Message = state.Message,
-			  OnChange = newState => props.Dispatcher.HandleViewAction(
+			  OnChange = newState => props.Dispatcher.Dispatch(
 				new MessageEditStateChanged { NewState = newState }
 			  ),
-			  OnSave = () => props.Dispatcher.HandleViewAction(
+			  OnSave = () => props.Dispatcher.Dispatch(
 				new MessageSaveRequested
 				{
 				  Message = new MessageDetails
@@ -534,7 +533,7 @@ We're almost ready to talk about how to create the Store now, but first we need 
 			() =>
 			{
 			  _messages.Add(Tuple.Create(_messages.Count, message));
-			  _dispatcher.HandleServerAction(
+			  _dispatcher.Dispatch(
 			    new MessageSaveSucceeded { RequestId = requestId }
 			  );
 			  if (optionalSaveCompletedCallback != null)
@@ -553,7 +552,7 @@ We're almost ready to talk about how to create the Store now, but first we need 
 		  // exhibited if this was really persisting messages to a server somewhere)
 		  var requestId = new RequestId();
 		  Window.SetTimeout(
-			() => _dispatcher.HandleServerAction(new MessageHistoryUpdated
+			() => _dispatcher.Dispatch(new MessageHistoryUpdated
 			{
 			  RequestId = requestId,
 			  Messages = _messages.ToArray()
@@ -736,7 +735,7 @@ While we're adding actions, we're going to need a **StoreInitialised** action cl
 	  }
 	}
 
-Now, *finally*, we can look at how to create a Store.
+Now, *finally*, we so create a Store.
 
 Create a new folder in the project root called "Stores" and add a new class file to it; "MessageWriterStore.cs" -
 
@@ -762,31 +761,31 @@ Create a new folder in the project root called "Stores" and add a new class file
 		  Message = GetInitialMessageEditState();
 		  MessageHistory = new Tuple<int, MessageDetails>[0];
 
-		  dispatcher.Register(message =>
+		  dispatcher.Receive(action =>
 		  {
-			if (message.Action is StoreInitialised)
+			if (action is StoreInitialised)
 			{
-			  var storeInitialised = (StoreInitialised)message.Action;
+			  var storeInitialised = (StoreInitialised)action;
 			  if (storeInitialised.Store == this)
 				OnChange();
 			}
-			else if (message.Action is MessageEditStateChanged)
+			else if (action is MessageEditStateChanged)
 			{
-			  var messageEditStateChanged = (MessageEditStateChanged)message.Action;
+			  var messageEditStateChanged = (MessageEditStateChanged)action;
 			  Message = messageEditStateChanged.NewState;
 			  ValidateMessage(Message);
 			  OnChange();
 			}
-			else if (message.Action is MessageSaveRequested)
+			else if (action is MessageSaveRequested)
 			{
-			  var messageSaveRequested = (MessageSaveRequested)message.Action;
+			  var messageSaveRequested = (MessageSaveRequested)action;
 			  _saveActionRequestId = messageApi.SaveMessage(messageSaveRequested.Message);
 			  Message.IsSaveInProgress = true;
 			  OnChange();
 			}
-			else if (message.Action is MessageSaveSucceeded)
+			else if (action is MessageSaveSucceeded)
 			{
-			  var messageSaveSucceeded = (MessageSaveSucceeded)message.Action;
+			  var messageSaveSucceeded = (MessageSaveSucceeded)action;
 			  if (messageSaveSucceeded.RequestId == _saveActionRequestId)
 			  {
 				_saveActionRequestId = null;
@@ -795,9 +794,9 @@ Create a new folder in the project root called "Stores" and add a new class file
 				_lastDataUpdatedRequestId = messageApi.GetMessages();
 			  }
 			}
-			else if (message.Action is MessageHistoryUpdated)
+			else if (action is MessageHistoryUpdated)
 			{
-			  var messageHistoryUpdated = (MessageHistoryUpdated)message.Action;
+			  var messageHistoryUpdated = (MessageHistoryUpdated)action;
 			  if ((_lastDataUpdatedRequestId == null)
 			  || (_lastDataUpdatedRequestId == messageHistoryUpdated.RequestId)
 			  || messageHistoryUpdated.RequestId.ComesAfter(_lastDataUpdatedRequestId))
@@ -909,44 +908,42 @@ And for the first two points, we can use some extension methods which are includ
 		  Message = GetInitialMessageEditState();
 		  MessageHistory = new Tuple<int, MessageDetails>[0];
 
-		  dispatcher.Register(message =>
-		  {
-			message
-			  .If<StoreInitialised>(
-				condition: action => (action.Store == this),
-				work: action => { }
-			  )
-			  .Else<MessageEditStateChanged>(action =>
-			  {
-				Message = action.NewState;
-				ValidateMessage(Message);
-			  })
-			  .Else<MessageSaveRequested>(action =>
-			  {
-				_saveActionRequestId = messageApi.SaveMessage(action.Message);
-				Message.IsSaveInProgress = true;
-			  })
-			  .Else<MessageSaveSucceeded>(
-				condition: action => (action.RequestId == _saveActionRequestId),
-				work: action =>
-				{
-				  _saveActionRequestId = null;
-				  Message = GetInitialMessageEditState();
-				  _lastDataUpdatedRequestId = messageApi.GetMessages();
-				}
-			  )
-			  .Else<MessageHistoryUpdated>(
-				condition: action =>
-				  action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
-				work: action =>
-				{
-				  _lastDataUpdatedRequestId = action.RequestId;
-				  MessageHistory = action.Messages;
-				}
-			  )
-			  .IfAnyMatched(OnChange);
-		  });
-		}
+          dispatcher.Receive(a => a
+            .If<StoreInitialised>(
+              condition: action => (action.Store == this),
+              work: action => { }
+            )
+            .Else<MessageEditStateChanged>(action =>
+            {
+              Message = action.NewState;
+              ValidateMessage(Message);
+            })
+            .Else<MessageSaveRequested>(action =>
+            {
+              _saveActionRequestId = messageApi.SaveMessage(action.Message);
+              Message.IsSaveInProgress = true;
+            })
+            .Else<MessageSaveSucceeded>(
+              condition: action => (action.RequestId == _saveActionRequestId),
+              work: action =>
+              {
+                _saveActionRequestId = null;
+                Message = GetInitialMessageEditState();
+                _lastDataUpdatedRequestId = messageApi.GetMessages();
+              }
+            )
+            .Else<MessageHistoryUpdated>(
+              condition: action =>
+                action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
+              work: action =>
+              {
+                _lastDataUpdatedRequestId = action.RequestId;
+                MessageHistory = action.Messages;
+              }
+            )
+            .IfAnyMatched(OnChange)
+          );
+        }
 
 		public event Action Change;
 		public MessageEditState Message;
@@ -1030,7 +1027,7 @@ There's just one final thing to do now in order to make the application compile 
 			}),
 			container
 		  );
-		  dispatcher.HandleViewAction(new StoreInitialised { Store = store });
+		  dispatcher.Dispatch(new StoreInitialised { Store = store });
 		}
 	  }
 	}
@@ -1082,13 +1079,13 @@ Now, anywhere that there is a reference to **MessageEditStateChanged**, you will
 
 The non-generic "For" function is just for convenience, it allows you to create a new **UserEditRequested&lt;T&gt;** instance without writing out the type of "T" - it will be inferred by the type of the "newState" reference passed for it. The "OnChange" lambda set on the **MessageEditor** props was previously
 
-	OnChange = newState => props.Dispatcher.HandleViewAction(
+	OnChange = newState => props.Dispatcher.Dispatch(
 	  new MessageEditStateChanged { NewState = newState }
 	)
 
 but should now become
 
-	OnChange = newState => props.Dispatcher.HandleViewAction(
+	OnChange = newState => props.Dispatcher.Dispatch(
 	  UserEditRequested.For(newState)
 	)
 
@@ -1167,43 +1164,41 @@ And, finally, "MessageHistoryUpdated.cs" replaced with
 
 The action type-matching that occurs in the **MessageWriteStore** now needs to be changed to:
 
-    dispatcher.Register(message =>
-    {
-      message
-        .If<StoreInitialised>(
-          condition: action => (action.Store == this),
-          work: action => { }
-        )
-        .Else<UserEditRequested<MessageEditState>>(action =>
+    dispatcher.Receive(a => a
+      .If<StoreInitialised>(
+        condition: action => (action.Store == this),
+        work: action => { }
+      )
+      .Else<UserEditRequested<MessageEditState>>(action =>
+      {
+        Message = action.NewState;
+        ValidateMessage(Message);
+      })
+      .Else<SaveRequested<MessageDetails>>(action =>
+      {
+        _saveActionRequestId = messageApi.SaveMessage(action.Data);
+        Message.IsSaveInProgress = true;
+      })
+      .Else<SaveSucceeded>(
+        condition: action => (action.RequestId == _saveActionRequestId),
+        work: action =>
         {
-          Message = action.NewState;
-          ValidateMessage(Message);
-        })
-        .Else<SaveRequested<MessageDetails>>(action =>
+          _saveActionRequestId = null;
+          Message = GetInitialMessageEditState();
+          _lastDataUpdatedRequestId = messageApi.GetMessages();
+        }
+      )
+      .Else<DataUpdated<IEnumerable<Tuple<int, MessageDetails>>>>(
+        condition: action =>
+          action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
+        work: action =>
         {
-          _saveActionRequestId = messageApi.SaveMessage(action.Data);
-          Message.IsSaveInProgress = true;
-        })
-        .Else<SaveSucceeded>(
-          condition: action => (action.RequestId == _saveActionRequestId),
-          work: action =>
-          {
-            _saveActionRequestId = null;
-            Message = GetInitialMessageEditState();
-            _lastDataUpdatedRequestId = messageApi.GetMessages();
-          }
-        )
-        .Else<DataUpdated<IEnumerable<Tuple<int, MessageDetails>>>>(
-		  condition: action =>
-		    action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
-          work: action =>
-          {
-            _lastDataUpdatedRequestId = action.RequestId;
-            MessageHistory = action.Data;
-          }
-        )
-        .IfAnyMatched(OnChange);
-    });
+          _lastDataUpdatedRequestId = action.RequestId;
+          MessageHistory = action.Data;
+        }
+      )
+      .IfAnyMatched(OnChange)
+    );
 	
 The **AppContainer** now becomes:
 
@@ -1247,10 +1242,10 @@ The **AppContainer** now becomes:
 			{
 			  ClassName = "message",
 			  Message = state.Message,
-			  OnChange = newState => props.Dispatcher.HandleViewAction(
+			  OnChange = newState => props.Dispatcher.Dispatch(
 				UserEditRequested.For(newState)
 			  ),
-			  OnSave = () => props.Dispatcher.HandleViewAction(
+			  OnSave = () => props.Dispatcher.Dispatch(
 				SaveRequested.For(new MessageDetails
 				{
 				  Title = state.Message.Title.Text,
@@ -1284,6 +1279,7 @@ And the **MessageApi**:
 
 	using System;
 	using System.Collections.Generic;
+	using System.Linq;
 	using Bridge;
 	using Bridge.Html5;
 	using Bridge.React;
@@ -1332,7 +1328,7 @@ And the **MessageApi**:
 			() =>
 			{
 			  _messages.Add(Tuple.Create(_messages.Count, message));
-			  _dispatcher.HandleServerAction(new SaveSucceeded { RequestId = requestId });
+			  _dispatcher.Dispatch(new SaveSucceeded { RequestId = requestId });
 			  if (optionalSaveCompletedCallback != null)
 				optionalSaveCompletedCallback();
 			},
@@ -1351,7 +1347,7 @@ And the **MessageApi**:
 		  // DataUpdated<IEnumerable<Tuple<int, MessageDetails>>>>
 		  var requestId = new RequestId();
 		  Window.SetTimeout(
-			() => _dispatcher.HandleServerAction(DataUpdated.For(requestId, _messages.ToArray().AsEnumerable())),
+			() => _dispatcher.Dispatch(DataUpdated.For(requestId, _messages.ToArray().AsEnumerable())),
 			1000 // Simulate a roundtrip to the server
 		  );
 		  return requestId;

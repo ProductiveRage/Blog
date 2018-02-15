@@ -223,24 +223,22 @@ So, maybe most properties should *have* to be specified in order to get a new **
 	  /// <summary>
 	  /// This is optional and so may be null (if non-null, then it will never be blank)
 	  /// </summary>
-	  public string ClassName { get; private set; }
+	  public string ClassName { get; }
 	  
-	  public bool Disabled { get; private set; }
+	  public bool Disabled { get; }
 	  
 	  /// <summary>
 	  /// An input may not always have a value and so this may be blank (but it should never
 	  /// be null)
 	  /// </summary>
-	  public string Content { get; private set; }
+	  public string Content { get; }
 	  
 	  /// <summary>
 	  /// This is mandatory and will never be null
 	  /// </summary>
-	  public Action<string> OnChange { get; private set; }
+	  public Action<string> OnChange { get; }
 	}
 	
-*(Note: Since Bridge does not yet support C# 6 syntax, the new readonly auto-property syntax can't be used, hence the use of "get; private set;").*
-
 Two nice benefits arise from this. Firstly, the comments may be tighted up - so "OnChange" is no longer described as
 
 > This is mandatory and should never be null
@@ -272,11 +270,7 @@ One final tweak to this sort of approach is to enable optional values to truly b
 
 to:
 
-	public Props(
-	  string content,
-	  bool disabled,
-	  Action<string> onChange,
-	  string className = "")
+	public Props(string content, bool disabled, Action<string> onChange, string className = "")
 	{
 	  if (content == null)
 	    throw new ArgumentNullException("content");
@@ -348,20 +342,20 @@ to:
 	  /// <summary>
 	  /// This is optional and so may be null (if non-null, then it will never be blank)
 	  /// </summary>
-	  public string ClassName { get; private set; }
+	  public string ClassName { get; }
 	  
-	  public bool Disabled { get; private set; }
+	  public bool Disabled { get; }
 	  
 	  /// <summary>
 	  /// An input may not always have a value and so this may be blank (but it should never
 	  /// be null)
 	  /// </summary>
-	  public string Content { get; private set; }
+	  public string Content { get; }
 	  
 	  /// <summary>
 	  /// This is mandatory and will never be null
 	  /// </summary>
-	  public Action<string> OnChange { get; private set; }
+	  public Action<string> OnChange { get; }
 	}
 
 While I am willing to make a certain trade-off between the cost of writing the code to begin with against the long term benefits of it being easier to quickly understand and then reason about\*, I don't want to have to write any more of this monotonous form of code than absolutely necessary - in particular, I think I would get bored of writing "This is mandatory and will never be null" over and over again on different properties on different classes\*\*.
@@ -380,21 +374,17 @@ If a class implements an empty interface **IAmImmutable** then it may access ext
 
 	public class Props : IAmImmutable
 	{
-	  public Props(
-	    string content,
-		bool disabled,
-		Action<string> onChange,
-		string className = "")
+	  public Props(string content, bool disabled, Action<string> onChange, string className = "")
 	  {
 	    this.CtorSet(_ => _.Content, content);
 	    this.CtorSet(_ => _.Disabled, disabled);
 	    this.CtorSet(_ => _.OnChange, onChange);
 	    this.CtorSet(_ => _.ClassName, className);
 	  }
-	  public string ClassName { get; private set; }
-	  public bool Disabled { get; private set; }
-	  public string Content { get; private set; }
-	  public Action<string> OnChange { get; private set; }
+	  public string ClassName { get; }
+	  public bool Disabled { get; }
+	  public string Content { get; }
+	  public Action<string> OnChange { get; }
 	}
 
 The extension method is "CtorSet" and it takes a lambda that specifies a property on the class and it takes a new value for that property. The type of the property and the type of the new value must be consistent - so, although there's apparently a little magic involved, we're not sacrificing any type safety.
@@ -416,10 +406,10 @@ This actually doesn't work for the **Props** class we're looking at here since w
 	    this.CtorSet(_ => _.OnChange, onChange);
 	    this.CtorSet(_ => _.ClassName, className);
 	  }
-	  public Optional<string> ClassName { get; private set; }
-	  public bool Disabled { get; private set; }
-	  public string Content { get; private set; }
-	  public Action<string> OnChange { get; private set; }
+	  public Optional<string> ClassName { get; }
+	  public bool Disabled { get; }
+	  public string Content { get; }
+	  public Action<string> OnChange { get; }
 	}
 	
 Once again, we've made a step forward to encoding additional information in the class itself. In terms of being able to more easily reason about the code, this is a great win - classes such as these will never have null values to worry about; any property that may or may not have a value will be of type **Optional&lt;T&gt;**, which has properties "IsDefined" (a boolean indicating whether or not it has a value) and "Value" (which is the value itself, so long as "IsDefined" is true).
@@ -494,7 +484,7 @@ One way to try to address this would be with *another* type -
 	  /// <summary>
 	  /// This will never be null, blank or have any leading or trailing whitespace
 	  /// </summary>
-	  public string Value { get; private set; }
+	  public string Value { get; }
 
 	  /// <summary>
 	  /// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
@@ -525,10 +515,10 @@ I said that I wasn't keen on writing out more of this type of "This will never b
 	    this.CtorSet(_ => _.OnChange, onChange);
 	    this.CtorSet(_ => _.ClassName, className);
 	  }
-	  public Optional<NonBlankTrimmedString> ClassName { get; private set; }
-	  public bool Disabled { get; private set; }
-	  public string Content { get; private set; }
-	  public Action<string> OnChange { get; private set; }
+	  public Optional<NonBlankTrimmedString> ClassName { get; }
+	  public bool Disabled { get; }
+	  public string Content { get; }
+	  public Action<string> OnChange { get; }
 	}
 	
 If you wanted to instantiate one then you would need to change the calling code slightly - eg.
@@ -625,10 +615,10 @@ My problem with this is that it's possible to call the constructor with a null "
 			this.CtorSet(_ => _.OnChange, onChange);
 			this.CtorSet(_ => _.ClassName, className);
 		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; private set; }
-		  public bool Disabled { get; private set; }
-		  public string Content { get; private set; }
-		  public Action<string> OnChange { get; private set; }
+		  public Optional<NonBlankTrimmedString> ClassName { get; }
+		  public bool Disabled { get; }
+		  public string Content { get; }
+		  public Action<string> OnChange { get; }
 		}
 	  }
 	}
@@ -700,8 +690,8 @@ It should be rewritten thusly:
 	      this.CtorSet(_ => _.Title, title);
 	      this.CtorSet(_ => _.Content, content);
 	    }
-	    public NonBlankTrimmedString Title { get; private set; }
-	    public NonBlankTrimmedString Content { get; private set; }
+	    public NonBlankTrimmedString Title { get; }
+	    public NonBlankTrimmedString Content { get; }
 	  }
 	}
 
@@ -863,10 +853,10 @@ The first thing I'm going to do is change the **Props** type and the component's
 			this.CtorSet(_ => _.OnChange, onChange);
 			this.CtorSet(_ => _.OnSave, onSave);
 		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; private set; }
-		  public MessageEditState Message { get; private set; }
-		  public Action<MessageEditState> OnChange { get; private set; }
-		  public Action OnSave { get; private set; }
+		  public Optional<NonBlankTrimmedString> ClassName { get; }
+		  public MessageEditState Message { get; }
+		  public Action<MessageEditState> OnChange { get; }
+		  public Action OnSave { get; }
 		}
 	  }
 	}
@@ -877,10 +867,10 @@ This means that the	**MessageEditor** instantiation code changes slightly from:
 	{
 	  ClassName = "message",
 	  Message = state.Message,
-	  OnChange = newState => props.Dispatcher.HandleViewAction(
+	  OnChange = newState => props.Dispatcher.Dispatch(
 		UserEditRequested.For(newState)
 	  ),
-	  OnSave = () => props.Dispatcher.HandleViewAction(
+	  OnSave = () => props.Dispatcher.Dispatch(
 		SaveRequested.For(
 		  new MessageDetails(
 			new NonBlankTrimmedString(state.Message.Title.Text),
@@ -895,10 +885,10 @@ to:
 	new MessageEditor(
 	  className: new NonBlankTrimmedString("message"),
 	  message:  state.Message,
-	  onChange: newState => props.Dispatcher.HandleViewAction(
+	  onChange: newState => props.Dispatcher.Dispatch(
 		UserEditRequested.For(newState)
 	  ),
-	  onSave: () => props.Dispatcher.HandleViewAction(
+	  onSave: () => props.Dispatcher.Dispatch(
 		SaveRequested.For(
 		  new MessageDetails(
 			new NonBlankTrimmedString(state.Message.Title.Text),
@@ -941,10 +931,10 @@ to:
 		  this.CtorSet(_ => _.Content, content);
 		  this.CtorSet(_ => _.IsSaveInProgress, isSaveInProgress);
 		}
-		public NonBlankTrimmedString Caption { get; private set; }
-		public TextEditState Title { get; private set; }
-		public TextEditState Content { get; private set; }
-		public bool IsSaveInProgress { get; private set; }
+		public NonBlankTrimmedString Caption { get; }
+		public TextEditState Title { get; }
+		public TextEditState Content { get; }
+		public bool IsSaveInProgress { get; }
 	  }
 	}
 
@@ -975,8 +965,8 @@ to:
 		  this.CtorSet(_ => _.Text, text);
 		  this.CtorSet(_ => _.ValidationError, validationError);
 		}
-		public string Text { get; private set; }
-		public Optional<NonBlankTrimmedString> ValidationError { get; private set; }
+		public string Text { get; }
+		public Optional<NonBlankTrimmedString> ValidationError { get; }
 	  }
 	}
 	
@@ -1035,11 +1025,11 @@ I'm going to change the **ValidatedTextInput** to
 			this.CtorSet(_ => _.OnChange, onChange);
 			this.CtorSet(_ => _.ValidationMessage, validationMessage);
 		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; private set; }
-		  public bool Disabled { get; private set; }
-		  public string Content { get; private set; }
-		  public Action<string> OnChange { get; private set; }
-		  public Optional<NonBlankTrimmedString> ValidationMessage { get; private set; }
+		  public Optional<NonBlankTrimmedString> ClassName { get; }
+		  public bool Disabled { get; }
+		  public string Content { get; }
+		  public Action<string> OnChange { get; }
+		  public Optional<NonBlankTrimmedString> ValidationMessage { get; }
 		}
 	  }
 	}
@@ -1225,10 +1215,10 @@ All of these changes combined mean that the **MessageEditor** component now beco
 			this.CtorSet(_ => _.OnChange, onChange);
 			this.CtorSet(_ => _.OnSave, onSave);
 		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; private set; }
-		  public MessageEditState Message { get; private set; }
-		  public Action<MessageEditState> OnChange { get; private set; }
-		  public Action OnSave { get; private set; }
+		  public Optional<NonBlankTrimmedString> ClassName { get; }
+		  public MessageEditState Message { get; }
+		  public Action<MessageEditState> OnChange { get; }
+		  public Action OnSave { get; }
 		}
 	  }
 	}
@@ -1290,9 +1280,7 @@ Despite this appearing very simple at first glance, there are various implicit a
 
 By this point, we've seen several examples of how to prevent "props" being null (ie. require that the props constructor arguments be passed as the component's constructor arguments) and we've seen how to better represent **Props** to allow "ClassName" to be optional but for "Messages" to not be ("ClassName" should be an **Optional&lt;NonBlankTrimmedString&gt;**). But there are two further tricks we can use for the **MessageHistory.Props**.
 
-Firstly, **IEnumerable** is too loose for my liking - technically, there are no guarantees that an **IEnumerable** will report the same information if enumerated multiple times and there are definitely no guarantees that it won't contain any null references. I want consistency and I want a life free from null. The [ProductiveRage.Immutable](https://www.nuget.org/packages/ProductiveRage.Immutable) library contains another handy class for this sort of thing; **Set&lt;T&gt;**. This is essentially an ordered list of items of type "T" that is immutable and that will never contain any null values. If you want a set of items that may or may not have values of type "T" then you need the list type to be **Set&lt;Optional&lt;T&gt;&gt;**.
-
-*(I will confess that this may not be the most-well-named of all classes, since some mathematical circles like a "Set" to be a group of unique items that are likely not ordered.. but I wanted a convenient short name and **List&lt;T&gt;** already has a well-understood definition - **NonNullImmutableList&lt;T&gt;** was in the running, but I ideally wanted something shorter).*
+Firstly, **IEnumerable** is too loose for my liking - technically, there are no guarantees that an **IEnumerable** will report the same information if enumerated multiple times and there are definitely no guarantees that it won't contain any null references. I want consistency and I want a life free from null. The [ProductiveRage.Immutable](https://www.nuget.org/packages/ProductiveRage.Immutable) library contains another handy class for this sort of thing; **NonNullList&lt;T&gt;**. This is essentially an ordered list of items of type "T" that is immutable and that will never contain any null values. If you want a set of items that may or may not have values of type "T" then you need the list type to be **NonNullList&lt;Optional&lt;T&gt;&gt;**.
 
 The second tweak that I want to make is to replace the **Tuple&lt;int, MessageDetails&gt;** - in part, again, because there is no guarantee that the second item in the pair will not be null but also because I don't like the "Item1" and "Item2" property names. I think it's just one more thing to mentally translate ("Oh yes, Item1 means Key and Item2 means Message"). So I'm going to extend the type system again.
 
@@ -1313,8 +1301,8 @@ So, instead of the **MessageHistory** using the generic **Tuple** class to repre
 		  this.CtorSet(_ => _.Key, key);
 		  this.CtorSet(_ => _.Value, value);
 		}
-		public TKey Key { get; private set; }
-		public TValue Value { get; private set; }
+		public TKey Key { get; }
+		public TValue Value { get; }
 	  }
 	  
 	  public static class Saved
@@ -1339,7 +1327,7 @@ I'm *still* not happy, though. I think that **Saved&lt;int, MessageDetails&gt;**
 	{
 	  public struct MessageId
 	  {
-		public int Value { get; private set; }
+		public int Value { get; }
 
 		public static explicit operator MessageId(int value)
 		{
@@ -1353,7 +1341,7 @@ I'm *still* not happy, though. I think that **Saved&lt;int, MessageDetails&gt;**
 	  }
 	}
 
-This is the final step in the move away from **IEnumerable&lt;Tuple&lt;int, MessageDetails&gt;&gt;**, we will now represent this data with the type **Set&lt;Saved&lt;MessageId, MessageDetails&gt;&gt;**. This set will never contain any null "Saved" instances and a "Saved" instance will never contain a null message. This set of messages will never vary, which is another way that React's "consider props to be immutable" guidelines is described and enforced in the type system.
+This is the final step in the move away from **IEnumerable&lt;Tuple&lt;int, MessageDetails&gt;&gt;**, we will now represent this data with the type **NonNullList&lt;Saved&lt;MessageId, MessageDetails&gt;&gt;**. This list will never contain any null "Saved" instances and a "Saved" instance will never contain a null message. This list of messages will never vary, which is another way that React's "consider props to be immutable" guidelines is described and enforced in the type system.
 
 Not only do I believe that having strongly-typed IDs makes the code clearer in cases like this but it can also avoid silly mistakes that have a nasty tendency to crop up from time to time - if you're writing code and having a bad day, then it's easy to accidentally pass the wrong ID around. For example, if I have a function:
 
@@ -1384,7 +1372,7 @@ These changes lead the **MessageHistory** component's code to now look like this
 	  public class MessageHistory : StatelessComponent<MessageHistory.Props>
 	  {
 		public MessageHistory(
-		  Set<Saved<MessageId, MessageDetails>> messages,
+		  NonNullList<Saved<MessageId, MessageDetails>> messages,
 		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
 		  : base(new Props(className, messages)) { }
 
@@ -1419,13 +1407,13 @@ These changes lead the **MessageHistory** component's code to now look like this
 		{
 		  public Props(
 			Optional<NonBlankTrimmedString> className,
-			Set<Saved<MessageId, MessageDetails>> messages)
+			NonNullList<Saved<MessageId, MessageDetails>> messages)
 		  {
 			this.CtorSet(_ => _.ClassName, className);
 			this.CtorSet(_ => _.Messages, messages);
 		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; private set; }
-		  public Set<Saved<MessageId, MessageDetails>> Messages { get; private set; }
+		  public Optional<NonBlankTrimmedString> ClassName { get; }
+		  public NonNullList<Saved<MessageId, MessageDetails>> Messages { get; }
 		}
 	  }
 	}
@@ -1490,10 +1478,10 @@ Let's start with the **AppContainer**. Last we saw it, it looked like this:
 			new MessageEditor(
 			  className: new NonBlankTrimmedString("message"),
 			  message:  state.Message,
-			  onChange: newState => props.Dispatcher.HandleViewAction(
+			  onChange: newState => props.Dispatcher.Dispatch(
 				UserEditRequested.For(newState)
 			  ),
-			  onSave: () => props.Dispatcher.HandleViewAction(
+			  onSave: () => props.Dispatcher.Dispatch(
 				SaveRequested.For(
 				  new MessageDetails(
 					new NonBlankTrimmedString(state.Message.Title.Text),
@@ -1571,10 +1559,10 @@ These changes result in this:
 			new MessageEditor(
 			  className: new NonBlankTrimmedString("message"),
 			  message:  state.Value.Message,
-			  onChange: newState => props.Dispatcher.HandleViewAction(
+			  onChange: newState => props.Dispatcher.Dispatch(
 				UserEditRequested.For(newState)
 			  ),
-			  onSave: () => props.Dispatcher.HandleViewAction(
+			  onSave: () => props.Dispatcher.Dispatch(
 				SaveRequested.For(
 				  new MessageDetails(
 					new NonBlankTrimmedString(state.Value.Message.Title.Text),
@@ -1597,21 +1585,21 @@ These changes result in this:
 			this.CtorSet(_ => _.Dispatcher, dispatcher);
 			this.CtorSet(_ => _.Store, store);
 		  }
-		  public AppDispatcher Dispatcher { get; private set; }
-		  public MessageWriterStore Store { get; private set; }
+		  public AppDispatcher Dispatcher { get; }
+		  public MessageWriterStore Store { get; }
 		}
 
 		public class State : IAmImmutable
 		{
 		  public State(
 		    MessageEditState message,
-			Set<Saved<MessageId, MessageDetails>> messageHistory)
+			NonNullList<Saved<MessageId, MessageDetails>> messageHistory)
 		  {
 			this.CtorSet(_ => _.Message, message);
 			this.CtorSet(_ => _.MessageHistory, messageHistory);
 		  }
-		  public MessageEditState Message { get; private set; }
-		  public Set<Saved<MessageId, MessageDetails>> MessageHistory { get; private set; }
+		  public MessageEditState Message { get; }
+		  public NonNullList<Saved<MessageId, MessageDetails>> MessageHistory { get; }
 		}
 	  }
 	}
@@ -1642,43 +1630,41 @@ At the bare minimum, it will need some changes since it was written when the **M
 		  Message = GetInitialMessageEditState();
 		  MessageHistory = new Tuple<int, MessageDetails>[0];
 
-		  dispatcher.Register(message =>
-		  {
-			message
-			  .If<StoreInitialised>(
-				condition: action => (action.Store == this),
-				work: action => { }
-			  )
-			  .Else<MessageEditStateChanged>(action =>
-			  {
-				Message = action.NewState;
-				ValidateMessage(Message);
-			  })
-			  .Else<MessageSaveRequested>(action =>
-			  {
-				_saveActionRequestId = messageApi.SaveMessage(action.Message);
-				Message.IsSaveInProgress = true;
-			  })
-			  .Else<MessageSaveSucceeded>(
-				condition: action => (action.RequestId == _saveActionRequestId),
-				work: action =>
-				{
-				  _saveActionRequestId = null;
-				  Message = GetInitialMessageEditState();
-				  _lastDataUpdatedRequestId = messageApi.GetMessages();
-				}
-			  )
-			  .Else<MessageHistoryUpdated>(
-				condition: action =>
-				  action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
-				work: action =>
-				{
-				  _lastDataUpdatedRequestId = action.RequestId;
-				  MessageHistory = action.Messages;
-				}
-			  )
-			  .IfAnyMatched(OnChange);
-		  });
+          dispatcher.Receive(a => a
+            .If<StoreInitialised>(
+              condition: action => (action.Store == this),
+              work: action => { }
+            )
+            .Else<MessageEditStateChanged>(action =>
+            {
+              Message = action.NewState;
+              ValidateMessage(Message);
+            })
+            .Else<MessageSaveRequested>(action =>
+            {
+              _saveActionRequestId = messageApi.SaveMessage(action.Message);
+              Message.IsSaveInProgress = true;
+            })
+            .Else<MessageSaveSucceeded>(
+              condition: action => (action.RequestId == _saveActionRequestId),
+              work: action =>
+              {
+                _saveActionRequestId = null;
+                Message = GetInitialMessageEditState();
+                _lastDataUpdatedRequestId = messageApi.GetMessages();
+              }
+            )
+            .Else<MessageHistoryUpdated>(
+              condition: action =>
+                action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
+              work: action =>
+              {
+                _lastDataUpdatedRequestId = action.RequestId;
+                MessageHistory = action.Messages;
+              }
+            )
+            .IfAnyMatched(OnChange);
+          );
 		}
 
 		public event Action Change;
@@ -2003,48 +1989,46 @@ It seems, in general, that people write methods as instance methods by default a
 			throw new ArgumentNullException("dispatcher");
 
 		  Message = GetInitialMessageEditState();
-		  MessageHistory = Set<Saved<MessageId, MessageDetails>>.Empty;
+		  MessageHistory = NonNullList<Saved<MessageId, MessageDetails>>.Empty;
 
-		  dispatcher.Register(message =>
-		  {
-			message
-			  .If<StoreInitialised>(
-				condition: action => (action.Store == this),
-				work: action => { }
-			  )
-			  .Else<UserEditRequested<MessageEditState>>(action =>
-			    Message = ValidateMessage(action.NewState)
-			  )
-			  .Else<SaveRequested<MessageDetails>>(action =>
-			  {
-				_saveActionRequestId = messageApi.SaveMessage(action.Data);
-				Message = Message.With(_ => _.IsSaveInProgress, true);
-			  })
-			  .Else<SaveSucceeded>(
-				condition: action => (action.RequestId == _saveActionRequestId),
-				work: action =>
-				{
-				  _saveActionRequestId = null;
-				  Message = GetInitialMessageEditState();
-				  _lastDataUpdatedRequestId = messageApi.GetMessages();
-				}
-			  )
-			  .Else<DataUpdated<Set<Saved<MessageId, MessageDetails>>>>(
-				condition:
-				  action => action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
-				work: action =>
-				{
-				  _lastDataUpdatedRequestId = action.RequestId;
-				  MessageHistory = action.Data;
-				}
-			  )
-			  .IfAnyMatched(() => { if (Change != null) Change(); });
-		  });
-		}
+          dispatcher.Receive(a => a
+            .If<StoreInitialised>(
+              condition: action => (action.Store == this),
+              work: action => { }
+            )
+            .Else<UserEditRequested<MessageEditState>>(action =>
+              Message = ValidateMessage(action.NewState)
+            )
+            .Else<SaveRequested<MessageDetails>>(action =>
+            {
+              _saveActionRequestId = messageApi.SaveMessage(action.Data);
+              Message = Message.With(_ => _.IsSaveInProgress, true);
+            })
+            .Else<SaveSucceeded>(
+              condition: action => (action.RequestId == _saveActionRequestId),
+              work: action =>
+              {
+                _saveActionRequestId = null;
+                Message = GetInitialMessageEditState();
+                _lastDataUpdatedRequestId = messageApi.GetMessages();
+              }
+            )
+            .Else<DataUpdated<NonNullList<Saved<MessageId, MessageDetails>>>>(
+              condition:
+                action => action.RequestId.IsEqualToOrComesAfter(_lastDataUpdatedRequestId),
+              work: action =>
+              {
+                _lastDataUpdatedRequestId = action.RequestId;
+                MessageHistory = action.Data;
+              }
+            )
+            .IfAnyMatched(() => { if (Change != null) Change(); })
+          );
+        }
 
 		public event Action Change;
 		public MessageEditState Message { get; private set; }
-		public Set<Saved<MessageId, MessageDetails>> MessageHistory { get; private set; }
+		public NonNullList<Saved<MessageId, MessageDetails>> MessageHistory { get; private set; }
 
 		private readonly static NonBlankTrimmedString _defaultCaption
 		  = new NonBlankTrimmedString("Untitled");
@@ -2145,7 +2129,7 @@ Note that, since the **RequestId** values are now **Optional&lt;RequestId&gt;** 
 
 There's been a lot of theory covered so far. To really put it into practice, though, we need to fix the rest of the compile errors in the example application.
 
-Changing the **MessageEditor**, **MessageHistory**, **AppContainer** and **MessageWriteStore** to use the new immutable types (the now-immutable **MessageDetails** and the **Set** type from [ProductiveRage.Immutable](https://www.nuget.org/packages/ProductiveRage.Immutable)) require further changes to the **MessageApi** and the **App** file that initialises the application.
+Changing the **MessageEditor**, **MessageHistory**, **AppContainer** and **MessageWriteStore** to use the new immutable types (the now-immutable **MessageDetails** and the **NonNullList** type from [ProductiveRage.Immutable](https://www.nuget.org/packages/ProductiveRage.Immutable)) require further changes to the **MessageApi** and the **App** file that initialises the application.
 
 And, while we're making everything immutable, let's change the action classes. Currently, we have actions such as:
 
@@ -2183,8 +2167,8 @@ This should be:
 		  this.CtorSet(_ => _.RequestId, requestId);
 		  this.CtorSet(_ => _.Data, data);
 		}
-		public RequestId RequestId { get; private set; }
-		public T Data { get; private set; }
+		public RequestId RequestId { get; }
+		public T Data { get; }
 	  }
 	  public static class DataUpdated
 	  {
@@ -2208,7 +2192,7 @@ The others require similar changes -
 		{
 		  this.CtorSet(_ => _.Data, data);
 		}
-		public T Data { get; private set; }
+		public T Data { get; }
 	  }
 	  public static class SaveRequested
 	  {
@@ -2231,7 +2215,7 @@ The others require similar changes -
 		{
 		  this.CtorSet(_ => _.RequestId, requestId);
 		}
-		public RequestId RequestId { get; private set; }
+		public RequestId RequestId { get; }
 	  }
 	}
 
@@ -2246,7 +2230,7 @@ The others require similar changes -
 		{
 		  this.CtorSet(_ => _.Store, store);
 		}
-		public object Store { get; private set; }
+		public object Store { get; }
 	  }
 	}
 
@@ -2262,7 +2246,7 @@ The others require similar changes -
 		{
 		  this.CtorSet(_ => _.NewState, newState);
 		}
-		public T NewState { get; private set; }
+		public T NewState { get; }
 	  }
 	  public static class UserEditRequested
 	  {
@@ -2307,7 +2291,7 @@ The **App** class requires only minor tweaks, from:
 			}),
 			container
 		  );
-		  dispatcher.HandleViewAction(new StoreInitialised { Store = store });
+		  dispatcher.Dispatch(new StoreInitialised { Store = store });
 		}
 	  }
 	}
@@ -2342,7 +2326,7 @@ to:
 			new AppContainer(dispatcher, store),
 			container
 		  );
-		  dispatcher.HandleViewAction(new StoreInitialised(store));
+		  dispatcher.Dispatch(new StoreInitialised(store));
 		}
 	  }
 	}
@@ -2362,14 +2346,14 @@ Finally, the **MessageApi** needs various alterations to deal with the fact that
 	  public class MessageApi : IReadAndWriteMessages
 	  {
 		private readonly AppDispatcher _dispatcher;
-		private Set<Saved<MessageId, MessageDetails>> _messages;
+		private NonNullList<Saved<MessageId, MessageDetails>> _messages;
 		public MessageApi(AppDispatcher dispatcher)
 		{
 		  if (dispatcher == null)
 			throw new ArgumentException("dispatcher");
 
 		  _dispatcher = dispatcher;
-		  _messages = Set<Saved<MessageId, MessageDetails>>.Empty;
+		  _messages = NonNullList<Saved<MessageId, MessageDetails>>.Empty;
 
 		  // To further mimic a server-based API (where other people may be recording messages
 		  // of their own), after a 10s delay a periodic task will be executed to retrieve a
@@ -2400,7 +2384,7 @@ Finally, the **MessageApi** needs various alterations to deal with the fact that
 				(MessageId)(int)_messages.Count,
 				message
 			  ));
-			  _dispatcher.HandleServerAction(new SaveSucceeded(requestId));
+			  _dispatcher.Dispatch(new SaveSucceeded(requestId));
 			  if (optionalSaveCompletedCallback != null)
 				optionalSaveCompletedCallback();
 			},
@@ -2413,7 +2397,7 @@ Finally, the **MessageApi** needs various alterations to deal with the fact that
 		{
 		  var requestId = new RequestId();
 		  Window.SetTimeout(
-			() => _dispatcher.HandleServerAction(DataUpdated.For(requestId, _messages)),
+			() => _dispatcher.Dispatch(DataUpdated.For(requestId, _messages)),
 			1000 // Simulate a roundtrip to the server
 		  );
 		  return requestId;
@@ -2499,7 +2483,7 @@ One pleasant change was the removal of code that was previously in the **Message
 	// is updated (which sounds convenient but it's not the behaviour that would be
 	// exhibited if this was really persisting messages to a server somewhere)
 	
-Since the message set is described by an immutable structure, there is no way that a particular reference's data could change. There is no way that a component could have a reference to this data type and then find that the data in that reference had changed by the time that an event bubbled up to that component from one of its child components. Similarly, when the **MessageApi** passes its message history data out, there is no action that may be performed by any code that receives the message history reference that could "pollute" the data that the **MessageApi** stores internally.
+Since the message list is described by an immutable structure, there is no way that a particular reference's data could change. There is no way that a component could have a reference to this data type and then find that the data in that reference had changed by the time that an event bubbled up to that component from one of its child components. Similarly, when the **MessageApi** passes its message history data out, there is no action that may be performed by any code that receives the message history reference that could "pollute" the data that the **MessageApi** stores internally.
 
 Previously, when the **MessageApi** wanted to share its message history data, we had two options - we could hope that the mutable list of mutable **MessageDetails** would never be manipulated when it was passed out from the **MessageApi** or we could try to make it impossible for other code to pollute the **MessageApi**'s copy of the data, which is what the "ToArray" call went some way towards (note that this wouldn't have saved us from code that received the mutable message history and then changed one of the fields on any of the individual mutable **MessageDetails** instances - this *would* have polluted to **MessageApi**'s internal data).
 
@@ -2537,7 +2521,7 @@ If we were using mutable structures to represent the data that the React compone
 
 Another option would be to try to have components make use of React's "[shouldComponentUpdate](https://facebook.github.io/react/docs/component-specs.html#updating-shouldcomponentupdate)" method. This is a method that may optionally be implemented on components, that is called before a component's "Render" method is called, so long as that component has been rendered at least once before. It will be given two "props" values - one is the props data from the last render and the second is the new props data that has been specified for the re-render. If this method returns true then the component is re-rendered (to the Virtual DOM) as normal. If it returns false then the component's "Render" method is *not* called. This would mean that none of its child components would be re-rendered either, since those re-renders are only triggered by code in their parent's component's "Render" method. If it was possible for the **MessageHistory** to look at its last props and its next props and see that they describe the same data, then the entire re-render work could be avoided. The problem comes in working that out, though - for the cases where the old and new messages data *was* the same and when we had an **IEnumerable** set of mutable **MessageDetails** instances, we would have had to have enumerated through every value in the set and compared the "Title" and "Content" values on each message. If they all matched then the old and new data would have been proven to have been the same and the re-render would not be required. But was all that comparison work really much cheaper than just letting the Virtual DOM do its magic?
 
-One of the good thing about immutable structures is that data can safely be shared and reused. Now that the **MessageHistory** component takes an immutable **Set** of immutable **MessageDetails** instances, if the data hasn't changed then the same **Set&lt;Saved&lt;MessageId, MessageDetails&gt;&gt;** reference will be passed to the **MessageHistory.Props** instance - but if the data *has* changed then, by necessity, a new **Set&lt;Saved&lt;MessageId, MessageDetails&gt;&gt;** reference will be provided. This would make a "shouldComponentUpdate" implementation very simple - just look at each property on the old and new props references and use reference equality comparisons to see if anything's changed.
+One of the good thing about immutable structures is that data can safely be shared and reused. Now that the **MessageHistory** component takes an immutable **NonNullList** of immutable **MessageDetails** instances, if the data hasn't changed then the same **NonNullList&lt;Saved&lt;MessageId, MessageDetails&gt;&gt;** reference will be passed to the **MessageHistory.Props** instance - but if the data *has* changed then, by necessity, a new **NonNullList&lt;Saved&lt;MessageId, MessageDetails&gt;&gt;** reference will be provided. This would make a "shouldComponentUpdate" implementation very simple - just look at each property on the old and new props references and use reference equality comparisons to see if anything's changed.
 
 The bad news is that the **StatelessComponent** base class in the Bridge / React bindings doesn't support "shouldComponentUpdate". So you can't try to take advantage of it to reduce the work that the Virtual DOM does - only the **Component** (which is the full stateful component) base class supports it. The good news is that you don't need to implement it manually. If you're creating stateless components whose props classes have properties that are all primitive values (such as bool, int, string, etc..) and / or immutable types and / or functions\* and if the components genuinely render *entirely* according to the props data (no accessing DateTime.Now, for example) then you can derive from the **PureComponent** base class instead. This automatically implements "shouldComponentUpdate" behind the scenes.
 
@@ -2563,7 +2547,7 @@ Now, change the base class of the **MessageHistory** from **StatelessComponent&l
 	  public class MessageHistory : StatelessComponent<MessageHistory.Props>
 	  {
 		public MessageHistory(
-		  Set<Saved<MessageId, MessageDetails>> messages,
+		  NonNullList<Saved<MessageId, MessageDetails>> messages,
 		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
 		  : base(new Props(className, messages)) { }
 
@@ -2601,13 +2585,13 @@ Now, change the base class of the **MessageHistory** from **StatelessComponent&l
 		{
 		  public Props(
 			Optional<NonBlankTrimmedString> className,
-			Set<Saved<MessageId, MessageDetails>> messages)
+			NonNullList<Saved<MessageId, MessageDetails>> messages)
 		  {
 			this.CtorSet(_ => _.ClassName, className);
 			this.CtorSet(_ => _.Messages, messages);
 		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; private set; }
-		  public Set<Saved<MessageId, MessageDetails>> Messages { get; private set; }
+		  public Optional<NonBlankTrimmedString> ClassName { get; }
+		  public NonNullList<Saved<MessageId, MessageDetails>> Messages { get; }
 		}
 	  }
 	}
@@ -2708,10 +2692,10 @@ Maybe it's worth examining the **MessageEditor** code again to try to make this 
 			this.CtorSet(_ => _.OnChange, onChange);
 			this.CtorSet(_ => _.OnSave, onSave);
 		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; private set; }
-		  public MessageEditState Message { get; private set; }
-		  public Action<MessageEditState> OnChange { get; private set; }
-		  public Action OnSave { get; private set; }
+		  public Optional<NonBlankTrimmedString> ClassName { get; }
+		  public MessageEditState Message { get; }
+		  public Action<MessageEditState> OnChange { get; }
+		  public Action OnSave { get; }
 		}
 	  }
 	}
@@ -2825,7 +2809,7 @@ An alternative is to implement an "Equals" override for the **NonBlankTrimmedStr
 		/// <summary>
 		/// This will never be null, blank or have any leading or trailing whitespace
 		/// </summary>
-		public string Value { get; private set; }
+		public string Value { get; }
 
 		/// <summary>
 		/// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument

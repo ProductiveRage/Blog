@@ -158,7 +158,7 @@ The Bridge package also adds some README files and a bridge.json file (under the
 
 This will tell it create a single JavaScript file when translating, including the Bridge library content and the React bindings and JavaScript generated from code that you write. The name of the file that it generates is based upon the name of your project. I named mine "BridgeReactTutorial" and so the Bridge compiler will generate "BridgeReactTutorial.js" and "BridgeReactTutorial.min.js" files in the "Bridge/output" folder on each build of the project.
 
-Now change demo.html (which is another file that the Bridge NuGet package created, it will be in the Brige/www folder) to the following:
+Now create an empty html file in the project root called "demo.html" and paste in the following:
 
     <!DOCTYPE html>
     <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -172,7 +172,7 @@ Now change demo.html (which is another file that the Bridge NuGet package create
       <div id="main" class="loading">Loading..</div>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/react/0.14.7/react.js"></script>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/react/0.14.7/react-dom.js"></script>
-      <script src="../output/BridgeReactTutorial.js"></script>
+      <script src="Bridge/output/BridgeReactTutorial.js"></script>
     </body>
     </html>
 
@@ -939,15 +939,9 @@ Now, we'll need a way to render this information -
 			  DOM.Span(new Attributes { ClassName = "content" }, idAndMessage.Item2.Content)
 			));
 
-		  // When child components are specified (as they are through the second argument of
-		  // DOM.Div), the argument is of type Any<ReactElement, string>[] (meaning that each
-		  // element may be another component or it may be a simple text value)
-		  // - The React  bindings have an extension method that transforms an IEnumerable
-		  //   set of components (such as "messageElements" above) into an
-		  //   Any<ReactElement, string>[]
 		  return DOM.FieldSet(new FieldSetAttributes { ClassName = className },
 			DOM.Legend(null, "Message History"),
-			DOM.Div(null, messageElements.ToChildComponentArray())
+			DOM.Div(null, messageElements)
 		  );
 		}
 
