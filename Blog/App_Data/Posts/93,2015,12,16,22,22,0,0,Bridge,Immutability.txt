@@ -382,23 +382,23 @@ However, this is often unnecessary due to **Optional**'s implicit operator from 
 	// The rely-on-Optional's-implicit-operator way
 	DoSomething("Hello!");
 	
-There is also an immutable collection type; the **Set&lt;T&gt;**. This has a very basic interface -
+There is also an immutable collection type; the **NonNullList&lt;T&gt;**. This has a very basic interface -
 
-    public sealed class Set<T> : IEnumerable<T>
+    public sealed class NonNullList<T> : IEnumerable<T>
     {
-	  public static Set<T> Empty { get; }
+	  public static NonNullList<T> Empty { get; }
 
       public int Count { get; }
       public T this[int index] { get; }
-      public Set<T> SetValue(int index, T value);
-      public Set<T> Insert(T item);
+      public NonNullList<T> SetValue(int index, T value);
+      public NonNullList<T> Insert(T item);
     }
 	
 .. and it comes with a similar convenience static function -
 
-    public static class Set
+    public static class NonNullList
     {
-        public static Set<T> Of<T>(params T[] values);
+        public static NonNullList<T> Of<T>(params T[] values);
     }
 
 The reason for this type is that it's so common to need collections of values but there is nothing immediately available in Bridge that allows me to do this while maintaining guarantees about non-null values and immutability.
@@ -408,19 +408,19 @@ I thought about using the [Facebook Immutable-Js](https://facebook.github.io/imm
 1. It's a further dependency
 1. I *really* wanted to continue the do-not-allow-null philosophy that I use with "CtorSet" and "With"
 
-I actually considered calling the "**Set**" type the "**NonNullImmutableList**" but "NonNull" felt redundant when I was trying to encourage non-null-by-default and "Immutable" felt redundant since immutability is what this library is for. So that left my with **List&lt;T&gt;** and that's already used! So I went with simply **Set&lt;T&gt;**.
+I actually considered calling the "**NonNullList**" type the "**NonNullImmutableList**" but "NonNull" felt redundant when I was trying to encourage non-null-by-default and "Immutable" felt redundant since immutability is what this library is for. So that left my with **List&lt;T&gt;** and that's already used! So I went with simply **NonNullList&lt;T&gt;**.
 
 Immutable lists like this are commonly written using linked lists since, if the nodes are immutable, then sections of the list can often be shared between multiple lists - so, if you have a list with three items in it and you call "Insert" to create a new list with four items that has the new item as the new first first item in the linked list then the following three items will be the same three node instances that existed in the original list. This reuse of data is a way to make immutable types more efficient than the naive copy-the-entire-list-and-then-manipulate-the-new-version approach would be. I'm 99% sure that this is what the Facebook library uses for the simple list type and it's something I wrote about doing in C# a few years ago if you want to read more (see "[Persistent Immutable Lists](Post38)").
 
-The reason that I mention this is to try to explain why the **Set** interface is so minimal - there are no Add, InsertAt, etc.. functions. The cheapest operations to do to this structure are to add a new item at the start of the list and to iterate through the items from the start, so I started off with only those facilities initially. Then I added a getter (which is an O(n) operation, rather than the O(1) that you get with a standard array) and a setter (which is similarly O(n) in cost, compared to O(1) for an array) because they are useful in many situations. In the future I might expand this class to include more List-like functions, but I haven't for now.
+The reason that I mention this is to try to explain why the **NonNullList** interface is so minimal - there are no Add, InsertAt, etc.. functions. The cheapest operations to do to this structure are to add a new item at the start of the list and to iterate through the items from the start, so I started off with only those facilities initially. Then I added a getter (which is an O(n) operation, rather than the O(1) that you get with a standard array) and a setter (which is similarly O(n) in cost, compared to O(1) for an array) because they are useful in many situations. In the future I might expand this class to include more List-like functions, but I haven't for now.
 
-Just to make this point clear one more time: **Set&lt;T&gt;** functions will throw exceptions if null values are ever specified - all values should be non-null and the type of "T" should be an **Optional** if null values *are* required (in which case none of the actual elements of the set will be null since they will all be **Optional** instances and **Optional** is a struct).
+Just to make this point clear one more time: **NonNullList&lt;T&gt;** functions will throw exceptions if null values are ever specified - all values should be non-null and the type of "T" should be an **Optional** if null values *are* required (in which case none of the actual elements of the set will be null since they will all be **Optional** instances and **Optional** is a struct).
 
 To make it easier to work with properties that are collections of items, there is another "With" method signature:
 
 	public T With<T, TPropertyElement>(
 	  this T source,
-	  Func<T, Set<TPropertyElement>> propertyIdentifier,
+	  Func<T, NonNullList<TPropertyElement>> propertyIdentifier,
 	  int index,
 	  TPropertyElement value)
 
@@ -428,24 +428,24 @@ So, if you had a class like this -
 
     public class Something : IAmImmutable
     {
-      public Something(int id, Set<string> items)
+      public Something(int id, NonNullList<string> items)
       {
         this.CtorSet(_ => _.Id, id);
         this.CtorSet(_ => _.Items, items);
       }
       public int Id { get; private set; }
-      public Set<string> Items { get; private set; }
+      public NonNullList<string> Items { get; private set; }
     }
 	
 .. and an instance of one created with:
 
-    var s = new Something(1, Set.Of("ZERO", "One"));
+    var s = new Something(1, NonNullList.Of("ZERO", "One"));
 
 .. and you then wanted to change the casing of that second item, then you could do so with:
 
     s = s.With(_ => _.Items, 1, "ONE");
 	
-If you specified an invalid index then it would fail at runtime, as it would if you tried to pass a null value. If you tried to specify a value that was of an incompatible type then you would get a compile error as the method signature ensures that the specified value matches the **Set&lt;T&gt;**'s item type.
+If you specified an invalid index then it would fail at runtime, as it would if you tried to pass a null value. If you tried to specify a value that was of an incompatible type then you would get a compile error as the method signature ensures that the specified value matches the **NonNullList&lt;T&gt;**'s item type.
 
 ### Getting hold of the library
 

@@ -236,14 +236,14 @@ The next step would be to change the array type in the **MessageList.Props** typ
 	
 to
 
-    public Set<Tuple<int, MessageEditState>> IdsAndMessages;
+    public NonNullList<Tuple<int, MessageEditState>> IdsAndMessages;
 
-The **Set** class is also in the [ProductiveRage.Immutable](https://www.nuget.org/packages/ProductiveRage.Immutable) NuGet package. It's basically an immutable **IEnumerable** that may be used in Bridge.NET projects. A simple example of it in use is:
+The **NonNullList** class is also in the [ProductiveRage.Immutable](https://www.nuget.org/packages/ProductiveRage.Immutable) NuGet package. It's basically an immutable **IEnumerable** that may be used in Bridge.NET projects. A simple example of it in use is:
 
 	// Create a new set of values (the static "Of" method uses type inference to determine
-	// the type of "T" in the returned "Set<T>" - since 1, 2 and 3 are all ints, the
-	// "numbers" reference will be of type "Set<int>")
-	var numbers = Set.Of(1, 2, 3);
+	// the type of "T" in the returned "NonNullList<T>" - since 1, 2 and 3 are all ints, the
+	// "numbers" reference will be of type "NonNullList<int>")
+	var numbers = NonNullList.Of(1, 2, 3);
 	
 	// SetValue takes an index and a new value, so calling SetValue(2, 4) on a set
 	// containing 1, 2, 3 will return a new set containing the values 1, 2, 4
@@ -253,7 +253,7 @@ The **Set** class is also in the [ProductiveRage.Immutable](https://www.nuget.or
 	// changes, so the input reference is passed straight back out
 	numbers = numbers.SetValue(2, 4);
 
-As with **IAmImmutable** instances we get two big benefits - we can rely on reference equality comparisons more often, since the data with any given reference can never change, and references will be reused in many cases if operations are requested that would not actually change the data. (It's worth noting that the guarantees fall apart if any property on an **IAmImmutable** reference is a of a mutable type, similarly if a **Set** has elements that are a mutable type, or that have nested properties that are of a mutable type.. but so long as immutability is used "all the way down" then all will be well).
+As with **IAmImmutable** instances we get two big benefits - we can rely on reference equality comparisons more often, since the data with any given reference can never change, and references will be reused in many cases if operations are requested that would not actually change the data. (It's worth noting that the guarantees fall apart if any property on an **IAmImmutable** reference is a of a mutable type, similarly if a **NonNullList** has elements that are a mutable type, or that have nested properties that are of a mutable type.. but so long as immutability is used "all the way down" then all will be well).
 
 If this philosophy was followed, then suddenly the "ShouldComponentUpdate" implementation for the **MessageList** component would be very easy to write - just perform reference equality comparisons on the "IdsAndMessages" and "OnChange" values on the current props and on the nextProps. While solving the problem for the general case is very difficult, solving it when you introduce some constraints (such as the use of immutable and persistent data types) can be very easy!
 
@@ -430,7 +430,7 @@ It's also worth considering the fact that every allocation made in JavaScript is
 
 ### So it's an unequivocable success then??
 
-Well, until it transpired that the Bridge translator would be altered to convert these sorts of lambdas into named functions, I was going to say "this is good, but..". However, *with* that change in sight, I'm just going to say outright "yes, and I'm going to change all classes that derive from **StatelessComponent** in my projects to derive from **PureComponent**". This will work fine, so long as your props references are all immutable (meaning that they are immutable *all the way down* - you shouldn't have, say, a props property that is an immutable **Set** of references, but where those references have mutable properties).
+Well, until it transpired that the Bridge translator would be altered to convert these sorts of lambdas into named functions, I was going to say "this is good, but..". However, *with* that change in sight, I'm just going to say outright "yes, and I'm going to change all classes that derive from **StatelessComponent** in my projects to derive from **PureComponent**". This will work fine, so long as your props references are all immutable (meaning that they are immutable *all the way down* - you shouldn't have, say, a props property that is an immutable **NonNullList** of references, but where those references have mutable properties).
 
 And, if you're not using immutable props types - sort yourself out! While a component is being rendered (according to the [Facebook React Tutorial](https://facebook.github.io/react/docs/tutorial.html)):
 

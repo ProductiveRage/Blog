@@ -117,12 +117,12 @@ With that in mind, the code below should be easy to understand. For simplicity, 
 
 		public sealed class State : IAmImmutable
 		{
-			public State(Set<Saved<MessageEditState>> messages)
+			public State(NonNullList<Saved<MessageEditState>> messages)
 			{
 				this.CtorSet(_ => _.Messages, messages);
 			}
 
-			public Set<Saved<MessageEditState>> Messages { get; private set; }
+			public NonNullList<Saved<MessageEditState>> Messages { get; private set; }
 		}
 	}
 
@@ -160,11 +160,11 @@ With that in mind, the code below should be easy to understand. For simplicity, 
 		public bool IsAwesome { get; private set; }
 	}
 
-	public sealed class MessageTable : PureComponent<CommonProps<Set<Saved<MessageEditState>>>>
+	public sealed class MessageTable : PureComponent<CommonProps<NonNullList<Saved<MessageEditState>>>>
 	{
 		public MessageTable(
-			Set<Saved<MessageEditState>> state,
-			Action<Set<Saved<MessageEditState>>> onChange,
+			NonNullList<Saved<MessageEditState>> state,
+			Action<NonNullList<Saved<MessageEditState>>> onChange,
 			Optional<ClassName> className,
 			bool disabled)
 				: base(CommonProps.For(state, onChange, className, disabled)) { }
@@ -279,11 +279,11 @@ The Chrome dev tools allow you to zoom in on sections of the profiler results, s
 
 which requires **MessageTable** to be changed to:
 
-	public sealed class MessageTable : PureComponent<CommonProps<Set<Saved<MessageEditState>>>>
+	public sealed class MessageTable : PureComponent<CommonProps<NonNullList<Saved<MessageEditState>>>>
 	{
 		public MessageTable(
-			Set<Saved<MessageEditState>> state,
-			Action<Set<Saved<MessageEditState>>> onChange,
+			NonNullList<Saved<MessageEditState>> state,
+			Action<NonNullList<Saved<MessageEditState>>> onChange,
 			Optional<ClassName> className,
 			bool disabled)
 				: base(CommonProps.For(state, onChange, className, disabled)) { }
