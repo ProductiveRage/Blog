@@ -95,7 +95,7 @@ Now let's move on to the **MessageList** and **MessageRow** components, since th
           }));
         return DOM.Div(
 		  new Attributes { ClassName = "message-list" },
-		  messageRows.ToChildComponentArray()
+		  messageRows
 	    );
       }
 
