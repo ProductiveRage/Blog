@@ -472,29 +472,34 @@ I'm *still* not happy with this, though. I talked earlier about the ambiguity be
 
 One way to try to address this would be with *another* type -
 
-	public class NonBlankTrimmedString
+	using System;
+	
+	namespace BridgeReactTutorial.API
 	{
-	  public NonBlankTrimmedString(string value)
+	  public class NonBlankTrimmedString
 	  {
-	    if (string.IsNullOrWhiteSpace(value))
-	      throw new ArgumentException("Null, blank or whitespace-only value specified");
-	    Value = value.Trim();
-	  }
+	    public NonBlankTrimmedString(string value)
+	    {
+	      if (string.IsNullOrWhiteSpace(value))
+	        throw new ArgumentException("Null, blank or whitespace-only value specified");
+	      Value = value.Trim();
+	    }
 
-	  /// <summary>
-	  /// This will never be null, blank or have any leading or trailing whitespace
-	  /// </summary>
-	  public string Value { get; }
+	    /// <summary>
+	    /// This will never be null, blank or have any leading or trailing whitespace
+	    /// </summary>
+	    public string Value { get; }
 
-	  /// <summary>
-	  /// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
-	  /// that requires a string
-	  /// </summary>
-	  public static implicit operator string(NonBlankTrimmedString value)
-	  {
-	    if (value == null)
-	      throw new ArgumentNullException("value");
-	    return value.Value;
+	    /// <summary>
+	    /// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
+	    /// that requires a string
+	    /// </summary>
+	    public static implicit operator string(NonBlankTrimmedString value)
+	    {
+	      if (value == null)
+	        throw new ArgumentNullException("value");
+	      return value.Value;
+	    }
 	  }
 	}
 
@@ -1087,7 +1092,7 @@ and a further implicit operator adding to the **NonBlankTrimmedString** -
 		/// that requires a ReactElement-or-string, such as for the children array of the React
 		/// DOM component factories
 		/// </summary>
-		public static implicit operator Any<ReactElement, string>(NonBlankTrimmedString value)
+		public static implicit operator Union<ReactElement, string>(NonBlankTrimmedString value)
 		{
 			if (value == null)
 				throw new ArgumentNullException("value");
@@ -1258,13 +1263,13 @@ This is the **MessageHistory** component as it currently stands:
 		  ));
 
 		  // When child components are specified (as they are through the second argument of
-		  // DOM.Div), the argument is of type Any<ReactElement, string>[] (meaning that each
+		  // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
 		  // element may be another component or it may be a simple text value)
 		  // - The React bindings have an extension method that transforms an IEnumerable set
-		  //   of components (such as "messageElements") into an Any<ReactElement, string>[]
+		  //   of components (such as "messageElements") into an Union<ReactElement, string>[]
 		  return DOM.FieldSet(new FieldSetAttributes { ClassName = className },
 			DOM.Legend(null, "Message History"),
-			DOM.Div(null, messageElements.ToChildComponentArray())
+			DOM.Div(null, messageElements)
 		  );
 		}
 
@@ -1327,7 +1332,7 @@ I'm *still* not happy, though. I think that **Saved&lt;int, MessageDetails&gt;**
 	{
 	  public struct MessageId
 	  {
-		public int Value { get; }
+		public int Value { get; private set; }
 
 		public static explicit operator MessageId(int value)
 		{
@@ -1353,7 +1358,7 @@ then it's possible in the calling code to mix up the IDs if you're having a bad 
 
 If the IDs were strongly-typed, meaning that the method signature would be..
 
-    void RecordMessageAsHavingBeenReadBy3(MessageId messageId, UserId userId)
+    void RecordMessageAsHavingBeenReadBy(MessageId messageId, UserId userId)
 
 .. then that mishap would result in a compile error, rather than runtime confusion that may not get noticed immediately.
 
@@ -1392,14 +1397,14 @@ These changes lead the **MessageHistory** component's code to now look like this
 			));
 
 		  // When child components are specified (as they are through the second argument of
-		  // DOM.Div), the argument is of type Any<ReactElement, string>[] (meaning that each
+		  // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
 		  // element may be another component or it may be a simple text value)
 		  // - The React bindings have an extension method that transforms an IEnumerable set
-		  //   of components (such as "messageElements") into an Any<ReactElement, string>[]
+		  //   of components (such as "messageElements") into an Union<ReactElement, string>[]
 		  return DOM.FieldSet(
 		    new FieldSetAttributes { ClassName = className.ToStringIfDefined() },
 			DOM.Legend(null, "Message History"),
-			DOM.Div(null, messageElements.ToChildComponentArray())
+			DOM.Div(null, messageElements)
 		  );
 		}
 
@@ -2535,8 +2540,8 @@ Now, run the application in the browser and bring up the browser console in the 
 
 Now, change the base class of the **MessageHistory** from **StatelessComponent&lt;MessageHistory.Props&gt;** to **PureComponent&lt;MessageHistory.Props&gt;**. It will look like this:
 
+	using System;
 	using System.Linq;
-	using Bridge.Html5;
 	using Bridge.React;
 	using BridgeReactTutorial.API;
 	using BridgeReactTutorial.ViewModels;
@@ -2553,7 +2558,7 @@ Now, change the base class of the **MessageHistory** from **StatelessComponent&l
 
 		public override ReactElement Render()
 		{
-		  Bridge.Html5.Console.WriteLine("MessageHistory.Render");
+		  Console.WriteLine("MessageHistory.Render");
 
 		  var className = props.ClassName;
 		  if (!props.Messages.Any())
@@ -2570,14 +2575,14 @@ Now, change the base class of the **MessageHistory** from **StatelessComponent&l
 			));
 
 		  // When child components are specified (as they are through the second argument of
-		  // DOM.Div), the argument is of type Any<ReactElement, string>[] (meaning that each
+		  // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
 		  // element may be another component or it may be a simple text value)
 		  // - The React  bindings have an extension method that transforms an IEnumerable set
-		  //   of components (such as "messageElements") into an Any<ReactElement, string>[]
+		  //   of components (such as "messageElements") into an Union<ReactElement, string>[]
 		  return DOM.FieldSet(
 		    new FieldSetAttributes { ClassName = className.ToStringIfDefined() },
 			DOM.Legend(null, "Message History"),
-			DOM.Div(null, messageElements.ToChildComponentArray())
+			DOM.Div(null, messageElements)
 		  );
 		}
 
@@ -2827,7 +2832,7 @@ An alternative is to implement an "Equals" override for the **NonBlankTrimmedStr
 		/// that requires a ReactElement-or-string, such as for the children array of the React
 		/// DOM component factories
 		/// </summary>
-		public static implicit operator Any<ReactElement, string>(NonBlankTrimmedString value)
+		public static implicit operator Union<ReactElement, string>(NonBlankTrimmedString value)
 		{
 		  if (value == null)
 			throw new ArgumentNullException("value");
