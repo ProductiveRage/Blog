@@ -40,12 +40,12 @@ Instead of writing something like this:
       /// <summary>
       /// This will never be null
       /// </summary>
-      public PersonId Id { get; private set; }
+      public PersonId Id { get; }
       
       /// <summary>
       /// This will never be null
       /// </summary>
-      public NameDetails Name { get; private set; }
+      public NameDetails Name { get; }
       
 	  public EmployeeDetails WithId(PersonId id)
 	  {
@@ -66,8 +66,8 @@ Instead of writing something like this:
         this.CtorSet(_ => _.Id, id);
         this.CtorSet(_ => _.Name, name);
       }
-      public PersonId Id { get; private set; }
-      public NameDetails Name { get; private set; }
+      public PersonId Id { get; }
+      public NameDetails Name { get; }
     }
 
 The if-null-then-throw validation is encapsulated in the CtorSet call (since the library takes the view that no value should ever be null - it introduces an **Optional** struct so that you can identify properties that may be without a value). And it saves you from having to write "With" methods for the updates as **IAmImmutable** implementations may use the "With" extension method whenever you want to create a new instance with an altered property - eg.
@@ -76,7 +76,7 @@ The if-null-then-throw validation is encapsulated in the CtorSet call (since the
 
 The library can only work if certain conditions are met. For example, every property must have a getter and a setter - otherwise, the "CtorSet" extension method won't know how to actually set the value "under the hood" when populating the initial instance (nor would the "With" method know how to set the value on the new instance that it would create).
 
-If you forgot this and wrote the following (note that the "Name" property now has no setter) -
+If you forgot this and wrote the following (note the "DisplayNameLength" property that is now effectively a computed value and there would be no way for us to directly set it via a "With" call) -
 
     public sealed class EmployeeDetails : IAmImmutable
     {
@@ -85,8 +85,9 @@ If you forgot this and wrote the following (note that the "Name" property now ha
         this.CtorSet(_ => _.Id, id);
         this.CtorSet(_ => _.Name, name);
       }
-      public PersonId Id { get; private set; }
+      public PersonId Id { get; }
       public NameDetails Name { get; }
+	  public int DisplayNameLength { get { return Name.DisplayName.Length; } }
     }
 
 .. then you would see the following errors reported by Visual Studio (presuming you are using 2015 or later) -
