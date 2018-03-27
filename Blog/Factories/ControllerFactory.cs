@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Web.Mvc;
 using System.Web.Routing;
 using System.Web.SessionState;
@@ -69,6 +68,9 @@ namespace Blog.Factories
 
 		private bool IsLocalHost(RequestContext requestContext)
 		{
+#if !DEBUG
+			return false; // Return false so that the real analytics username is inserted into the content, for publishing to GitHub Pages
+#else
 			if (requestContext == null)
 				throw new ArgumentNullException("requestContext");
 
@@ -82,6 +84,7 @@ namespace Blog.Factories
 			if (url == null)
 				return false;
 			return url.Host.Equals("localhost", StringComparison.InvariantCultureIgnoreCase);
+#endif
 		}
 
 		public SessionStateBehavior GetControllerSessionBehavior(RequestContext requestContext, string controllerName)

@@ -171,6 +171,7 @@
     <Content Include="App_Data\Posts\109,2017,6,19,19,55,0,0.txt" />
     <Content Include="App_Data\Posts\11,2011,12,6,18,11,0,0.txt" />
     <Content Include="App_Data\Posts\110,2017,7,26,20,31,0,0,LINQ,Reflection,BenchmarkDotNet.txt" />
+    <Content Include="App_Data\Posts\111,2018,3,27,22,18,0,0,Machine Learning,F#.txt" />
     <Content Include="App_Data\Posts\12,2011,12,8,20,50,0,0,Mercurial.txt" />
     <Content Include="App_Data\Posts\13,2011,12,8,23,46,0,0,ASP.Net,MVC.txt" />
     <Content Include="App_Data\Posts\14,2011,12,9,0,25,0,0.txt" />
@@ -292,6 +293,7 @@
     <Content Include="Content\Images\Posts\Memory Blow Up - GC CPU.jpg" />
     <Content Include="Content\Images\Posts\Memory Blow Up - Gen 2 Heap.jpg" />
     <Content Include="Content\Images\Posts\NETStandard.png" />
+    <Content Include="Content\Images\Posts\NeuralNetwork.jpg" />
     <Content Include="Content\Images\Posts\ObjectInitializerExpression.png" />
     <Content Include="Content\Images\Posts\OccludedFace.jpg" />
     <Content Include="Content\Images\Posts\PerfMon.png" />
@@ -300,6 +302,9 @@
     <Content Include="Content\Images\Posts\ProductiveRageImmutableAnalyserError1.png" />
     <Content Include="Content\Images\Posts\ProfilingTheProcessor.png" />
     <Content Include="Content\Images\Posts\ReactTutorial2.png" />
+    <Content Include="Content\Images\Posts\SingleLayerPercepton-ManagerDecision-With-Bias.jpg" />
+    <Content Include="Content\Images\Posts\SingleLayerPercepton-ManagerDecision.jpg" />
+    <Content Include="Content\Images\Posts\SingleLayerPercepton.jpg" />
     <Content Include="Content\Images\Posts\SkinMask2.png" />
     <Content Include="Content\Images\Posts\SkinMask3.png" />
     <Content Include="Content\Images\Posts\SkinMaskGeneration-Hue.png" />
