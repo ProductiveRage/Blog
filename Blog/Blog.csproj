@@ -303,9 +303,9 @@
     <Content Include="Content\Images\Posts\ProductiveRageImmutableAnalyserError1.png" />
     <Content Include="Content\Images\Posts\ProfilingTheProcessor.png" />
     <Content Include="Content\Images\Posts\ReactTutorial2.png" />
-    <Content Include="Content\Images\Posts\SingleLayerPercepton-ManagerDecision-With-Bias.jpg" />
-    <Content Include="Content\Images\Posts\SingleLayerPercepton-ManagerDecision.jpg" />
-    <Content Include="Content\Images\Posts\SingleLayerPercepton.jpg" />
+    <Content Include="Content\Images\Posts\SingleLayerPerceptron-ManagerDecision-With-Bias.png" />
+    <Content Include="Content\Images\Posts\SingleLayerPerceptron-ManagerDecision.png" />
+    <Content Include="Content\Images\Posts\SingleLayerPerceptron.png" />
     <Content Include="Content\Images\Posts\SkinMask2.png" />
     <Content Include="Content\Images\Posts\SkinMask3.png" />
     <Content Include="Content\Images\Posts\SkinMaskGeneration-Hue.png" />
