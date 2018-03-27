@@ -86,5 +86,10 @@ namespace Blog.Models
 		/// individual posts with content of the pages that include those posts (such as the home page or monthly archives)
 		/// </summary>
 		public bool MarkPageAsFollowNoIndex { get { return true; } }
+
+		/// <summary>
+		/// This may be null if no Twitter meta data should be displayed
+		/// </summary>
+		public TwitterCardDetails OptionalTwitterCardDetails { get { return null; } }
 	}
 }

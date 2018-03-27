@@ -136,6 +136,7 @@
     <Compile Include="Helpers\Timing\StopwatchAttribute.cs" />
     <Compile Include="Misc\Constants.cs" />
     <Compile Include="Models\ArchiveMonthLink.cs" />
+    <Compile Include="Models\TwitterCardDetails.cs" />
     <Compile Include="Models\PostListDisplayOptions.cs" />
     <Compile Include="Models\PostRepositories\PostMatchDetails.cs" />
     <Compile Include="Models\PostWithRelatedPostStubs.cs" />

@@ -1,7 +1,7 @@
 ﻿@using System.Web.Script.Serialization;
 @model Blog.Models.ICommonSiteConfigModel
 @{
-    Layout = null;
+	Layout = null;
 }
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -9,7 +9,7 @@
 	<meta charset="utf-8" />
 	<title>Productive Rage - @ViewBag.Title</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#393939" />
+	<meta name="theme-color" content="#393939" />
 	<link rel="stylesheet" type="text/css" media="all" href="@Url.Content("~/Content/Styles.css")" />
 	<!--[if lt IE 9]>
 	<link rel="stylesheet" type="text/css" href="@Url.Content("~/Content/IEBefore9.css")" />
@@ -39,6 +39,14 @@
 			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
 		})();
 	</script>
+}
+@if ((Model != null) && (Model.OptionalTwitterCardDetails != null))
+{
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:site" content="@Model.OptionalTwitterCardDetails.UserName" />
+    <meta name="twitter:title" content="@Model.OptionalTwitterCardDetails.Title" />
+    <meta name="twitter:image" content="@Model.OptionalTwitterCardDetails.Image" />
+    <meta name="twitter:description" content="@Model.OptionalTwitterCardDetails.Description" />
 }
 </head>
 

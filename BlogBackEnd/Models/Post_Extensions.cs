@@ -55,5 +55,41 @@ namespace BlogBackEnd.Models
 
 			return content;
 		}
+
+		/// <summary>
+		/// Try to return plain text from the first paragraph element that exists in a Post's MarkdownContent. The length may optionally be limited (if the content
+		/// must be reduced to meet this requirement then ellipses characters will be appended to the end). If there is no paragraph element (as a direct child node
+		/// of the content) or if that paragraph is empty then this will return null, it will never return a blank string nor one with any leading or trailing
+		/// whitespace).
+		/// </summary>
+		public static string TryToGetFirstParagraphContentAsPlainText(this Post source, int maxLength = int.MaxValue)
+		{
+			if (source == null)
+				throw new ArgumentNullException("source");
+			if (maxLength < 3)
+				throw new ArgumentException("Maximum length must be AT LEAST 3 because we'll add two '..' characters to any string that is trimmed, which would leave only a single character from the input!");
+
+			var doc = new HtmlDocument();
+			doc.LoadHtml(
+				(new Markdown()).Transform(source.MarkdownContent)
+			);
+			var firstParagraph = doc.DocumentNode.ChildNodes.FindFirst("p");
+			if (firstParagraph == null)
+				return null;
+
+			var text = (firstParagraph.InnerText ?? "").Trim();
+			if (text == "")
+				return null;
+
+			if (text.Length < maxLength)
+				return text;
+
+			var whiteSpaceBreak = text.LastIndexOfAny(_allWhitespaceCharacters, startIndex: maxLength - 2);
+			if (whiteSpaceBreak != -1)
+				return text.Substring(0, whiteSpaceBreak) + "..";
+			return text.Substring(0, maxLength - 2) + "..";
+		}
+
+		private static readonly char[] _allWhitespaceCharacters = Enumerable.Range(char.MinValue, char.MaxValue).Select(value => (char)value).Where(char.IsWhiteSpace).ToArray();
 	}
 }
