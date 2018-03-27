@@ -19,6 +19,7 @@ namespace Blog.Models
 			string optionalCanonicalLinkBase,
 			string optionalGoogleAnalyticsId,
 			string optionalDisqusShortName,
+			TwitterCardDetails optionalTwitterCardDetails,
 			IRetrievePostSlugs postSlugRetriever,
 			ICache postContentCache)
 		{
@@ -50,6 +51,7 @@ namespace Blog.Models
 			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			OptionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
+			OptionalTwitterCardDetails = optionalTwitterCardDetails;
 			PostSlugRetriever = postSlugRetriever;
 			PostContentCache = postContentCache;
 		}
@@ -135,5 +137,10 @@ namespace Blog.Models
 				return PostListDisplay != PostListDisplayOptions.SinglePost;
 			}
 		}
+
+		/// <summary>
+		/// This may be null if no Twitter meta data should be displayed
+		/// </summary>
+		public TwitterCardDetails OptionalTwitterCardDetails { get; }
 	}
 }

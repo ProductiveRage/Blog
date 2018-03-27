@@ -18,5 +18,10 @@
 		/// This may be null but it will never be empty if non-null
 		/// </summary>
 		string OptionalGoogleAnalyticsId { get; }
+
+		/// <summary>
+		/// This may be null if no Twitter meta data should be displayed
+		/// </summary>
+		TwitterCardDetails OptionalTwitterCardDetails { get; }
 	}
 }

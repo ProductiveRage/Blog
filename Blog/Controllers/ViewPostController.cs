@@ -1,26 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web;
 using System.Web.Mvc;
 using Blog.Helpers.Timing;
 using Blog.Models;
 using BlogBackEnd.Caching;
-using FullTextIndexer.Common.Lists;
 using BlogBackEnd.Models;
+using FullTextIndexer.Common.Lists;
 
 namespace Blog.Controllers
 {
 	public class ViewPostController : AbstractErrorLoggingController
 	{
 		private readonly IPostRepository _postRepository;
-		private readonly string _optionalCanonicalLinkBase, _optionalGoogleAnalyticsId, _optionalDisqusShortName;
+		private readonly string _optionalCanonicalLinkBase, _optionalGoogleAnalyticsId, _optionalDisqusShortName, _optionalTwitterUserName, _optionalTwitterImage;
 		private readonly ICache _postContentCache;
 		public ViewPostController(
 			IPostRepository postRepository,
 			string optionalCanonicalLinkBase,
 			string optionalGoogleAnalyticsId,
 			string optionalDisqusShortName,
+			string optionalTwitterUserName,
+			string optionalTwitterImage,
 			ICache postContentCache)
 		{
 			if (postRepository == null)
@@ -32,6 +33,8 @@ namespace Blog.Controllers
 			_optionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			_optionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			_optionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
+			_optionalTwitterUserName = string.IsNullOrWhiteSpace(optionalTwitterUserName) ? null : optionalTwitterUserName.Trim();
+			_optionalTwitterImage = string.IsNullOrWhiteSpace(optionalTwitterImage) ? null : optionalTwitterImage.Trim();
 			_postContentCache = postContentCache;
 		}
 
@@ -69,6 +72,27 @@ namespace Blog.Controllers
 				);
 			}
 
+			TwitterCardDetails twitterCardDetails;
+			if ((_optionalTwitterUserName == null) || (_optionalTwitterImage == null))
+				twitterCardDetails = null;
+			else
+			{
+				// Try to get Twitter card description from the Post content - the ideal is to find the first paragraph of content and break that at a natural point to get
+				// no more than 200 characters. If that fails for then just try to get all of the plain text content and cut it at 200 characters (this is not as good an
+				// approach because the plain text content may include code sample content if that appear very early on in the post). If THAT fails then just display
+				// a generic (and quite sad) message.
+				var description = postMatch.Post.TryToGetFirstParagraphContentAsPlainText(maxLength: 200);
+				if (description == null)
+				{
+					description = postMatch.Post.GetContentAsPlainText();
+					if (description.Length > 200)
+						description = description.Substring(0, 198) + "..";
+					else if (description == "")
+						description = "No preview content available";
+				}
+				twitterCardDetails = new TwitterCardDetails(_optionalTwitterUserName, postMatch.Post.Title, _optionalTwitterImage, description);
+			}
+
 			return View(
 				"Index",
 				new PostListModel(
@@ -83,6 +107,7 @@ namespace Blog.Controllers
 					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
+					twitterCardDetails,
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
 				)
@@ -113,6 +138,7 @@ namespace Blog.Controllers
 					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
+					null, // optionalTwitterCardDetails
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
 				)
@@ -145,52 +171,54 @@ namespace Blog.Controllers
 					_optionalCanonicalLinkBase,
 					_optionalGoogleAnalyticsId,
 					_optionalDisqusShortName,
+					null, // optionalTwitterCardDetails
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
 				)
 			);
 		}
 
-        [Stopwatch]
-        public ActionResult ArchiveByTitle()
-        {
-            var posts = _postRepository.GetAll();
+		[Stopwatch]
+		public ActionResult ArchiveByTitle()
+		{
+			var posts = _postRepository.GetAll();
 			if (posts.Count() == 0)
 				return new HttpNotFoundResult();
 
-            return View(
-                "PostsByTitle",
-                new PostListModel(
-                    "Every Post Title",
-                    posts
-                        .Select(post => new PostWithRelatedPostStubs(
-				            post.Id,
-				            post.Posted,
-				            post.LastModified,
-				            post.Slug,
-				            post.RedirectFromSlugs,
-				            post.Title,
-				            post.IsHighlight,
-				            post.MarkdownContent,
-                            new NonNullImmutableList<PostStub>(),
-				            post.Tags
-			            ))
-                        .OrderByDescending(post => post.Posted)
-                        .ToNonNullImmutableList(),
-                    null, // previousPostIfAny,
-                    null, // nextPostIfAny
-                    _postRepository.GetMostRecentStubs(5),
-                    _postRepository.GetStubs(null, null, true),
-                    _postRepository.GetArchiveLinks(),
-                    PostListDisplayOptions.ArchiveByEveryTitle,
-                    _optionalCanonicalLinkBase,
-                    _optionalGoogleAnalyticsId,
-                    _optionalDisqusShortName,
-                    new PostSlugRetriever(_postRepository),
-                    _postContentCache
-                )
-            );
-        }
+			return View(
+				"PostsByTitle",
+				new PostListModel(
+					"Every Post Title",
+					posts
+						.Select(post => new PostWithRelatedPostStubs(
+							post.Id,
+							post.Posted,
+							post.LastModified,
+							post.Slug,
+							post.RedirectFromSlugs,
+							post.Title,
+							post.IsHighlight,
+							post.MarkdownContent,
+							new NonNullImmutableList<PostStub>(),
+							post.Tags
+						))
+						.OrderByDescending(post => post.Posted)
+						.ToNonNullImmutableList(),
+					null, // previousPostIfAny,
+					null, // nextPostIfAny
+					_postRepository.GetMostRecentStubs(5),
+					_postRepository.GetStubs(null, null, true),
+					_postRepository.GetArchiveLinks(),
+					PostListDisplayOptions.ArchiveByEveryTitle,
+					_optionalCanonicalLinkBase,
+					_optionalGoogleAnalyticsId,
+					_optionalDisqusShortName,
+					null, // optionalTwitterCardDetails
+					new PostSlugRetriever(_postRepository),
+					_postContentCache
+				)
+			);
+		}
 
 		[Stopwatch]
 		public ActionResult ArchiveByMonthMostRecent()

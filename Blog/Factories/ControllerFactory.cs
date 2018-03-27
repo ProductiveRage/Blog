@@ -44,6 +44,8 @@ namespace Blog.Factories
 						Constants.CanonicalLinkBase,
 						IsLocalHost(requestContext) ? null : Constants.GoogleAnalyticsId,
 						Constants.DisqusShortName,
+						Constants.TwitterUserName,
+						Constants.TwitterImage,
 						GetPostContentCache(requestContext)
 					);
 
