@@ -1,4 +1,4 @@
-## Learning F# via some Machine Learning: The Single Layer Percepton
+## Learning F# via some Machine Learning: The Single Layer Perceptron
 
 ### TL;DR
 
