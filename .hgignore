@@ -40,3 +40,4 @@ SearchIndex.dat
 Cache/
 Blog/Properties/PublishProfiles/
 Deploy/
+.vs/
