@@ -437,6 +437,24 @@ It's also interesting to see the discrepancies between .NET Framework 4.6.1 and 
 
 I'm really happy with how easy BenchmarkDotNet makes it to measure these sorts of very short operations. Whenever I've tried to do something similar in the past, I've felt niggling doubts that maybe I'm not running it enough times or maybe there are some factors that I should try to average out. Even when I get a result, I've sometimes just looked at the single average (ie. the mean) time taken, which is a bit sloppy since the spread of results can be of vital importance as well. That BenchmarkDotNet presents the final data in such a useful way and with so few decisions on my part is fantastic.
 
+### Benchmarking across multiple frameworks
+
+I forget each time that I start a new project how the running-benchmarks-against-multiple-frameworks functionality works, so I'll add a note here for anyone else that gets confused (and, likely, for me in the future!) - the first thing to do is to manually edit the .csproj file of the benchmark project so that it includes the following:
+
+    <TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
+	
+It's not currently possible to specify multiple projects using the VS GUI, so your .csproj file will normally have a line like this:
+
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+	
+(Not only is there only a single framework specified but the node is called "TargetFramework" - without an "s" - as opposed to "TargetFrameworks" *with* an "s")
+
+After you've done this, you need to run the benchmark project from the command line (if you try to run it from within VS, even in Release configuation, you will get a warning that the results may be inaccurate as a debugger is attached). You do that with a command like this (it may vary if you're using a different version of .NET Core) -
+
+    dotnet run --framework netcoreapp2.0 --configuration release
+	
+You have to specify a framework to run the project as but (and this is the important part) that does *not* mean that the benchmarks will only be run against the framework. What happens when you run this command is that multiple executables are built and then executed, which run the tests in each of the frameworks that you specified in the benchmark attributes and in the "TargetFrameworks" node in the .csproj file. The results of these multiple executables are aggregated to give you the final benchmark output.
+
 ### .NET Core upsets me again
 
 On the other hand, unfortunately .NET Core has been hard work for me again when it came to BenchmarkDotNet. I made it sound very easy earlier to get everything up and running because I didn't want dilute my enthusiasm for the benchmarking. However, I did have a myriad of problems before everything started working properly.
