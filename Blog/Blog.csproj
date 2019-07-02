@@ -318,6 +318,9 @@
     <Content Include="Content\Images\Posts\StylesWithoutMarkerIds.png" />
     <Content Include="Content\Images\Posts\SyntaxVisualizer.png" />
     <Content Include="Content\Images\Posts\SystemGlobalizationExtensionsDependency.png" />
+    <Content Include="Content\Images\Posts\Threads-Graph.png" />
+    <Content Include="Content\Images\Posts\Threads-SingleExample.png" />
+    <Content Include="Content\Images\Posts\Threads-Stacked.png" />
     <Content Include="Content\Images\Posts\TigerWoods-Block1.jpg" />
     <Content Include="Content\Images\Posts\TigerWoods-Block2.jpg" />
     <Content Include="Content\Images\Posts\TigerWoods-FaceDetected.png" />
