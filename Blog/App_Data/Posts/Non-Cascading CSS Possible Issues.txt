@@ -1,4 +1,0 @@
-Pixel units with Response Design a no-no?
-
-Media queries based on ems instead of pixels.
-
