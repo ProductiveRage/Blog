@@ -1,0 +1,80 @@
+## Private / local C# analysers (without NuGet)
+
+(**Note:** The information here depends upon the "new" .csproj format being used.. but it's not that new any more, so hopefully that's not a limitation for too many people)
+
+I'm a big fan of writing analysers to catch common mistakes at compile time rather than run time. For example, the [DanSerialiser](https://github.com/ProductiveRage/DanSerialiser), [Bridge.Immutable](https://github.com/ProductiveRage/Bridge.Immutable) and [ProductiveRage.SealedClassVerification](https://github.com/ProductiveRage/ProductiveRage.SealedClassVerification) libraries that I've published all include some. The way that they're traditionally distributed is as a NuGet package that installs the analyser into the desired project, which is great if you're publishing a public package that you expect to be installed via nuget.org. But what if you wanted to create a non-public analyser for something that you were working on, can you do so *without* creating a NuGet package? Yes.. but with some caveats.
+
+If you're still interested then read on for the details!
+
+(For anyone who finds themselves in the **"too lazy; didn't read"** category, hopefully this gives you enough information as to whether to continue or not)
+
+### What I wish existed
+
+Actually, before I talk about what I wish already existed (but which, unfortunately, does *not* exist), I'll get one option out of the way first; nuget.org is not the only place that NuGet packages can be published to. If you decided that you wanted to write an analyser for some conventions internal to your company then you could create a NuGet package and publish it on an *internal* NuGet feed. It's pretty easy and you have a range of options such as a private NuGet feed service within your network, a private hosted service (possible with MyGet, I believe) or you can even chuck all of your private NuGet .nupkg files into a folder (on your local computer or, I presume, on a network - though I've not tested that option) and then add that as a NuGet feed in Visual Studio. This *is* straight forward but, still, occasionally I wish that it was possible to include an analyser project as part of a solution and have that analyser added to one of the other projects. Which brings me to..
+
+What I've really wanted, from time to time, is to be able to have one project (say, "MyLibrary") in a solution and another project (say, "MyAnalyser") where the second project is added an analyser reference to the first project.
+
+I'd like it to be as simple as clicking on References on the "MyLibrary" project, then "Add an Analyzer" and then choosing the "MyAnalyser" project. This, however, is not currently possible.
+
+It seems that I'm not the only one that thinks that this would be nice, there is an issue on the [.NET Compiler Platform ("Roslyn")](https://github.com/dotnet/roslyn/) repo relating to this: [Adding Analyzers Via a Project Reference](https://github.com/dotnet/roslyn/issues/18093). The first reply is from a Senior Software Engineer at Microsoft who says:
+
+> This would be one of the coolest features ever
+
+.. which sounds like a great and promising start!
+
+However, the issue was raised in March 2017 and I don't think that any progress has been made on it, so I don't know when / if it will be tackled\*.
+
+*(Having said that, just last month it was recategorised from "Backlog" to "IDE: InternalPriority" and even assigned Priority 1 - so maybe this **will** change in the near future! We'll have to wait and see)*
+
+### What *does* exist
+
+So the bad news is that there is no way in the UI to do what I want. But the good news is that there *is* a way to move towards it with some manual .csproj editing.
+
+If I opened the MyLibrary.csproj from the example earlier then I could add the following section:
+
+    <ItemGroup>
+      <ProjectReference Include="..\MyAnalyser\MyAnalyser.csproj">
+        <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+        <OutputItemType>Analyzer</OutputItemType>
+      </ProjectReference>
+    </ItemGroup>
+  
+.. and the MyAnalyser would now be added to MyLibrary and it would check over the code that I'd written in MyLibrary project - reporting any resulting messages, warnings or error in the VS Error List. Hurrah!
+  
+It seems like a pity that something seemingly so simple needs to be done by hand-editing the .csproj file instead of there being something in the VS GUI to do this but there are other features where you have to do the same. For example, if you want a project to target multiple frameworks when it's built then you have to manually edit the .csproj file and rename the "targetframework" node to "targetframeworks" and then type in a semi-colon-delimited list of IDs of frameworks that you're interested in - eg. from this:
+
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+
+.. to this:
+
+    <TargetFrameworks>netcoreapp2.1;net461</TargetFrameworks>
+	
+(It's quite common to do this in [BenchmarkDotNet](https://benchmarkdotnet.org/) projects so that you can see how the results vary when your library is imported into different frameworks)
+
+The good news is that hand-editing the .csproj file is much easier with the file format that we have now than the old one! So having to do this is not the end of the world.
+
+It's not *all* rainbows and unicorns, though..
+
+### What are the downsides?
+
+The biggest (and only, so far as I can tell) downside is that it seem like Visual Studio will somehow cache the analyser assembly after it loads it. This means that when you first open the solution, the analyser(s) in the MyAnalyser project will be run against the MyLibrary code and any messages, warnings and errors displayed.. *but*, if you then change the MyAnalyser code and rebuild then those changes won't affect the checks performed against MyLibrary.
+
+Even if you rebuild the entire solution (rebuilding MyAnalyser first and *then* rebuilding MyLibrary, to try to force the new analyser assembly to be loaded).
+
+Even if you rebuild it and then unload the solution and then reload the solution and build *again*.
+
+It seems like the only way to get it to reliably load the new analyser assembly is to close the Visual Studio instance entirely and start it again.
+
+A cryptic note in the [GitHub issue](https://github.com/dotnet/roslyn/issues/18093) that I referenced earlier made me wonder if changing the assembly version of the analyser project would help.. but it didn't.
+
+Now, *hopefully,* in real world usage this isn't as bad as it sounds. The process of writing analysers lends itself very nicely to a test driven development style because you can set up a test suite where every test is of the format "for code snippet, will I get the analyser messages that I expect?" and you can build up a nice suite of tests for middle-of-the-road cases and edge cases and have them all run quickly. I actually find this to be the easiest way for me to debug things when I get myself into a situation where I don't understand why the analyser code isn't doing what I expect; I write a test with a snippet of code and then debug the test to step through the code. So you should be to get your analyser working nicely without having to test it against your "MyLibrary" code over and over.
+
+Of course, sometimes you'll want to run it against your entire code base (otherwise, what was the point of writing it!) and then you *will* have to close VS and restart it. And this is inconvenient and I wish that it wasn't the case.
+
+I think, though, that you would be in the same situation if you decided to go down the NuGet distribution route (whether from a private or public feed) - in the past, I've found that if a new version of a NuGet package includes a new version of an analyser then Visual Studio won't load the new version of the analyser without me restarting VS. Which is just as frustrating. Maybe this is part of what's delaying the work on Microsoft's side; they know that if they make adding analysers easier then they'll have to fix the cached-analyser-doesn't-get-updated problem at the same time.
+
+### To conclude
+
+I'm going to keep my eye on that GitHub issue. It would be great to see some movement on it but I have no idea how much weight "IDE: InternalPriority" cases have, even if they are listed as Priority 1 within that category.. to be honest, I'm presuming that Priority 1 means **top priority** but it's just as feasible that it means *lowest* priority. There's a nice view of the ["IDE: Internal Priority" category in GitHub here](https://github.com/dotnet/roslyn/projects/35#card-16650341) in case you want to join in on the guessing game!
+
+At the end of the day, though, I still think that this is a powerful technology to have access to and I'd still rather have it with these caveats than not have it at all. I really believe that analysers provide a way to improve code quality and I encourage everyone to have a play around with them!

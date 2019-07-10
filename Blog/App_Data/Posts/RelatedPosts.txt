@@ -1,4 +1,4 @@
-# These are related Post lookups - the Post Id followed by colons followed by a comma-separated list of related Posts
+# These are related Post lookups - the Post ID followed by colons followed by a comma-separated list of related Posts
 # Blank lines and those starting with a hash are ignored
 
 77:74,68
@@ -12,3 +12,4 @@
 95:92,93
 93:99
 111:108
+115:102
