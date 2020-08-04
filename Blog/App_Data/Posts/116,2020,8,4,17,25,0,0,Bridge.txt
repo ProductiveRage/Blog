@@ -1,0 +1,202 @@
+## Removing ALL assembly names in Json.NET TypeNameHandling output
+
+In some cases, it may be desirable to include type name information in [Json.NET](https://www.newtonsoft.com/json) output but for those type names to not include assembly names.
+
+In my case it's because I have a [Shared Project](https://dev.to/rionmonster/sharing-is-caring-using-shared-projects-in-aspnet-e17) that contains classes that I want to appear in my .NET Core C# server code and in my [Bridge.NET](https://bridge.net/) client code and this results in the class names existing in assemblies with different names (but there are also other people with their own cases, such as [How do I omit the assembly name from the type name while serializing and deserializing in JSON.Net?](https://stackoverflow.com/questions/8039910/how-do-i-omit-the-assembly-name-from-the-type-name-while-serializing-and-deseria).
+
+Json.NET has support for customising how the type names are emitted and there is an answer in the Stack Overflow question that I linked just above that points to an [article](http://james.newtonking.com/archive/2011/11/19/json-net-4-0-release-4-bug-fixes) written by the Json.NET author illustrating how to do it. Essentially, you create a custom serialization binder that looks a bit like this:
+
+    public sealed class TypeNameAssemblyExcludingSerializationBinder : ISerializationBinder
+	{
+		public static TypeNameAssemblyExcludingSerializationBinder Instance { get; }
+			= new TypeNameAssemblyExcludingSerializationBinder();
+        
+		private TypeNameAssemblyExcludingSerializationBinder() { }
+
+		public void BindToName(Type serializedType, out string assemblyName, out string typeName)
+		{
+			assemblyName = null;
+			typeName = serializedType.FullName;
+		}
+
+		public Type BindToType(string assemblyName, string typeName)
+		{
+			// Note: Some additional work may be required here if the assembly name has been removed
+			// and you are not loading a type from the current assembly or one of the core libraries
+			return Type.GetType(typeName);
+		}
+	}
+
+Then you serialise your content something like this:
+
+    var json = JsonConvert.SerializeObject(
+        new ExampleClass(123, "Test"),
+        new JsonSerializerSettings
+        {
+			Formatting = Formatting.Indented,
+            TypeNameHandling = TypeNameHandling.All,
+            SerializationBinder = TypeNameAssemblyExcludingSerializationBinder.Instance
+        }
+    );
+
+If the **ExampleClass** looked like this:
+
+    public sealed class ExampleClass
+    {
+        public ExampleClass(int key, string name)
+        {
+            Key = key;
+            Name = name;
+        }
+        public int Key { get; }
+        public string Name { get; }
+    }
+	
+.. and was in a namespace called "Tester" then the resulting JSON would look like this:
+
+	{
+	  "$type": "Tester.ExampleClass",
+	  "Key": 123,
+	  "Name": "Test"
+	}
+	
+To make the difference clear, if the custom serialisation binder had not been used (and if the containing assembly was also called "Tester") then the JSON would have looked like this:
+
+	{
+	  "$type": "Tester.ExampleClass, Tester",
+	  "Key": 123,
+	  "Name": "Test"
+	}
+	
+So.. problem solved!
+
+Yes?
+
+No.
+
+### ISerializationBinder is not applied to generic type parameters
+
+While everything was hunkydory in the example above, there are cases where it isn't. For example, if we wanted to serialise a *list* of **ExampleClass** instances then we'd have code like this:
+
+    var json = JsonConvert.SerializeObject(
+        new List<ExampleClass> { new ExampleClass(123, "Test") },
+        new JsonSerializerSettings
+        {
+			Formatting = Formatting.Indented,
+            TypeNameHandling = TypeNameHandling.All,
+            SerializationBinder = TypeNameAssemblyExcludingSerializationBinder.Instance
+        }
+    );
+
+.. and the resulting JSON would look like this:
+
+	{
+	  "$type": "System.Collections.Generic.List`1[[Tester.ExampleClass, Tester]]",
+	  "$values": [
+		{
+		  "$type": "Tester.ExampleClass",
+		  "Key": 123,
+		  "Name": "Test"
+		}
+	  ]
+	}
+
+Without the custom serialisation binder, it would have looked like this:
+
+	{
+	  "$type": "System.Collections.Generic.List`1[[Tester.ExampleClass, Tester]], System.Private.CoreLib",
+	  "$values": [
+		{
+		  "$type": "Tester.ExampleClass, Tester",
+		  "Key": 123,
+		  "Name": "Test"
+		}
+	  ]
+	}
+
+.. and so we've successfully removed *some* of the assembly names as there is no mention of "System.Private.CoreLib" in the List's type and the $type string for the **ExampleClass** instance no longer mentions the "Tester" assembly name but the generic type of the List *does* mention the "Tester" assembly name and we were trying to prevent assembly names from appearing in the type data!
+
+I've had a good Google around this and there doesn't seem to be a definitive answer anywhere and I had a need for one, so I've put together a solution that does what I need. There is an answer to a similar(ish) stack overflow question [here](https://stackoverflow.com/a/19927484/3813189) but it ends with a disclaimer that the regex provided would need tweaking to support nested types and **a)** I definitely wanted to support nested generic type parameters (eg. a Dictionary that maps string keys to List-of-int values) and **b)** regexes and me are not the best of friends - hence my going about it my own way!
+
+    public sealed class TypeNameAssemblyExcludingSerializationBinder : ISerializationBinder
+    {
+        public static TypeNameAssemblyExcludingSerializationBinder Instance { get; }
+            = new TypeNameAssemblyExcludingSerializationBinder();
+        private TypeNameAssemblyExcludingSerializationBinder() { }
+
+        public void BindToName(Type serializedType, out string assemblyName, out string typeName)
+        {
+            // Note: Setting the assemblyName to null here will only remove it from the main type itself -
+			// it won't remove it from any types specified as generic type parameters (that's what the
+			// RemoveAssemblyNames method is needed for)
+            assemblyName = null;
+            typeName = RemoveAssemblyNames(serializedType.FullName);
+        }
+
+        public Type BindToType(string assemblyName, string typeName)
+        {
+            // Note: Some additional work may be required here if the assembly name has been removed
+        	// and you are not loading a type from the current assembly or one of the core libraries
+            return Type.GetType(typeName);
+        }
+
+        private static string RemoveAssemblyNames(string typeName)
+        {
+            var index = 0;
+            var content = new StringBuilder();
+            RecusivelyRemoveAssemblyNames();
+            return content.ToString();
+
+            void RecusivelyRemoveAssemblyNames()
+            {
+                // If we started inside a type name - eg.
+                //
+                //   "System.Int32, System.Private.CoreLib"
+                //
+                // .. then we want to look for the comma that separates the type name from the assembly
+				// information and ignore that content. If we started inside nested generic type content
+				// - eg.
+                //
+                //  "[System.Int32, System.Private.CoreLib], [System.String, System.Private.CoreLib]"
+                //
+                // .. then we do NOT want to start ignoring content after any commas encountered. So
+				// it's important to know here which case we're in.
+                var insideTypeName = typeName[index] != '[';
+
+                var ignoreContent = false;
+                while (index < typeName.Length)
+                {
+                    var c = typeName[index];
+                    index++;
+
+                    if (insideTypeName && (c == ','))
+                    {
+                        ignoreContent = true;
+                        continue;
+                    }
+
+                    if (!ignoreContent)
+                        content.Append(c);
+
+                    if (c == '[')
+                        RecusivelyRemoveAssemblyNames();
+                    else if (c == ']')
+                    {
+                        if (ignoreContent)
+                        {
+                            // If we encountered a comma that indicated that we were about to start
+							// an assembly name then we'll have stopped adding content to the string
+							// builder but we don't want to lose this closing brace, so explicitly
+							// add it in if that's the case
+                            content.Append(c);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+### A note about resolving types from type names (without assemblies)
+
+In .NET, the "Type.GetType" method will return null if it is given a type name that does not correspond to a type that exists in either the current assembly or in one of the core .NET libraries. In Bridge.NET, it doesn't appear that they maintained that requirement and I believe that all types are available, even if an assembly name is not specified - but whether it is or isn't, a similar approach could be used in both cases where you use reflection to look at all loaded assemblies and all of their available types and try to map assembly-name-less type names onto one of those. Getting into this would be completely out of the scope of this post and I'm hoping that you already have an idea in mind if you had got to the point where you wanted to remove all assembly names from your type metadata!
