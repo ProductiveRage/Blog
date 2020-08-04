@@ -33,7 +33,7 @@ _ReSharper*/
 *.resharper
 *.orig
 
-[Pp]ackages\*
+[Pp]ackages/*
 
 SearchIndex.dat
 
