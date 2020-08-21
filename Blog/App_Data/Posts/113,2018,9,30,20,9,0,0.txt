@@ -1,6 +1,6 @@
 ## I didn't understand why people struggled with (.NET's) async
 
-Long story short (I know that some readers love a TL;DR), I have almost always worked with async/await in C# projects where it's been async from top-to-bottom and so I've rarely tried to start integrating async code into a large project that is primiarily *non*-async. Due to this, I have never encountered any async problems.. so I've occasionally wondered "why would people be worried about getting deadlocks?"
+Long story short (I know that some readers love a TL;DR), I have almost always worked with async/await in C# projects where it's been async from top-to-bottom and so I've rarely tried to start integrating async code into a large project that is primarily *non*-async. Due to this, I have never encountered any async problems.. so I've occasionally wondered "why would people be worried about getting deadlocks?"
 
 Recently, this changed and I wanted to start integrating components that use async methods into a big project that doesn't. And it didn't take long until I got a hanging application!
 
