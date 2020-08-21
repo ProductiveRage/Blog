@@ -535,7 +535,7 @@ To see what that looks like in the real world, here's a slice of that barcode fr
 
 <img alt="Barcode numbers interpreted" src="/Content/Images/Posts/PeanutBarcode-AnnotatedValues.png" class="NoBorder AlwaysFullWidth" />
 
-*(I should point out that the article [How does a barcode work?](https://habr.com/en/post/439768/) was extremely helpful in the research I did for this post and I'm very grateful to the author for having written it in such an approachable manner!)
+*(I should point out that the article [How does a barcode work?](https://habr.com/en/post/439768/) was extremely helpful in the research I did for this post and I'm very grateful to the author for having written it in such an approachable manner!)*
 
 Any combination of bar widths that is not found in the table is considered to be invalid. On the one hand, you might think that this a potential loss; the format could support more combinations of bar widths to encode more values and then more data could be packed into the same space. There is an advantage, however, to having relatively few valid combinations of bar widths - it makes easier to tell whether the information being read appears to be correct. If a combination is encountered that seems incorrect then the read attempt should be aborted and retried. The format has existed for decades and it would make sense, bearing that in mind, to prioritise making it easier for the hardware to read rather prioritising trying to cram as much data in there as possible. There is *also* a checksum included in the numerical data to try to catch any "misreads" but when working with low resolutions or hardware with little computing power, the easier that it is to bail out of a scan and to retry the better.
 
