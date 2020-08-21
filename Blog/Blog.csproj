@@ -179,6 +179,7 @@
     <Content Include="App_Data\Posts\114,2019,7,2,21,59,0,0,Bridge.txt" />
     <Content Include="App_Data\Posts\116,2020,8,4,17,25,0,0,Bridge.txt" />
     <Content Include="App_Data\Posts\115,2019,7,10,21,42,0,0,Roslyn.txt" />
+    <Content Include="App_Data\Posts\118,2020,8,22,16,52,0,0,Arduino.txt" />
     <Content Include="App_Data\Posts\117,2020,8,7,23,24,0,0,Image Processing.txt" />
     <Content Include="App_Data\Posts\12,2011,12,8,20,50,0,0,Mercurial.txt" />
     <Content Include="App_Data\Posts\13,2011,12,8,23,46,0,0,ASP.Net,MVC.txt" />
@@ -279,6 +280,13 @@
     <Content Include="App_Data\Posts\RelatedPosts.txt" />
     <Content Include="Content\Content.less" />
     <Content Include="Content\Images\AssignReturnValueAnalyserScreenshot.png" />
+    <Content Include="Content\Images\Posts\ArduinoAndShield.jpg" />
+    <Content Include="Content\Images\Posts\ArduinoBreadboardFeltPads.jpg" />
+    <Content Include="Content\Images\Posts\ArduinoBreadboardWithFeltPadsAttached.jpg" />
+    <Content Include="Content\Images\Posts\ArduinoInBox.jpg" />
+    <Content Include="Content\Images\Posts\ArduinoStackWithBattery.jpg" />
+    <Content Include="Content\Images\Posts\ArduinoTower.jpg" />
+    <Content Include="Content\Images\Posts\ArduinoWithBreadboardAlongside.jpg" />
     <Content Include="Content\Images\Posts\BlackAndWhiteFaceFails.jpg" />
     <Content Include="Content\Images\Posts\BridgeReactProfiling1.png" />
     <Content Include="Content\Images\Posts\BridgeReactProfiling2.png" />
@@ -335,6 +343,7 @@
     <Content Include="Content\Images\Posts\SkinMaskGeneration-TextureAmplitude.png" />
     <Content Include="Content\Images\Posts\StylesWithMarkerIds.png" />
     <Content Include="Content\Images\Posts\StylesWithoutMarkerIds.png" />
+    <Content Include="Content\Images\Posts\SunnyGardenAndCats.jpg" />
     <Content Include="Content\Images\Posts\SyntaxVisualizer.png" />
     <Content Include="Content\Images\Posts\SystemGlobalizationExtensionsDependency.png" />
     <Content Include="Content\Images\Posts\Threads-Graph.png" />
