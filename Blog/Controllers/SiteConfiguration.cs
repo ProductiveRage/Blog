@@ -1,9 +1,11 @@
 ﻿using System;
+using Microsoft.AspNetCore.Http;
 
 namespace Blog.Controllers
 {
     public sealed class SiteConfiguration
 	{
+		private readonly string _optionalGoogleAnalyticsId;
 		public SiteConfiguration(
 			string optionalCanonicalLinkBase,
 			string optionalGoogleAnalyticsId,
@@ -16,7 +18,7 @@ namespace Blog.Controllers
 				throw new ArgumentOutOfRangeException(nameof(maximumNumberOfPostsToPublishInRssFeed), "must be greater than zero");
 
 			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
-			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
+			_optionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			OptionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
 			OptionalTwitterUserName = string.IsNullOrWhiteSpace(optionalTwitterUserName) ? null : optionalTwitterUserName.Trim();
 			OptionalTwitterImage = string.IsNullOrWhiteSpace(optionalTwitterImage) ? null : optionalTwitterImage.Trim();
@@ -24,15 +26,20 @@ namespace Blog.Controllers
 		}
 
 		public string OptionalCanonicalLinkBase { get; }
-		public string OptionalGoogleAnalyticsId { get; }
 		public string OptionalDisqusShortName { get; }
 		public string OptionalTwitterUserName { get; }
 		public string OptionalTwitterImage { get; }
 		public int MaximumNumberOfPostsToPublishInRssFeed { get; }
 
-		public SiteConfiguration RemoveGoogleAnalyticsId()
+		public string GetGoogleAnalyticsIdIfAny(HttpRequest request) => IsLocalHost(request ?? throw new ArgumentNullException(nameof(request))) ? null : _optionalGoogleAnalyticsId;
+
+		private static bool IsLocalHost(HttpRequest request)
 		{
-			return new SiteConfiguration(OptionalCanonicalLinkBase, optionalGoogleAnalyticsId: null, OptionalDisqusShortName, OptionalTwitterUserName, OptionalTwitterImage, MaximumNumberOfPostsToPublishInRssFeed);
+#if !DEBUG
+				return false; // Return false so that the real analytics username is inserted into the content when in release mode, for publishing to GitHub Pages
+#else
+			return "localhost".Equals((request ?? throw new ArgumentNullException(nameof(request))).Host.Host, StringComparison.OrdinalIgnoreCase);
+#endif
 		}
 	}
 }

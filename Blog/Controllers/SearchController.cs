@@ -48,7 +48,7 @@ namespace Blog.Controllers
 					await _postRepository.GetStubs(null, null, true),
 					await _postRepository.GetArchiveLinks(),
 					_siteConfiguration.OptionalCanonicalLinkBase,
-					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_postContentCache
 				)
 			);

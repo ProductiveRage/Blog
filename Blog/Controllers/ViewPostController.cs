@@ -19,8 +19,6 @@ namespace Blog.Controllers
 		{
             _postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
 			_siteConfiguration = siteConfiguration ?? throw new ArgumentNullException(nameof(siteConfiguration));
-			if (IsLocalHost())
-				_siteConfiguration = _siteConfiguration.RemoveGoogleAnalyticsId();
 			_postContentCache = postContentCache ?? throw new ArgumentNullException(nameof(postContentCache));
 		}
 
@@ -89,7 +87,7 @@ namespace Blog.Controllers
 					await _postRepository.GetArchiveLinks(),
 					PostListDisplayOptions.SinglePost,
 					_siteConfiguration.OptionalCanonicalLinkBase,
-					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_siteConfiguration.OptionalDisqusShortName,
 					twitterCardDetails,
 					new PostSlugRetriever(_postRepository),
@@ -119,7 +117,7 @@ namespace Blog.Controllers
 					await _postRepository.GetArchiveLinks(),
 					PostListDisplayOptions.ArchiveByTag,
 					_siteConfiguration.OptionalCanonicalLinkBase,
-					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_siteConfiguration.OptionalDisqusShortName,
 					null, // optionalTwitterCardDetails
 					new PostSlugRetriever(_postRepository),
@@ -151,7 +149,7 @@ namespace Blog.Controllers
 					await _postRepository.GetArchiveLinks(),
 					PostListDisplayOptions.ArchiveByMonth,
 					_siteConfiguration.OptionalCanonicalLinkBase,
-					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_siteConfiguration.OptionalDisqusShortName,
 					null, // optionalTwitterCardDetails
 					new PostSlugRetriever(_postRepository),
@@ -192,7 +190,7 @@ namespace Blog.Controllers
 					await _postRepository.GetArchiveLinks(),
 					PostListDisplayOptions.ArchiveByEveryTitle,
 					_siteConfiguration.OptionalCanonicalLinkBase,
-					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_siteConfiguration.OptionalDisqusShortName,
 					optionalTwitterCardDetails: null,
 					new PostSlugRetriever(_postRepository),
@@ -207,17 +205,6 @@ namespace Blog.Controllers
 			if (mostRecentPostDate == null)
 				return NotFound();
 			return await ArchiveByMonth(mostRecentPostDate.Value.Month, mostRecentPostDate.Value.Year);
-		}
-
-		private bool IsLocalHost()
-		{
-#if !DEBUG
-				return false; // Return false so that the real analytics username is inserted into the content when in release mode, for publishing to GitHub Pages
-#else
-			if (Request == null)
-				return false;
-			return "localhost".Equals(Request.Host.Host, StringComparison.OrdinalIgnoreCase);
-#endif
 		}
 
 		private async Task<PostWithRelatedPostStubs> GetPostWithRelatedPostStubs(Post post)
