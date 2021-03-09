@@ -78,7 +78,7 @@ namespace BlogBackEnd.Models
 			if (firstParagraph == null)
 				return null;
 
-			var text = (firstParagraph.InnerText ?? "").Trim();
+			var text = HttpUtility.HtmlDecode((firstParagraph.InnerText ?? "")).Trim(); // 2021-03-09 DWR: I'm not sure why I have to HtmlDecode here when I'm requesting InnerText but if I don't then I get encoded symbols (eg. "&quot;" instead of just "\"")
 			if (text == "")
 				return null;
 
