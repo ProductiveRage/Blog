@@ -7,6 +7,10 @@
     <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <NoWarn>1701;1702;SYSLIB0011</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="FullTextIndexer" Version="3.0.0" />
     <PackageReference Include="HtmlAgilityPack" Version="1.11.31" />
