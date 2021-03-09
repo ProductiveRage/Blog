@@ -33,8 +33,8 @@ Each processor is self-contained and most of them contain very little logic, so 
           throw new ArgumentNullException("stringNavigator");
 
         // For single line comments, the line return should be considered part of the comment content
-		// (in the same way that the "/*" and "*/" sequences are considered part of the content for
-		// multi-line comments)
+        // (in the same way that the "/*" and "*/" sequences are considered part of the content for
+        // multi-line comments)
         var currentCharacter = stringNavigator.CurrentCharacter;
         var nextCharacter = stringNavigator.CurrentCharacter;
         if ((currentCharacter == '\r') && (nextCharacter == '\n'))
@@ -50,10 +50,10 @@ Each processor is self-contained and most of them contain very little logic, so 
         }
         else if ((currentCharacter == '\r') || (currentCharacter == '\n')) {
           return new CharacterProcessorResult(
-		    CharacterCategorisationOptions.Comment,
-			_characterProcessorToReturnTo
-		  );
-		}
+            CharacterCategorisationOptions.Comment,
+            _characterProcessorToReturnTo
+          );
+        }
 
         return new CharacterProcessorResult(CharacterCategorisationOptions.Comment, this);
       }
@@ -65,8 +65,8 @@ becomes
       var processor = {
         Process: function (stringNavigator) {
           // For single line comments, the line return should be considered part of the comment content
-		  // (in the same way that the "/*" and "*/" sequences are considered part of the content for
-		  // multi-line comments)
+          // (in the same way that the "/*" and "*/" sequences are considered part of the content for
+          // multi-line comments)
           if (stringNavigator.DoesCurrentContentMatch("\r\n")) {
             return getCharacterProcessorResult(
               CharacterCategorisationOptions.Comment,
@@ -76,7 +76,7 @@ becomes
               )
             );
           } else if ((stringNavigator.CurrentCharacter === "\r")
-		      || (stringNavigator.CurrentCharacter === "\n")) {
+              || (stringNavigator.CurrentCharacter === "\n")) {
             return getCharacterProcessorResult(
               CharacterCategorisationOptions.Comment,
               characterProcessorToReturnTo
@@ -90,7 +90,7 @@ becomes
       };
       return processor;
     };
-    
+
 There are some concessions I made in the translation. Firstly, I tend to be very strict with input validation in C# (I long for a world where I can replace it all with code contracts but the last time I looked into the .net work done on that front it didn't feel quite ready) and try to rely on rich types to make the compiler work for me as much as possible (in both documenting intent and catching silly mistakes I may make). But in JavaScript we have no types to rely on and it seems like the level of input validation that I would perform in C# would be very difficult to replicate as reliably without them. Maybe I'm rationalising, but while searching for a precedent for this sort of thing, I came across the article [Error Handling in Node.js](https://www.joyent.com/developers/node/design/errors) which distinguishes between "operational" and "programmer" errors and states that
 
 > Programmer errors are bugs in the program. These are things that can always be avoided by changing the code. They can never be handled properly (since by definition the code in question is broken).
@@ -120,7 +120,7 @@ Some of the rules I found quite odd, such as its hatred of "++", but then I've a
 I presume that this refers to confusion between "i++" and "++i" but the extended version of "i++" may be used: "i = i + 1" or "i += 1". Alternatively, mutation of a loop counter can be avoided entirely with the use of "forEach" -
 
     [1, 2, 3].forEach(function(element, index) {
-    
+
 This relies upon a level of compatibility when considering JavaScript in the browser (though ancient browsers can have this worked around with polyfills) but since I had a Brackets extension as the intended target, "forEach" seemed like the best way forward. It also meant that I could avoid the warning
 
 > Avoid use of the continue statement. It tends to obscure the control flow of the function.
@@ -136,11 +136,11 @@ At this point, I had code that would take style content such as
         strong, em { font-weight: bold; }
       }
     }
-    
+
 and parse it with
 
     var result = CssParserJs.ExtendedLessParser.ParseIntoStructuredData(content);
-    
+
 into a structure
 
     [{
@@ -184,7 +184,7 @@ where the "FragmentCategorisation" values come from an enum-emulating reference 
     Selector: 3,
     StylePropertyName: 4,
     StylePropertyValue: 5
-    
+
 ### So it works?
 
 At this point, it was looking rosey - the translation had been painless, I'd made the odd silly mistake which I'd picked up quickly and it was giving the results I expected for some strings of content I was passing in. However, it's hard to be sure that it's *all* working perfectly without trying to exercise more of the code. Or without constructing some unit tests!
@@ -202,7 +202,7 @@ The C# project has unit tests, using [xUnit](https://github.com/xunit/xunit). Wh
           ];
       deepEqual(CssParserJs.ParseLess(content), expected);
     });
-    
+
 so they're nice and easy to read and easy to write.
 
 *(Note: In the actual test code, I've used the enum-esque values instead of their numeric equivalents, so instead of*
@@ -212,7 +212,7 @@ so they're nice and easy to read and easy to write.
 *I've used*
 
     CharacterCategorisation: CssParserJs.CharacterCategorisationOptions.SelectorOrStyleProperty
-	
+
 *which makes it even easier to read and write - but it made arranging the code in this post awkward without requiring scroll bars in the code display, which I don't like!).*
 
 The QUnit html page will execute all of the tests and display details about which passed and which failed.
@@ -222,7 +222,7 @@ I translated the tests from the C# code into this format and they all passed! I 
 The final thing to add to the QUnit tests was a way to run them without loading a full browser. Again, this is a solved problem and, again, I looked to Underscore as a good example of what to do. That library uses [PhantomJS](http://phantomjs.org) which is a "headless WebKit scriptable with a JavaScript API", according to the site. (I'm not sure if that should say "WebKit scriptable *browser*" or not, but you get the idea). This allows for the test scripts to be run at the command line and the output summary to be displayed. The tests are in a subfolder "test", within which is another folder "vendor", which includes the JavaScript and CSS for the core QUnit code. This allows for tests to be run (assuming you have PhantomJS installed) with
 
     phantomjs test/vendor/runner.js test/index.html
-    
+
 ### Share and share alike
 
 As with all my public code, I've released this on bitbucket (at [https://bitbucket.org/DanRoberts/cssparserjs](https://bitbucket.org/DanRoberts/cssparserjs)) but, since I've been looking into dependency management and npm, I've also released it as an npm package!

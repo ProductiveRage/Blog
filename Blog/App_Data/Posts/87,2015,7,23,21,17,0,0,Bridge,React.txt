@@ -151,7 +151,7 @@ Wow, that all sounds really confusing! But the upshot is that you can create a c
         }
       }
     }
-    
+
 Note that the "Render" method accesses "props.Name" directly - all of the wrapping / unwrapping is hidden away in the base class, the derived class is happily oblivious to all that **PropsWrapper** madness.
 
 Also note that the constructor has been declared as private, which is important since these components should never be instantiated directly - they should *only* be brought into existence via that "React.createElement" function. To this end, a static "New" function is present (which calls the static "New" function on the base class).
@@ -164,17 +164,17 @@ Bringing all this together, we could use this component in code such as:
       WelcomeComponent.New(new WelcomeComponent.Props(name: "Ted")),
       Document.GetElementById("main")
     );
-    
+
 But before doing so, we'd better get back to the builtin React element creation functions..
 
 *Warning (July 2015): The code above will actually fail at runtime with the current version of Bridge (1.7) because of [a bug I reported in their forums](http://forums.bridge.net/forum/bridge-net-pro/bugs/314-closed-306-failure-to-identify-generic-static-method-on-derived-class-as-call-targeti) - however this has been fixed and will be included in the next release. I'm being optimistic and hoping that this article will be relevant in the future when this bug is just a distant memory :) Until the version after 1.7 is released, replace the line*
 
     return New<WelcomeComponent>(props);
-    
+
 *with*
 
     return Component<WelcomeComponent.Props>.New<WelcomeComponent>(props);
-    
+
 *and it will work fine. But in the future the less verbose version shown in the **WelcomeComponent** example will be safe.*
 
 ### Bindings for the regular DOM element functions
@@ -214,7 +214,7 @@ and then define a new **ReactElementOrText** type -
         [Ignore]
         public extern static implicit operator ReactElementOrText(ReactElement element);
       }
-    
+
 This is another class with an "Ignore" attribute since it does not require any JavaScript to be generated for it, it's just to provide information to the C# compiler. It means that anywhere that a **ReactElementOrText** type is specified as an argument type, it is valid to provide either a **ReactElement** or a string. (The "Ignore" attributes on the functions are only present so that they may be identified as "extern" - as described earlier, an "extern" function *must* be decorated with an attribute of some kind).
 
 The **DOM** class makes further of the "Name" attribute, ensuring that any accesses in C# to "Bridge.React.DOM" are replaced with just "React.DOM" in the generated JavaScript.
@@ -237,9 +237,9 @@ As you can probably tell, this is *not* the full-featured React interface ("clas
 **HTMLAttributes** is another type that we don't directly want to include in the generated JavaScript. If we have the C# line -
 
     return DOM.Div(new HTMLAttributes { className = "welcome" }, "Hello!");
-    
+
 we want this to be translated into the following:
-    
+
     return React.DOM.div({ className = "welcome" }, "Hello!");
 
 This is idiomatic React-calling code.
@@ -249,7 +249,7 @@ Bridge.net has support to instruct the compiler to interpret class constructors 
 We saw this "ObjectLiteral" attribute used earlier, on the **Component** base class - it was used for the wrapper around the props data. That wrapper is only used to nest the real "props" reference inside a property so that React's internals don't try to mess with it. It would be unnecessary to wrap that reference up inside a full class instance, it is more sensible for the generated JavaScript to be simply -
 
     return React.createElement(TComponent, { props: props });
-    
+
 as opposed to something like
 
     return React.createElement(
@@ -259,7 +259,7 @@ as opposed to something like
         { props: props }
       )
     );
-    
+
 (which is what Bridge would emit if the **PropsWrapper** type did *not* have the "ObjectLiteral" attribute on it).
 
 ### More DOM bindings..
@@ -342,7 +342,7 @@ The big difference is that the TypeScript bindings do not expose a "target" prop
         public Action stopPropagation;
         public string type;
       }
-      
+
       [Ignore]
       public class InputEventTarget : EventTarget
       {
@@ -352,7 +352,7 @@ The big difference is that the TypeScript bindings do not expose a "target" prop
       [Ignore]
       public class EventTarget { }
     }
-    
+
 There are obviously more properties that belong on the **InputAttribute** type (such as "onKeyDown", "onKeyPress", "onKeyUp" and many others) but for now I just wanted to write enough to prove the concept.
 
 ### Flux

@@ -1,4 +1,4 @@
-﻿## Why do you hate my (WCF) types, PHP??
+## Why do you hate my (WCF) types, PHP??
 
 Last November, I was helping someone consume a WCF Web Service with PHP (in the imaginatively named [Consuming a WCF Web Service from PHP](Post35)). After jumping through some hoops (and reading a _lot_ of unhelpful and/or misleading information on the web) it was working; requests that relied on type names being specified were being accepted, gzip support was being enabled, even some useful debug information was being made available for when problems were encountered. All was well. But there was something that was bugging me for a long time that I only quite recently was able to address -
 
@@ -102,9 +102,9 @@ But if we try this with the web service call -
     );
     $metaDataTypes = $client->GetMetaData(
       array(
-        "request" => array(  
+        "request" => array(
           "ApiKey" => "TestKey",
-          "Language" => 1, 
+          "Language" => 1,
           "MetaDataTypes" => array(
             "MetaDataTypeOptions" => array(
               "Award",
@@ -132,7 +132,7 @@ For example, to guess that a result is an **AwardMetaDataEntry** we could try
 and work on the basis that if it exposes an "ImageUrl" property that it is **AwardMetaDataEntry**.
 
 But this won't work for differentiating between a **CategoryGroupMetaDataEntry** and a **FacilityGroupMetaDataEntry** since those response types have no structural differences.
-    
+
 ### Class Mappings
 
 It turns out that the SoapClient *does* offer a way to get what we want, so long as we don't mind declaring PHP classes for every response type that we're interested in.

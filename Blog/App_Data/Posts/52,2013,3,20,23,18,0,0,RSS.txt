@@ -1,4 +1,4 @@
-﻿## Publishing RSS
+## Publishing RSS
 
 With the recent furor about the death of Google Reader, I've been inspired to add an RSS Feed to my blog. It's not something that was at the forefront of my mind since I don't subscribe to any RSS Feeds. The sort of feeds that I might subscribe to will probably have any interesting posts they generate appear on [Hacker News](http://news.ycombinator.com/) or [Programming Reddit](http://programming.reddit.com/) - and they have the benefit that any posts that *aren't* particularly interesting to me aren't likely to appear at all!
 
@@ -122,7 +122,7 @@ So, for my blog, that's just the date of the most recent Post. I've decided to g
 
 ### TTL (Time To Live)
 
-This one I really don't even know where to start with. 
+This one I really don't even know where to start with.
 
 > ttl stands for time to live. It's a number of minutes that indicates how long a channel can be cached before refreshing from the source. This makes it possible for RSS sources to be managed by a file-sharing network such as Gnutella.
 

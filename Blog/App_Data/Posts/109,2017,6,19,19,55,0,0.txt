@@ -36,36 +36,36 @@ My final whinge about .NET Standard versions is that it's often hard to know *wh
 
 Let me try and get more tightly focused on the tooling again. Earlier, I said that one of the plusses is that it's so easy to create NuGet packages with "dotnet pack". One of the *problems* (maybe "mixed blessing" would be more accurate) with this is that the packages are built entirely from metadata in the .csproj file. So you need to add any extra NuGet-specific information there. This actually works great - for example, here is one of my project files:
 
-	<Project Sdk="Microsoft.NET.Sdk">
+    <Project Sdk="Microsoft.NET.Sdk">
 
-	  <PropertyGroup>
-		<TargetFrameworks>netstandard1.6;net45</TargetFrameworks>
+      <PropertyGroup>
+        <TargetFrameworks>netstandard1.6;net45</TargetFrameworks>
 
-		<PackageId>FullTextIndexer.Serialisation.Json</PackageId>
-		<PackageVersion>1.1.0</PackageVersion>
-		<Authors>ProductiveRage</Authors>
-		<Copyright>Copyright 2017 Productive Rage</Copyright>
-		<PackageTags>C# full text index search</PackageTags>
-		<PackageIconUrl>https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200</PackageIconUrl>
-		<PackageProjectUrl>https://bitbucket.org/DanRoberts/full-text-indexer</PackageProjectUrl>
-	  </PropertyGroup>
+        <PackageId>FullTextIndexer.Serialisation.Json</PackageId>
+        <PackageVersion>1.1.0</PackageVersion>
+        <Authors>ProductiveRage</Authors>
+        <Copyright>Copyright 2017 Productive Rage</Copyright>
+        <PackageTags>C# full text index search</PackageTags>
+        <PackageIconUrl>https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200</PackageIconUrl>
+        <PackageProjectUrl>https://bitbucket.org/DanRoberts/full-text-indexer</PackageProjectUrl>
+      </PropertyGroup>
 
-	  <ItemGroup>
-		<PackageReference Include="Newtonsoft.Json" Version="10.0.2" />
-	  </ItemGroup>
+      <ItemGroup>
+        <PackageReference Include="Newtonsoft.Json" Version="10.0.2" />
+      </ItemGroup>
 
-	  <ItemGroup>
-		<ProjectReference Include="..\FullTextIndexer.Common\FullTextIndexer.Common.csproj" />
-		<ProjectReference Include="..\FullTextIndexer.Core\FullTextIndexer.Core.csproj" />
-	  </ItemGroup>
+      <ItemGroup>
+        <ProjectReference Include="..\FullTextIndexer.Common\FullTextIndexer.Common.csproj" />
+        <ProjectReference Include="..\FullTextIndexer.Core\FullTextIndexer.Core.csproj" />
+      </ItemGroup>
 
-	  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard1.6'">
-		<PackageReference Include="System.Reflection.TypeExtensions">
-		  <Version>4.3.0</Version>
-		</PackageReference>
-	  </ItemGroup>
+      <ItemGroup Condition="'$(TargetFramework)' == 'netstandard1.6'">
+        <PackageReference Include="System.Reflection.TypeExtensions">
+          <Version>4.3.0</Version>
+        </PackageReference>
+      </ItemGroup>
 
-	</Project>
+    </Project>
 
 I've got everything I need; package id, author, copyright, icon, tags, .. My issue isn't how this works, it's that this doesn't seem to well documented. Searching on Google presents articles such as [Create .NET standard packages with Visual Studio 2017](https://docs.microsoft.com/en-us/nuget/guides/create-net-standard-packages-vs2017) which is very helpful but *doesn't* link anywhere to a definitive list of what properties are and aren't supported. I came up with the above by hoping that it would work, calling "dotnet pack" and then examining the resulting .nupkg file in NuGet Package Explorer.
 
@@ -85,9 +85,9 @@ Another flakey issue I had is that I have a "FullTextIndexer" project that doesn
 
 In my multi-framework-targeting example solution, I have some conditional compilation statements. I use the Full Text Indexer to power the search on this blog and I serialise a search index using the BinaryFormatter. In order to do this, the search index classes have to have the [Serializable] attribute. But this attribute is not available in .NET Standard.. So the .NET Standard builds of the Full Text Indexer don't have [Serializable] attributes, while the .NET Framework builds *do* have it. That way I can produce nice, clean, new .NET Standard libraries without breaking backwards compatibility for .NET Framework consumers (like my Blog). To do this end, I have code like this:
 
-	#if NET45
-	  [Serializable]
-	#endif
+    #if NET45
+      [Serializable]
+    #endif
 
 I have two problems with this. Firstly, the conditional compile strings are a little bit "magic" and are not statically analysed. If, for example, you change "#if NET45" to "#if net45" then the code would not be included in .NET Framwork 4.5 builds. You wouldn't get any warning or indication of this, it would happen silently. Similarly, if your project builds for "netstandard1.6" and "net45" and you include a conditional "#if NET452" then that condition will never be met because you should have used "NET45" and not "NET452". Considering the fact that I use languages like C# that are statically typed so that the compiler can identify silly mistakes like this that I might make, this is frustrating when I get it wrong. The second issue I have is that the conditional statement highlighting is misleading when the debugger steps through code. If I have a project that has target frameworks "netstandard1.6;net45" and I reference this from a .NET Framework Console Application and I step through into the library code, any "#if NET45" code will appear "disabled" in the IDE when, really, that code is in play. That's misleading and makes me sad.
 

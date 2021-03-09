@@ -20,7 +20,7 @@ In the C# code from last time, the core logic was contained within a static meth
         "TODO: Implement this"
 
     [<EntryPoint>]
-    let private Main _ = 
+    let private Main _ =
         Go (new Random(0)) |> ignore
         0
 
@@ -46,11 +46,11 @@ If we changed the "Go" function to this:
 This essentially means that the type "r" is not fixed and that it may be any type because there is no way for the compiler to apply any restrictions to it based upon the code that it has access to. When comparing to C#, you might imagine that this would be equivalent to this:
 
     private string Go(object r)
-	
+
 .. but it would actually be more accurate to think about it like a generic method - eg.
 
     private string Go<T>(T r)
-	
+
 The difference isn't important right now it's worth bearing in mind.
 
 There's also a function "Main" that takes a single string argument argument named "\_" and that returns an int. Just looking at this code, you may imagine that "\_" would also be of an unknown / generic type but if you hover to the word "Main" then you'll see this signature:
@@ -64,18 +64,18 @@ The string array is a list of arguments passed to the compiled executable if cal
 In a similar vein, F# will warn you if you call a function and ignore its return value. If the idea is that all functions be pure (and so have no side effects) then a function is useless if you ignore its return value. In the scaffolding above, though, we just want to call "Go" (which will do some calculations and write a summary to the console) - we don't really care about its return value. To tell the compiler this, we use a special function called "ignore" that we pass the return value of the "Go" function to. The C# way to do this might look something like this:
 
     ignore(Go(new Random(0)))
-	
+
 This is valid F# but it's criticised as having to be read "inside out". It's more common in F# to see it like this:
 
     Go (new Random(0)) |> ignore
-	
+
 The "pipe forward" operator (|&gt;) effectively means take the value on the left and use it as the last argument in the function on the right. Since "ignore" only takes one argument, the two versions above are equivalent.
 
 If a function has more than one argument then the pipe operator only provides the last one. To illustrate this, consider the method "List.map" that takes two arguments; a "mapping" delegate and a list of items. It's very similar to LINQ's "Select" method. You could call it like this:
 
     let numbers = [1;2;3]
     let squares = List.map (fun x -> x * x) numbers
-	
+
 I'll breeze through some of the syntax above in a moment but the important point here is that there is a method that takes two arguments where the second is a list.
 
 It could be argued that this syntax is back-to-front because you may describe this in English as:
@@ -96,24 +96,24 @@ Because the pipe operator passes the value on the left as the *last* argument to
 Now, as promised, a quick rundown of F# syntax introduced above. The "let" keyword is very similar to C#'s "var" in that it use type inference to determine what type the specific reference should be. *Unlike* "var", though, you can't change the reference later on - eg.
 
     let numbers = [1;2;3]
-    
-	// Invalid! This "=" operator is treated as a comparison whose return value is ignored
-	// rather than this statement being a reassignment - the "numbers" reference is still
-	// a list with the values 1, 2 and 3 (a compiler warning will be displayed)
+
+    // Invalid! This "=" operator is treated as a comparison whose return value is ignored
+    // rather than this statement being a reassignment - the "numbers" reference is still
+    // a list with the values 1, 2 and 3 (a compiler warning will be displayed)
     numbers = [1;2;3;4]
-	
+
 Because F# *only* allows you to set value in statements that include the "let" operator, it makes it easier for the F# compiler to know whether the code fragment:
 
-	a = b
-	
+    a = b
+
 is an assignment or a comparison - if it follows a "let" then it's always an assignment but otherwise it's a comparison.
 
 This is unlike C# where the following is acceptable:
 
-	var numbers = new[] { 1, 2, 3 };
-	
-	// This is allowed in C#
-	numbers = new[] { 1, 2, 3, 4 };
+    var numbers = new[] { 1, 2, 3 };
+
+    // This is allowed in C#
+    numbers = new[] { 1, 2, 3, 4 };
 
 .. and this means that the C# compiler can't as easily tell whether the code fragment "a = b" is an assignment or a comparison and *that* is why C# has the assignment operator "=" and a separate equality comparison operator "==" (and why F# can use "=" as both the assignment operator *and* equality comparison operator).
 
@@ -121,9 +121,9 @@ The next thing to talk about is that F# allows you to declare a list of values u
 and F# -
 
     var numbers = new List<int> { 1, 2, 3 }; // C#
-	
-	let numbers = [1;2;3] // F#
-	
+
+    let numbers = [1;2;3] // F#
+
 The reason that they're similar and not identical is that the C# code uses the **System.Collections.Generic.List&lt;T&gt;** type, which is mutable (you can add, remove and replace items within a list). In F#, the list is *immutable* and so any operation (such as add, remove or replace) would return a new list reference, rather than mutating the existing list.
 
 You may have noticed that semi-colons are not present at the end of each F# line in the examples above. That's because they are not required. F# uses whitespace (such as line returns and indenting) to determine when statements terminate and when they continue and so semi-colons are not used to specify where statements finish (unlike in C#, where they are).
@@ -131,7 +131,7 @@ You may have noticed that semi-colons are not present at the end of each F# line
 Finally, there was a delegate shown in the above code -
 
     (fun x -> x * x)
-	
+
 This is an anonymous function. The F# code:
 
     let numbers = [1;2;3]
@@ -140,8 +140,8 @@ This is an anonymous function. The F# code:
 is roughly the same as the following C# code:
 
     var numbers = new[] { 1, 2, 3 };
-	var squares = numbers.Select(x => x * x);
-	
+    var squares = numbers.Select(x => x * x);
+
 It's not *precisely* the same since "numbers" in the F# code is an immutable list reference and in C# it's an array but it's close enough. The point is that the "fun" keyword is used to declare an anonymous function and that brackets are required around that function declaration in order to segregate that code and make it clear to the compiler that the function declaration should be considered as a single value that is being passed to the "List.map" function.
 
 ### Declaring training data
@@ -149,11 +149,11 @@ It's not *precisely* the same since "numbers" in the F# code is an immutable lis
 In the C# perceptron code from [last week](Post111), there was an array of **Tuple** values that contained each pair of inputs and the expected result -
 
     var trainingData = new[]
-	{
-	  Pattern(0.08, 0.94, true),
-	  
-	  // .. more patterns
-	};
+    {
+      Pattern(0.08, 0.94, true),
+
+      // .. more patterns
+    };
 
 The "Pattern" function was just this:
 
@@ -161,7 +161,7 @@ The "Pattern" function was just this:
     {
       return Tuple.Create(new[] { x, y }, output);
     }
-	
+
 The **Tuple** class is a very convenient way to represent small groups of values (such as an input array and the expected boolean output) but one thing that I don't like is that the properties are named "Item1", "Item2", etc.. rather than it being possible to give them more descriptive labels.
 
 I could have defined a class to contain these values but that can involve a lot of boilerplate code (particularly if it's an immutable class, which would be my preference when creating classes that describe data that should be initialised once and never changed).
@@ -173,7 +173,7 @@ Fortunately, F# has a convenient way to describe data like this called "[Records
 It is now possible to define an input list / output boolean object with properties name "Values" and "Result" like this:
 
     let x = { Values = [0.08; 0.94]; Result = true }
-	
+
 The type of "x" is not explicitly specified in the code but the compiler will be able to match it to the **Input** type.
 
 ### double vs float
@@ -186,23 +186,23 @@ This seems quite confusing to me (coming at this from C#) but I decided to try t
 
 To declare all of the training data in F#, we want a list of patterns -
 
-	let trainingData = [
-		{ Values = [0.08; 0.94]; Result = true }
-		{ Values = [0.13; 0.95]; Result = true }
-	  
-		// .. more patterns
-  	]
+    let trainingData = [
+        { Values = [0.08; 0.94]; Result = true }
+        { Values = [0.13; 0.95]; Result = true }
+
+        // .. more patterns
+      ]
 
 When declaring a list (items within square brackets), they may either be separated by semi-colons or by line returns. So, above, each pattern is on its own line and so no semi-colons need to separate them while the individual numbers within the "Values" lists *do* need semi-colon separators since there are no line returns to break them up.
 
 In the C# code, the "Pattern" function specifically took two "x" and "y" arguments and so each **Tuple** had an "Item1" property which was an array with two elements. In the above code, there would be no compiler warning if I accidentally included a line where the pattern had more "Values" entries than the others. As a sanity check, we can include the following code after the "trainingData" list is declared -
 
-	let inputLengths =
-		trainingData
-		|> List.map (fun input -> input.Values.Length)
-		|> List.distinct
-		|> List.length
-	if (inputLengths > 1) then raise (Exception "Inconsistent pattern input lengths!")
+    let inputLengths =
+        trainingData
+        |> List.map (fun input -> input.Values.Length)
+        |> List.distinct
+        |> List.length
+    if (inputLengths > 1) then raise (Exception "Inconsistent pattern input lengths!")
 
 There's a lot of piping here, which seems to be quite common in F# code. Hopefully, though, it illustrates how using the pipe operator allows code to be written in a more logical order. Here, we're saying:
 
@@ -215,19 +215,19 @@ If the "trainingData" has patterns which all have the same number of inputs then
 
 Since F# has a concept of "significant whitespace" (meaning that it uses line returns and indentation to indicate where expressions start and end, which is why semi-colons are not required to terminate lines), sometimes it can get a bit demanding about what it thinks it ok and what isn't. In the code above, if you tried to put the "trainingData" on the same line as the "let inputLengths =" and then have the pipe operator lines start underneath it then you will get cryptic errors such as "The block following this 'let' is unfinished". Using the format above not only means that your code will be more consistent with other F# "in the wild" but it also means that the compiler will understand it!
 
-	// The F# compiler is happy with this..
-	let inputLengths =
-		trainingData
-		|> List.map (fun input -> input.Values.Length)
-		|> List.distinct
-		|> List.length
+    // The F# compiler is happy with this..
+    let inputLengths =
+        trainingData
+        |> List.map (fun input -> input.Values.Length)
+        |> List.distinct
+        |> List.length
 
-	// .. it is NOT happy with this..
-	let inputLengths = trainingData
-		|> List.map (fun input -> input.Values.Length)
-		|> List.distinct
-		|> List.length
-		
+    // .. it is NOT happy with this..
+    let inputLengths = trainingData
+        |> List.map (fun input -> input.Values.Length)
+        |> List.distinct
+        |> List.length
+
 (I would not have thought that putting "trainingData" on the same line as "let inputLengths =" would introduce any ambiguity but presumably doing similar things must do in some situations).
 
 ### Translating the network-training code
@@ -264,7 +264,7 @@ The c# code that we ended up with [last time](Post111) for training a network lo
           return resultForIteration;
         }
       )
-	  .First(state => state.GlobalError <= 0);
+      .First(state => state.GlobalError <= 0);
 
 .. and relied upon the following two functions:
 
@@ -303,7 +303,7 @@ The "List.zip" function is very similar to LINQ's "Zip" function except that it 
 F# has nice support for tuples that allows us to avoid having to rely upon "Item1" and "Item2" accesses. The lambda above that performs multiplication would have to look something like this in C# if the input was a tuple:
 
     weightAndInput => weightAndInput.Item1 * weightAndInput.Item2
-	
+
 .. but F# allows us to "deconstruct" the tuple by providing names for the tuple properties - ie.
 
     fun (weight, input) -> weight * input
@@ -314,17 +314,17 @@ Hopefully the rest of the code is easy to understand, "List.zip" is like LINQ's 
 
 The second line "sum &gt;= float 0" is the return value for the function - either true or false. The expression "float 0" is important because the "sum" value will be a **float** and F# will not attempt *any* type coercion when comparing values. In C#, if you have two numeric types then you can compare them - eg.
 
-	// Valid in C#
-	double x1 = 0; // double
-	int x2 = 0;    // int
-	var isMatch = (x1 == x2);
+    // Valid in C#
+    double x1 = 0; // double
+    int x2 = 0;    // int
+    var isMatch = (x1 == x2);
 
 .. but in F# this is not allowed. If you tried to write the following:
 
-	// Not allowed in F#
-	let x1 = float 0 // float
-	let x2 = 0       // int
-	let isMatch = (x1 = x2)
+    // Not allowed in F#
+    let x1 = float 0 // float
+    let x2 = 0       // int
+    let isMatch = (x1 = x2)
 
 .. then you would get the following error:
 
@@ -363,11 +363,11 @@ The "UpdateWeights" function may be translated in a similar manner -
 
 In F#, if / then / else is a bit different to C#. In F#, it is an expression that returns a value, so you could write something like:
 
-	// Valid F#
+    // Valid F#
     let x = if something then 1 else 2
-	
-	// Not valid C#
-	var x = if something then 1 else 2
+
+    // Not valid C#
+    var x = if something then 1 else 2
 
 So, in the F# "UpdateWeights" function, the "if" expression returns either the original "weights" reference or the updated list.
 
@@ -375,17 +375,17 @@ We've actually seen quite a lot of F# syntax, just in the code above - variable 
 
     let private Go (r: Random) =
 
-		let Output weights bias inputs =
-			let sum = (List.zip weights inputs |> List.map (fun (weight, input) -> weight * input) |> List.sum) + bias
-			sum >= float 0
-		
-		let UpdateWeights weights localError inputs =
-			if (localError = float 0)
-				then weights
-				else
-					List.zip weights inputs
-					|> List.map (fun (weight, input) -> weight + (learningRate * localError * input))
-	
+        let Output weights bias inputs =
+            let sum = (List.zip weights inputs |> List.map (fun (weight, input) -> weight * input) |> List.sum) + bias
+            sum >= float 0
+
+        let UpdateWeights weights localError inputs =
+            if (localError = float 0)
+                then weights
+                else
+                    List.zip weights inputs
+                    |> List.map (fun (weight, input) -> weight + (learningRate * localError * input))
+
         "TODO: Implement this"
 
 ### Sidebar: The influence of F# on C# ###
@@ -400,7 +400,7 @@ It seems that quite a lot of features from F# are coming over to C# from C# 7 on
       }
 
       Console.WriteLine(GetNumber());
-	}
+    }
 
 Similarly, Tuple deconstruction is also now available -
 
@@ -410,9 +410,9 @@ Similarly, Tuple deconstruction is also now available -
       Console.WriteLine(string.Join(", ", inputs));
       Console.WriteLine(output);
     }
-	
-	// Note: We're not returning a "Tuple<double[], bool>" here, it's a different type (and it requires
-	// the "System.ValueType" package to be added to the project
+
+    // Note: We're not returning a "Tuple<double[], bool>" here, it's a different type (and it requires
+    // the "System.ValueType" package to be added to the project
     private static (double[] inputs, bool output) GetPattern()
     {
       return (new[] { 0.5, 0.6 }, true);
@@ -421,17 +421,17 @@ Similarly, Tuple deconstruction is also now available -
 Coming at some point (looks like it will be C# 8), there will be support for defining record types -
 
     // This syntax is not yet available (as of January 2018)
-	public class Point(int X, int Y);
-	
+    public class Point(int X, int Y);
+
 The **Point** class will have X and Y properties that are set through a constructor call. It will have an "Equals" implementation that will return true for two **Point** references that have the same X and Y values (and probably have == and != operator overloads that do the same thing) *and* it will have a "With" method that allows you to take an instance of a **Point** and create a new instance that has a new value for either X or Y - eg.
 
     var p1 = new Point(1, 2);
-	var p2 = new Point(1, 2);
-	Console.WriteLine(p1 == p2); // True!
-	
-	p2 = p2.With(X: 7);
-	Console.WriteLine(p1 == p2); // False
-	
+    var p2 = new Point(1, 2);
+    Console.WriteLine(p1 == p2); // True!
+
+    p2 = p2.With(X: 7);
+    Console.WriteLine(p1 == p2); // False
+
 (For more details about C# record types, see the [records proposal](https://github.com/dotnet/csharplang/blob/master/proposals/records.md)).
 
 It's interesting to see these features working their way into C# and hopefully it will make it easier for someone in the future to try F# if they already know C#. (Some may argue that it could make F# less appealing with more of its features being added to C# but I think that it will still have enough differences to stand apart - having immutability and non-nulls *by default* is not something that is likely to be incorporated into C# because it would require enormous changes).
@@ -455,16 +455,16 @@ Now that the supporting functions ("Output" and "UpdateWeights") have been trans
           // Do work here..
         }
       )
-	  .First(state => state.GlobalError <= 0);
+      .First(state => state.GlobalError <= 0);
 
 The "Enumerable.Range(0, int.MaxValue)" line was basically a way to say "keep enumerating for ever" (int.MaxValue isn't technically the same as "forever" but in this context it's good enough because we'll die of boredom waiting for the code to perform two billion iterations).
 
 In F# there is a function that seems closer to what we want called "Seq.initInfinite" - this takes a single argument that is a delegate that takes an int and returns a value in the generated sequence based upon that int. It could be implemented in C# like this:
 
-	public static IEnumerable<T> InitInfinite<T>(Func<int, T> initialiser)
-	{
-	  return Enumerable.Range(0, int.MaxValue).Select(initialiser);
-	}
+    public static IEnumerable<T> InitInfinite<T>(Func<int, T> initialiser)
+    {
+      return Enumerable.Range(0, int.MaxValue).Select(initialiser);
+    }
 
 This is *also* limited to int.MaxValue iterations since the delegate argument is an **int** but we're *still* not going to worry too much about whether it's *really* infinite or not.
 
@@ -472,7 +472,7 @@ From my last post, we know that "Scan" is already an F# concept and so that shou
 
 The last function to translate is "First" and this has a corresponding function in F#; "Seq.find".
 
-The only issue that we have to tackle now is that F# does not support anonymous types and so we'll need to declare another record type that I'll call "CalculationState". 
+The only issue that we have to tackle now is that F# does not support anonymous types and so we'll need to declare another record type that I'll call "CalculationState".
 
     type private CalculationState = {
         Weights: List<float>
@@ -487,27 +487,27 @@ Now we can translate the above C# into this F#:
     let finalResult =
         Seq.initInfinite (fun i -> i)
         |> Seq.scan
-			(fun previousState iteration ->
-				// Do work here..
-			)
+            (fun previousState iteration ->
+                // Do work here..
+            )
             { Weights = [r.NextDouble(); r.NextDouble()]; Bias = float 0; GlobalError = Double.MaxValue }
         |> Seq.find (fun state -> state.GlobalError = float 0)
 
 The "// Do work here.." code looks like this in C# -
 
     var resultForIteration = trainingData.Aggregate(
-	  seed: new { Weights = previousState.Weights, Bias = previousState.Bias, GlobalError = 0d },
-	  func: (stateSoFar, pattern) =>
-	  {
-	    var output = Output(stateSoFar.Weights, stateSoFar.Bias, pattern.Item1) ? 1 : -1;
-	    var localError = (pattern.Item2 ? 1 : -1) - output;
-	    return new
-	    {
-		  Weights = UpdateWeights(stateSoFar.Weights, learningRate, localError, pattern.Item1),
-		  Bias = stateSoFar.Bias + (learningRate * localError),
-		  GlobalError = stateSoFar.GlobalError + Math.Abs(localError)
-	    };
-	  }
+      seed: new { Weights = previousState.Weights, Bias = previousState.Bias, GlobalError = 0d },
+      func: (stateSoFar, pattern) =>
+      {
+        var output = Output(stateSoFar.Weights, stateSoFar.Bias, pattern.Item1) ? 1 : -1;
+        var localError = (pattern.Item2 ? 1 : -1) - output;
+        return new
+        {
+          Weights = UpdateWeights(stateSoFar.Weights, learningRate, localError, pattern.Item1),
+          Bias = stateSoFar.Bias + (learningRate * localError),
+          GlobalError = stateSoFar.GlobalError + Math.Abs(localError)
+        };
+      }
     );
     Console.WriteLine("Iteration {0}\tError {1}", iteration, resultForIteration.GlobalError);
     return resultForIteration;
@@ -523,35 +523,35 @@ I'm going to break this out into a separate function in the F# code because I wa
 
 .. and then define this nested function:
 
-	let CalculateNextState (state: CalculationState) (iteration: int) =
-		// Do work here..
+    let CalculateNextState (state: CalculationState) (iteration: int) =
+        // Do work here..
 
 (Again, I've started by including explicit type annotations for the arguments but I'll be able to remove them later).
 
 The C# code used the "Aggregate" function which corresponds to "List.fold" in F# and "Console.WriteLine" which corresponds to "printfn". With everything that we've covered already, it shouldn't be a big leap to see that the complete implementation of the "CalculateNextState" function will be as follows:
 
-	let CalculateNextState (state: CalculationState) (iteration: int) =
-		let resultForIteration =
-			List.fold
-				(fun stateSoFar input ->
-					let output = if (Output stateSoFar.Weights stateSoFar.Bias input.Values) then 1 else -1
-					let localError = float ((if input.Result then 1 else -1) - output)
-					{
-						Weights =
-							if (localError = float 0)
-							then stateSoFar.Weights
-							else UpdateWeights stateSoFar.Weights localError input.Values
-						Bias =
-							if (localError = float 0)
-							then stateSoFar.Bias
-							else stateSoFar.Bias + (learningRate * localError)
-						GlobalError = stateSoFar.GlobalError + Math.Abs(localError)
-					}
-				)
-				{ Weights = state.Weights; Bias = state.Bias; GlobalError = float 0 }
-				trainingData
-		printfn "Iteration %i\tError %i" iteration (int resultForIteration.GlobalError)
-		resultForIteration
+    let CalculateNextState (state: CalculationState) (iteration: int) =
+        let resultForIteration =
+            List.fold
+                (fun stateSoFar input ->
+                    let output = if (Output stateSoFar.Weights stateSoFar.Bias input.Values) then 1 else -1
+                    let localError = float ((if input.Result then 1 else -1) - output)
+                    {
+                        Weights =
+                            if (localError = float 0)
+                            then stateSoFar.Weights
+                            else UpdateWeights stateSoFar.Weights localError input.Values
+                        Bias =
+                            if (localError = float 0)
+                            then stateSoFar.Bias
+                            else stateSoFar.Bias + (learningRate * localError)
+                        GlobalError = stateSoFar.GlobalError + Math.Abs(localError)
+                    }
+                )
+                { Weights = state.Weights; Bias = state.Bias; GlobalError = float 0 }
+                trainingData
+        printfn "Iteration %i\tError %i" iteration (int resultForIteration.GlobalError)
+        resultForIteration
 
 It's still taking me a little while to get used to there being no "return" keyword and so I sometimes have to remind myself that the anonymous function passed to "List.fold" returns the { Weights, Bias, GlobalError } value and that the "CalculateNextState" function returns the "resultForIteration" that is on its last line.
 
@@ -562,33 +562,33 @@ Now that the function is fully defined, the type annotations can be removed from
 You might have noticed that in the code above, the C# write-info-to-console line:
 
     Console.WriteLine("Iteration {0}\tError {1}", iteration, resultForIteration.GlobalError);
-	
+
 was translated into this in F#:
 
     printfn "Iteration %i\tError %i" iteration (int resultForIteration.GlobalError)
 
 In principle, it's very similar; there are placeholders in the format string (which is what the "%i" values are in the F# code above) that will be populated with arguments passed to Console.WriteLine / printfn but there are a couple of key differences. The first is that the "%i% placeholder requires that the value used to populate it is an integer (alternatives are "%s" for strings, "%f" for floats and "%b" for booleans) but the second is much more exciting - the format string and the provided arguments are verified *at compile time* in the F# code whereas the C# code is only verified at *run time*. To make it really crystal clear what I mean by this, the following C# code will compile but fail when it's run -
 
-	// This will fail at runtime with "System.FormatException: 'Index (zero based) must be greater
-	// than or equal to zero and less than the size of the argument list.'" because there are two
-	// placeholders in the format string but only one value provided
-	Console.WriteLine("Hello {0}, {1}", "test");
+    // This will fail at runtime with "System.FormatException: 'Index (zero based) must be greater
+    // than or equal to zero and less than the size of the argument list.'" because there are two
+    // placeholders in the format string but only one value provided
+    Console.WriteLine("Hello {0}, {1}", "test");
 
 On the other hand, the following F# won't even *compile* -
 
-	// Will refuse to compile: "This expression is a function value, i.e. is missing arguments."
-	printfn "Hello %s, %s" "test"
+    // Will refuse to compile: "This expression is a function value, i.e. is missing arguments."
+    printfn "Hello %s, %s" "test"
 
 This makes me happy because I'm all about making the compiler catch simple mistakes instead of allowing them to surface at runtime.
 
 Now, I will admit that I was using a somewhat old school method of writing messages there in C#. C#6 introduced its own interpretation of "string interpolation" that allows us to combine the "template string" with the placeholder values so that we don't accidentally include too many or too few placeholder value arguments. Instead of writing this:
 
-	// Old style
+    // Old style
     Console.WriteLine("Iteration {0}\tError {1}", iteration, resultForIteration.GlobalError);
 
 .. we could write this:
 
-	// C# 6 string interpolation
+    // C# 6 string interpolation
     Console.WriteLine($"Iteration {iteration}\tError {resultForIteration.GlobalError});
 
 I would argue that this is even better again than the F# approach and it's unfortunate that F# doesn't currently have anything quite like this. That is one of the downsides to F# pioneering and pushing a lot of useful techniques that were later incorporated in to C#, I suppose!
@@ -625,10 +625,10 @@ To return to my first point in relation to "Selecting F# BCL functions" - how di
 
 Before I went on a couple of tangents about writing to the console and learning the F# BCL, we had actually finished translating the code that trained the network (it may be an *extremely* simple one but it *is* still technically a network!). Now the only C# that remains to be translated is the code that passes pairs of inputs through the network to see what output it generates for each pair - just to ensure that it matches our expectations. This is how we left it last time:
 
-	const double startAt = 0;
-	const double endAt = 1;
-	const double increment = 0.25;
-	var range = Enumerable.Range(0, (int)((endAt - startAt) / increment) + 1).Select(value => value * increment);
+    const double startAt = 0;
+    const double endAt = 1;
+    const double increment = 0.25;
+    var range = Enumerable.Range(0, (int)((endAt - startAt) / increment) + 1).Select(value => value * increment);
     var xyPairs = range.SelectMany(value => range, (x, y) => new[] { x, y });
     Console.WriteLine(string.Join(
       Environment.NewLine,
@@ -637,36 +637,36 @@ Before I went on a couple of tangents about writing to the console and learning 
 
 The first thing that will be nice about translating this into F# is that it has better support for defining ranges. In C#, we used "Enumerable.Range" but that only works with integers and so we then had to do some division. In F#, we're able to say "define a range by starting at x and incrementing by y until you get to z". So we could replace this:
 
-	const double startAt = 0;
-	const double endAt = 1;
-	const double increment = 0.25;
-	var range = Enumerable.Range(0, (int)((endAt - startAt) / increment) + 1).Select(value => value * increment);
+    const double startAt = 0;
+    const double endAt = 1;
+    const double increment = 0.25;
+    var range = Enumerable.Range(0, (int)((endAt - startAt) / increment) + 1).Select(value => value * increment);
 
 .. with this:
 
     let range = { float 0 .. float 0.25 .. float 1 }
 
-We could then translate the rest of the C# shown above in a like-for-like fashion into F# *or* we could get a tiny bit fancier with some code that I found on Stack Overflow that takes one set of values and transforms it by combining every value with other value (so if your input set was the numbers 1 and 2 then the output would be {1,1} and {1,2} and {2,1} and {2,2}). This is sometimes referred to as taking the "cross product" and is the same concept as doing a "cross join" in SQL. 
+We could then translate the rest of the C# shown above in a like-for-like fashion into F# *or* we could get a tiny bit fancier with some code that I found on Stack Overflow that takes one set of values and transforms it by combining every value with other value (so if your input set was the numbers 1 and 2 then the output would be {1,1} and {1,2} and {2,1} and {2,2}). This is sometimes referred to as taking the "cross product" and is the same concept as doing a "cross join" in SQL.
 
 The code to do it is as follows:
 
-	// Inspired by https://stackoverflow.com/a/482922/3813189
-	let crossproductWithSelf xs = seq { for x1 in xs do for x2 in xs do yield x1, x2 }
-	
+    // Inspired by https://stackoverflow.com/a/482922/3813189
+    let crossproductWithSelf xs = seq { for x1 in xs do for x2 in xs do yield x1, x2 }
+
 Using this means that our "Display network generalisation" summary code looks like this:
 
-	let crossproductWithSelf xs = seq { for x1 in xs do for x2 in xs do yield x1, x2 }
-	let calculatedResults =
-		{ float 0 .. float 0.25 .. float 1 }
-		|> crossproductWithSelf
-		|> Seq.map (fun (x, y) ->
-			x.ToString() + ",\t" +
-			y.ToString() + ",\t" +
-			(if (Output finalResult.Weights finalResult.Bias [x; y]) then "Yes" else "No")
-		)
-	printfn ""
-	printfn "X,\tY,\tOutput"
-	printfn "%s" (String.concat Environment.NewLine calculatedResults)
+    let crossproductWithSelf xs = seq { for x1 in xs do for x2 in xs do yield x1, x2 }
+    let calculatedResults =
+        { float 0 .. float 0.25 .. float 1 }
+        |> crossproductWithSelf
+        |> Seq.map (fun (x, y) ->
+            x.ToString() + ",\t" +
+            y.ToString() + ",\t" +
+            (if (Output finalResult.Weights finalResult.Bias [x; y]) then "Yes" else "No")
+        )
+    printfn ""
+    printfn "X,\tY,\tOutput"
+    printfn "%s" (String.concat Environment.NewLine calculatedResults)
 
 Pretty neat and tidy, I think!
 
@@ -680,118 +680,118 @@ As with the code here, I will be starting with C# from the [Robosoup blog](http:
 
 One more thing - in case you're curious to see the complete F# code that was scattered through this post, here it is:
 
-	open System
+    open System
 
-	type private Input = { Values: list<float>; Result: bool }
+    type private Input = { Values: list<float>; Result: bool }
 
-	type private CalculationState = {
-		Weights: List<float>
-		Bias: float
-		GlobalError: float
-	}
+    type private CalculationState = {
+        Weights: List<float>
+        Bias: float
+        GlobalError: float
+    }
 
-	let Go (r: Random) =
-		let trainingData = [
-			{ Values = [0.08; 0.94]; Result = true }; { Values = [0.13; 0.95]; Result = true };
-			{ Values = [0.28; 0.66]; Result = true }; { Values = [0.3; 0.59]; Result = true };
-			{ Values = [0.31; 0.51]; Result = true }; { Values = [0.34; 0.67]; Result = true };
-			{ Values = [0.34; 0.63]; Result = true }; { Values = [0.36; 0.55]; Result = true };
-			{ Values = [0.38; 0.67]; Result = true }; { Values = [0.4; 0.59]; Result = true };
-			{ Values = [0.4; 0.68]; Result = true }; { Values = [0.41; 0.5]; Result = true };
-			{ Values = [0.42; 0.53]; Result = true }; { Values = [0.43; 0.65]; Result = true };
-			{ Values = [0.44; 0.56]; Result = true }; { Values = [0.47; 0.61]; Result = true };
-			{ Values = [0.47; 0.5]; Result = true }; { Values = [0.48; 0.66]; Result = true };
-			{ Values = [0.52; 0.53]; Result = true }; { Values = [0.53; 0.58]; Result = true };
-			{ Values = [0.55; 0.6]; Result = true }; { Values = [0.56; 0.44]; Result = true };
-			{ Values = [0.58; 0.63]; Result = true }; { Values = [0.62; 0.57]; Result = true };
-			{ Values = [0.68; 0.42]; Result = true }; { Values = [0.69; 0.21]; Result = true }
-			{ Values = [0.7; 0.31]; Result = true }; { Values = [0.73; 0.48]; Result = true };
-			{ Values = [0.74; 0.47]; Result = true }; { Values = [0.74; 0.42]; Result = true };
-			{ Values = [0.76; 0.34]; Result = true }; { Values = [0.78; 0.5]; Result = true };
-			{ Values = [0.78; 0.26]; Result = true }; { Values = [0.81; 0.48]; Result = true };
-			{ Values = [0.83; 0.32]; Result = true }; { Values = [0.83; 0.28]; Result = true };
-			{ Values = [0.85; 0.07]; Result = true }; { Values = [0.85; 0.45]; Result = true };
-			{ Values = [0.88; 0.4]; Result = true }; { Values = [0.89; 0.92]; Result = true };
-			{ Values = [0.9; 0.33]; Result = true }; { Values = [0.91; 0.05]; Result = true };
-			{ Values = [0.92; 0.44]; Result = true }; { Values = [0.95; 0.94]; Result = true };
-			{ Values = [0.96; 0.08]; Result = true };
+    let Go (r: Random) =
+        let trainingData = [
+            { Values = [0.08; 0.94]; Result = true }; { Values = [0.13; 0.95]; Result = true };
+            { Values = [0.28; 0.66]; Result = true }; { Values = [0.3; 0.59]; Result = true };
+            { Values = [0.31; 0.51]; Result = true }; { Values = [0.34; 0.67]; Result = true };
+            { Values = [0.34; 0.63]; Result = true }; { Values = [0.36; 0.55]; Result = true };
+            { Values = [0.38; 0.67]; Result = true }; { Values = [0.4; 0.59]; Result = true };
+            { Values = [0.4; 0.68]; Result = true }; { Values = [0.41; 0.5]; Result = true };
+            { Values = [0.42; 0.53]; Result = true }; { Values = [0.43; 0.65]; Result = true };
+            { Values = [0.44; 0.56]; Result = true }; { Values = [0.47; 0.61]; Result = true };
+            { Values = [0.47; 0.5]; Result = true }; { Values = [0.48; 0.66]; Result = true };
+            { Values = [0.52; 0.53]; Result = true }; { Values = [0.53; 0.58]; Result = true };
+            { Values = [0.55; 0.6]; Result = true }; { Values = [0.56; 0.44]; Result = true };
+            { Values = [0.58; 0.63]; Result = true }; { Values = [0.62; 0.57]; Result = true };
+            { Values = [0.68; 0.42]; Result = true }; { Values = [0.69; 0.21]; Result = true }
+            { Values = [0.7; 0.31]; Result = true }; { Values = [0.73; 0.48]; Result = true };
+            { Values = [0.74; 0.47]; Result = true }; { Values = [0.74; 0.42]; Result = true };
+            { Values = [0.76; 0.34]; Result = true }; { Values = [0.78; 0.5]; Result = true };
+            { Values = [0.78; 0.26]; Result = true }; { Values = [0.81; 0.48]; Result = true };
+            { Values = [0.83; 0.32]; Result = true }; { Values = [0.83; 0.28]; Result = true };
+            { Values = [0.85; 0.07]; Result = true }; { Values = [0.85; 0.45]; Result = true };
+            { Values = [0.88; 0.4]; Result = true }; { Values = [0.89; 0.92]; Result = true };
+            { Values = [0.9; 0.33]; Result = true }; { Values = [0.91; 0.05]; Result = true };
+            { Values = [0.92; 0.44]; Result = true }; { Values = [0.95; 0.94]; Result = true };
+            { Values = [0.96; 0.08]; Result = true };
 
-			{ Values = [0.02; 0.76]; Result = false }; { Values = [0.06; 0.22]; Result = false };
-			{ Values = [0.07; 0.16]; Result = false }; { Values = [0.09; 0.43]; Result = false }; 
-			{ Values = [0.1; 0.08]; Result = false }; { Values = [0.14; 0.07]; Result = false };
-			{ Values = [0.15; 0.23]; Result = false }; { Values = [0.17; 0.18]; Result = false };
-			{ Values = [0.17; 0.11]; Result = false }; { Values = [0.21; 0.28]; Result = false };
-			{ Values = [0.22; 0.17]; Result = false }; { Values = [0.25; 0.09]; Result = false };
-			{ Values = [0.28; 0.28]; Result = false }; { Values = [0.28; 0.27]; Result = false };
-			{ Values = [0.29; 0.22]; Result = false }; { Values = [0.29; 0.29]; Result = false };
-			{ Values = [0.3; 0.29]; Result = false }; { Values = [0.31; 0.14]; Result = false };
-			{ Values = [0.33; 0.19]; Result = false }; { Values = [0.33; 0.06]; Result = false };
-			{ Values = [0.39; 0.15]; Result = false }; { Values = [0.52; 0.1]; Result = false };
-			{ Values = [0.65; 0.07]; Result = false }; { Values = [0.71; 0.1]; Result = false };
-			{ Values = [0.74; 0.05]; Result = false }
-		]
+            { Values = [0.02; 0.76]; Result = false }; { Values = [0.06; 0.22]; Result = false };
+            { Values = [0.07; 0.16]; Result = false }; { Values = [0.09; 0.43]; Result = false };
+            { Values = [0.1; 0.08]; Result = false }; { Values = [0.14; 0.07]; Result = false };
+            { Values = [0.15; 0.23]; Result = false }; { Values = [0.17; 0.18]; Result = false };
+            { Values = [0.17; 0.11]; Result = false }; { Values = [0.21; 0.28]; Result = false };
+            { Values = [0.22; 0.17]; Result = false }; { Values = [0.25; 0.09]; Result = false };
+            { Values = [0.28; 0.28]; Result = false }; { Values = [0.28; 0.27]; Result = false };
+            { Values = [0.29; 0.22]; Result = false }; { Values = [0.29; 0.29]; Result = false };
+            { Values = [0.3; 0.29]; Result = false }; { Values = [0.31; 0.14]; Result = false };
+            { Values = [0.33; 0.19]; Result = false }; { Values = [0.33; 0.06]; Result = false };
+            { Values = [0.39; 0.15]; Result = false }; { Values = [0.52; 0.1]; Result = false };
+            { Values = [0.65; 0.07]; Result = false }; { Values = [0.71; 0.1]; Result = false };
+            { Values = [0.74; 0.05]; Result = false }
+        ]
 
-		let inputLengths =
-			trainingData
-			|> List.map (fun input -> input.Values.Length)
-			|> List.distinct
-			|> List.length
-		if (inputLengths > 1) then raise (Exception "Inconsistent pattern input lengths!")
+        let inputLengths =
+            trainingData
+            |> List.map (fun input -> input.Values.Length)
+            |> List.distinct
+            |> List.length
+        if (inputLengths > 1) then raise (Exception "Inconsistent pattern input lengths!")
 
-		let learningRate = 0.1
+        let learningRate = 0.1
 
-		let Output weights bias inputs =
-			let sum = (List.zip weights inputs |> List.map (fun (weight, input) -> weight * input) |> List.sum) + bias
-			sum >= float 0
+        let Output weights bias inputs =
+            let sum = (List.zip weights inputs |> List.map (fun (weight, input) -> weight * input) |> List.sum) + bias
+            sum >= float 0
 
-		let UpdateWeights weights localError inputs =
-			if (localError = float 0)
-				then weights
-				else
-					List.zip weights inputs
-					|> List.map (fun (weight, input) -> weight + (learningRate * localError * input))
+        let UpdateWeights weights localError inputs =
+            if (localError = float 0)
+                then weights
+                else
+                    List.zip weights inputs
+                    |> List.map (fun (weight, input) -> weight + (learningRate * localError * input))
 
-		let CalculateNextState state iteration =
-			let resultForIteration =
-				List.fold
-					(fun stateSoFar input ->
-						let output = if (Output stateSoFar.Weights stateSoFar.Bias input.Values) then 1 else -1
-						let localError = float ((if input.Result then 1 else -1) - output)
-						{
-							Weights =
-								if (localError = float 0)
-								then stateSoFar.Weights
-								else UpdateWeights stateSoFar.Weights localError input.Values
-							Bias =
-								if (localError = float 0)
-								then stateSoFar.Bias
-								else stateSoFar.Bias + (learningRate * localError)
-							GlobalError = stateSoFar.GlobalError + Math.Abs(localError)
-						}
-					)
-					{ Weights = state.Weights; Bias = state.Bias; GlobalError = float 0 }
-					trainingData
-			printfn "Iteration %i\tError %i" iteration (int resultForIteration.GlobalError)
-			resultForIteration
+        let CalculateNextState state iteration =
+            let resultForIteration =
+                List.fold
+                    (fun stateSoFar input ->
+                        let output = if (Output stateSoFar.Weights stateSoFar.Bias input.Values) then 1 else -1
+                        let localError = float ((if input.Result then 1 else -1) - output)
+                        {
+                            Weights =
+                                if (localError = float 0)
+                                then stateSoFar.Weights
+                                else UpdateWeights stateSoFar.Weights localError input.Values
+                            Bias =
+                                if (localError = float 0)
+                                then stateSoFar.Bias
+                                else stateSoFar.Bias + (learningRate * localError)
+                            GlobalError = stateSoFar.GlobalError + Math.Abs(localError)
+                        }
+                    )
+                    { Weights = state.Weights; Bias = state.Bias; GlobalError = float 0 }
+                    trainingData
+            printfn "Iteration %i\tError %i" iteration (int resultForIteration.GlobalError)
+            resultForIteration
 
-		let finalResult =
-			Seq.initInfinite (fun i -> i)
-			|> Seq.scan
-				CalculateNextState
-				{ Weights = [r.NextDouble(); r.NextDouble()]; Bias = float 0; GlobalError = Double.MaxValue }
-			|> Seq.find (fun state -> state.GlobalError = float 0)
+        let finalResult =
+            Seq.initInfinite (fun i -> i)
+            |> Seq.scan
+                CalculateNextState
+                { Weights = [r.NextDouble(); r.NextDouble()]; Bias = float 0; GlobalError = Double.MaxValue }
+            |> Seq.find (fun state -> state.GlobalError = float 0)
 
-		let crossproductWithSelf xs = seq { for x1 in xs do for x2 in xs do yield x1, x2 }
-		let calculatedResults =
-			{ float 0 .. float 0.25 .. float 1 }
-			|> crossproductWithSelf
-			|> Seq.map (fun (x, y) ->
-				x.ToString() + ",\t" +
-				y.ToString() + ",\t" +
-				(if (Output finalResult.Weights finalResult.Bias [x; y]) then "Yes" else "No")
-			)
-		printfn ""
-		printfn "X,\tY,\tOutput"
-		printfn "%s" (String.concat Environment.NewLine calculatedResults)
+        let crossproductWithSelf xs = seq { for x1 in xs do for x2 in xs do yield x1, x2 }
+        let calculatedResults =
+            { float 0 .. float 0.25 .. float 1 }
+            |> crossproductWithSelf
+            |> Seq.map (fun (x, y) ->
+                x.ToString() + ",\t" +
+                y.ToString() + ",\t" +
+                (if (Output finalResult.Weights finalResult.Bias [x; y]) then "Yes" else "No")
+            )
+        printfn ""
+        printfn "X,\tY,\tOutput"
+        printfn "%s" (String.concat Environment.NewLine calculatedResults)
 
-	Go (new Random(0))
+    Go (new Random(0))

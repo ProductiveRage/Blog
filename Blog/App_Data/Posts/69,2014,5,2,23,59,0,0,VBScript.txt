@@ -1,4 +1,4 @@
-﻿## VBScript is DIM
+## VBScript is DIM
 
 At work, we still have some projects that are are written in VBScript (aka "Classic ASP"). Projects that are important to the company and its bottom line. Which, yes, is madness.
 
@@ -23,7 +23,7 @@ During one particularly perverse investigation, I came to question the sanity of
 
 It writes out "Empty" rather than *Variable is undefined: 'a'* which is the VBScript equivalent of the compile error you would get if you tried to do the same sort of thing with C#, which requires variables to be declared *before* use.
 
-Sidebar: When I said that REDIM can act as an "implicit DIM", I mean that that following does not raise an error 
+Sidebar: When I said that REDIM can act as an "implicit DIM", I mean that that following does not raise an error
 
     ' Writes out "Variant()"
     Option Explicit

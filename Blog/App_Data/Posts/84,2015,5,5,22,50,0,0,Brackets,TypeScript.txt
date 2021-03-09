@@ -41,7 +41,7 @@ where the TypeScript files live within "src". And so "src" is the folder that wo
             ]
         }
     }
-    
+
 For a Brackets extension, supporting ES5 (rather than ES3) and using the "AMD" module loading mechanism make sense (and are consistent with the environment that Brackets extensions operate in). Setting "noImplicitAny" to "true" is a matter of taste, but I think that the "any" concept in TypeScript should always be explicitly opted *into* since you're sacrificing compiler safety, which you should only do intentionally.
 
 So now we can start writing TypeScript in Brackets! But we are far from done..
@@ -70,7 +70,7 @@ What I particularly want to do with my extension is write a linter for [less sty
             { name: "Example Linting Results", scanFile: getBrokenRuleDetails }
         );
     });
-    
+
 This means that TypeScript needs to know that there is a module "brackets" available at runtime and that it has a module-loading mechanism based upon strings identifiers (such as "utils/AppInit" and "language/CodeInspection"). For this, a "brackets.d.ts" needs to be created in the "src" folder (for more details than I'm going to cover here, see my post from earlier in year: [Simple TypeScript type definitions for AMD modules](Post82)).
 
 Conveniently, TypeScript has the ability to "[Overload on Constants](http://blogs.msdn.com/b/typescript/archive/2013/03/25/working-on-typescript-0-9-generics-overload-on-constants-and-compiler-performance.aspx)", which means that a method can be specified with different return types for known constants for argument(s). This is an unusual feature (I can't immediately think of another statically-typed language that supports this; C# definitely doesn't, for example). The reason that it exists in TypeScript is interoperability with JavaScript. The example from the linked article is:
@@ -125,7 +125,7 @@ The "Overload on Constants" functionality has a limitation in that a method sign
 There is another limitation that is unfortunate. The **LintErrorDetails** interface has had to be defined with a **string** "type" property, it would have been better if this could have been an enum. However, the constants within Brackets are within the "CodeInspection" module - eg.
 
     CodeInspection.Type.ERROR
-    
+
 The "CodeInspection" reference is returned from a "getModule" call and so must be an interface or class, and an enum may not be nested within an interface or class definition. If "CodeInspection" was identified as a module then an enum *could* be nested in it, but then the getModule function definition would complain that
 
 > Type reference cannot refer to container 'brackets.CodeInspector'
@@ -146,7 +146,7 @@ but unfortunately it's also valid to use nonsense string "type" values, such as:
         message: "Example error on line 5",
         type: "BlahBlahBlah"
     }];
-    
+
 ### Compile-on-save
 
 So, at this point, we can actually start writing a linter extension in TypeScript. However, the Brackets TypeScript extension doesn't support compiling this to JavaScript. So we can write as much as we like, it's not going to be very useful!

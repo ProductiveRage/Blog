@@ -1,4 +1,4 @@
-﻿## The NeoCities Challenge! aka The Full Text Indexer goes client-side!
+## The NeoCities Challenge! aka The Full Text Indexer goes client-side!
 
 When I heard about [NeoCities](http://neocities.org/) last week, I thought it was a cool idea - offering some back-to-basics hosting for an outlay of absolutely zero. Yeah, the first thing that came to mind was those geocities sites that seemed to want to combine pink text, lime green backgrounds and javascript star effects that chase the cursor.. but that's just nostalgia! :)
 

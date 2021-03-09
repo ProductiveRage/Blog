@@ -26,7 +26,7 @@ After a quick shufty it seems like it's using a bucketed approach and basing the
 
 ### One more try
 
-The night I came to this point I went to bed and was bothered by what I'd found and ended up keeping myself half awake with ideas about data splitting and bucketing and lots of things that probably made no sense. It was like the opposite of the clarity of a "[shower moment](http://online.wsj.com/article/SB124535297048828601.html)" when a solution pops unbidden into your mind, I was just thinking round and round in circles. 
+The night I came to this point I went to bed and was bothered by what I'd found and ended up keeping myself half awake with ideas about data splitting and bucketing and lots of things that probably made no sense. It was like the opposite of the clarity of a "[shower moment](http://online.wsj.com/article/SB124535297048828601.html)" when a solution pops unbidden into your mind, I was just thinking round and round in circles.
 
 But I came out of it wondering - if bucketing the values to reduce the number of comparisons (even if these comparisons are only of hashed values) yields such improved performance, and since computers love simple binary operations the best, then wouldn't having nested buckets which we fall through by repeatedly dividing the hash value by two until we get to the value (if present) be faster again??
 
@@ -285,7 +285,7 @@ All keys reversed: Slower again, about 97% the performance
 
 All in all, pretty impressive! So long as at least 99% of requests are for keys that are present then the TST will offer an improvement, and a drastic one when _most_ requests are for valid keys.
 
-It's been a fun venture and left me think I should fill in my algorithm knowledge a little more - it's not every day that I'm going to obsess over a particular structure, but it's always good to increase my awareness of what's out there. 
+It's been a fun venture and left me think I should fill in my algorithm knowledge a little more - it's not every day that I'm going to obsess over a particular structure, but it's always good to increase my awareness of what's out there.
 
 The code can be found in the repository [https://bitbucket.org/DanRoberts/dictionaryspeedtests](https://bitbucket.org/DanRoberts/dictionaryspeedtests) - along with a few tests I ran and some of the approaches I tried out that I talked about at the top of the post - but the TST class is basically the following (again, slightly trimmed for brevity). As my original premise was to consider an immutable store I haven't implemented any add / delete / update methods but now that I'm happy with the performance boost I may well do - but then I'll have to make more decisions into whether I should try to build in a re-balancing threshold mechanism and I think instead I might have a little rest! :)
 

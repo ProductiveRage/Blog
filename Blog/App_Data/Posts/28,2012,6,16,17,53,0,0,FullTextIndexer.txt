@@ -1,4 +1,4 @@
-﻿## A Plurality-Handling Normaliser Correction
+## A Plurality-Handling Normaliser Correction
 
 A slight amendment to a previous post ([An English-language Plurality-handling String Normaliser](Post26)); the original intention of IStringNormaliser implementations was to expose IEqualityComparer&lt;string&gt; and return a value from GetNormalisedString that could be maintained in a dictionary (specifically a [Ternary Search Tree](Post25)). And at this the English Language Pluarity-handling String Normaliser has operated splendidly! Does the string "cat" match the string "cats" when searching? Why, yes it does! (And things like this are important to know since [the internet is made of cats](http://www.rathergood.com/cats)).
 

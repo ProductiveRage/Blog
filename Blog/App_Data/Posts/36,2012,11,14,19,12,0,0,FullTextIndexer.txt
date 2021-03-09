@@ -1,8 +1,8 @@
-﻿## The Full Text Indexer - Token Breaker and String Normaliser variations
+## The Full Text Indexer - Token Breaker and String Normaliser variations
 
 I've written a few Posts now about the investigative [Full Text Indexer](Post30) project I've been playing with (see also [Updating the Index](Post31), [MultiLingual Content](Post32) and various [tangents](Post26) [into](Post27) [plurality](Post28) [handling](Post29)) but I think I've got at least one more to round it off.
 
-Among the basic components of the Index Generator that determine the manner in which it processes content are (as outlined in that [First Indexer Post](Post30)):    
+Among the basic components of the Index Generator that determine the manner in which it processes content are (as outlined in that [First Indexer Post](Post30)):
 
 > #### Token Breakers
 > This example uses a "WhiteSpaceTokenBreaker" which will take the string content from the Content Retrievers and break it into individual words by splitting on whitespace characters. Straight forward!
@@ -78,7 +78,7 @@ The bulk of the Index generation is illustrated below with comments around most 
             new WhiteSpaceTokenBreaker()
         );
 
-        // Generate an index using the specified StringNormaliser, 
+        // Generate an index using the specified StringNormaliser,
         // - The Post class has an integer Id so a simple IntEqualityComparer (see below)
         //   will do the job fine for the dataKeyComparer
         // - If the search term is matched multiple times in a Post then combine the match

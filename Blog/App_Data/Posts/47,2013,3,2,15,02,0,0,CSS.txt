@@ -1,4 +1,4 @@
-﻿## Extending the CSS Minifier
+## Extending the CSS Minifier
 
 I have a [CSS Minifier project hosted on Bitbucket](https://bitbucket.org/DanRoberts/cssminifier) which I've used for some time to compile and minify the stylesheet contents for this blog but I've recently extended its functionality after writing the [Non-cascading CSS: A revolution!](Post42) post.
 
@@ -176,7 +176,7 @@ giving it a string of content and getting back an IEnumerable&lt;CategorisedChar
     {
       public CategorisedCharacterString(
         string value,
-        int indexInSource, 
+        int indexInSource,
         CharacterCategorisationOptions characterCategorisation);
 
       public CharacterCategorisationOptions CharacterCategorisation { get; }
@@ -197,11 +197,11 @@ giving it a string of content and getting back an IEnumerable&lt;CategorisedChar
 
       // Summary: Either a selector (eg. "#Header h2") or a style property (eg. "display")
       SelectorOrStyleProperty,
-    
+
       // Summary: This is the colon between a Style Property and Value (not any colons that may exist in a
       // media query, for example)
       StylePropertyColon,
-    
+
       Value,
       Whitespace
     }

@@ -16,11 +16,11 @@ To illustrate -
         StartDate = startDate;
         EndDateIfAny = endDateIfAny;
       }
-    
+
       public string Title { get; private set; }
       public DateTime StartDate { get; private set; }
       public DateTime? EndDateIfAny { get; private set; }
-    
+
       public RoleDetails UpdateWith(
         Optional<string> title = new Optional<string>(),
         Optional<DateTime> startDate = new Optional<DateTime>(),
@@ -30,7 +30,7 @@ To illustrate -
         && !startDate.IndicatesChangeFromValue(StartDate)
         && !endDateIfAny.IndicatesChangeFromValue(EndDateIfAny))
           return this;
-      
+
         return new RoleDetails(
           title.GetValue(Title),
           startDate.GetValue(StartDate),
@@ -38,32 +38,32 @@ To illustrate -
         );
       }
     }
-    
+
 The **Optional** struct looked like this:
-    
+
     public struct Optional<T>
     {
       private T _valueIfSet;
       private bool _valueHasBeenSet;
-    
+
       public T GetValue(T valueIfNoneSet)
       {
         return _valueHasBeenSet ? _valueIfSet : valueIfNoneSet;
       }
-    
+
       public bool IndicatesChangeFromValue(T value)
       {
         if (!_valueHasBeenSet)
           return false;
-    
+
         if ((value == null) && (_valueIfSet == null))
           return false;
         else if ((value == null) || (_valueIfSet == null))
           return true;
-    
+
         return !value.Equals(_valueIfSet);
       }
-    
+
       public static implicit operator Optional<T>(T value)
       {
         return new Optional<T>
@@ -73,7 +73,7 @@ The **Optional** struct looked like this:
         };
       }
     }
-    
+
 I then went on a bit of a wild tangent and thought "if pretty much all of these UpdateWith methods are going to look the same and be boring to write, could I have some magic code generate it for me on the fly?" - this led me to write a small library that allows the following:
 
     public RoleDetails UpdateWith(
@@ -83,7 +83,7 @@ I then went on a bit of a wild tangent and thought "if pretty much all of these 
     {
       return DefaultUpdateWithHelper.GetGenerator<RoleDetails>()(this, title, startDate);
     }
-    
+
 I got a variety of feedback on the post. One of the really interesting things to find was that the main idea itself was already in real-world use, in Microsoft's Roslyn .net compiler, for example. The file [ProjectInfo.cs](https://roslyn.codeplex.com/SourceControl/latest#Src/Workspaces/Core/Workspace/Solution/ProjectInfo.cs) has a "With" method that follows a very similar structure with a corresponding [Optional.cs](https://roslyn.codeplex.com/SourceControl/latest#Src/Compilers/Core/Portable/Optional.cs) struct that is also very similar to what I'd written. I found this very encouraging.. even if it did steal the thunder from "my" idea!
 
 More of the feedback related to performance concerns regarding the "DefaultUpdateWithHelper.GetGenerator" method. It returns a delegate to create a new instance, based upon the provided arguments. This delegate is a compiled LINQ Expression, cached against the target type and the provided argument structure. The problem was that *some* reflection was required in order to determine whether there was a compiled expression in the cache that could be re-used, so each call to "GetGenerator" carried that reflection overhead. The question was just how much..
@@ -109,7 +109,7 @@ The reason that I'd used XOR without thinking about it too much was that I knew 
     // but performing in two steps will not
     var i0 = int.MaxValue;
     var i1 = i0 + 1;
-    
+
 does *not* result in an overflow exception. Instead, it wraps around (so i1 will be equal to int.MinValue). In order to "opt in" to overflow exceptions being raised for theses sorts of operations, the "[checked](http://msdn.microsoft.com/en-us/library/74b4xzyw.aspx)" keyword needs to be used (or there's a "checked" compiler option that does the same).
 
 So we can safely change the implementation to
@@ -123,7 +123,7 @@ So we can safely change the implementation to
         hash = (3 * hash) ^ obj.GetUpdateParameter(index).GetHashCode();
       return hash;
     }
-    
+
 There was also a comment left on my blog
 
 > .. your usage of the object.Equals() method also creates garbage..
@@ -134,15 +134,15 @@ which I had to think about to understand what was meant. When I realised, I kick
     {
       if (!_valueHasBeenSet)
         return false;
-    
+
       if ((value == null) && (_valueIfSet == null))
         return false;
       else if ((value == null) || (_valueIfSet == null))
         return true;
-    
+
       return !value.Equals(_valueIfSet);
     }
-    
+
 That final call has to resort to
 
     public virtual bool Equals(object obj);
@@ -157,7 +157,7 @@ So the boxing can be avoided in most cases by changing the method to
     {
       if (!_valueHasBeenSet)
         return false;
-    
+
       if ((value != null) && (value is IEquatable<T>))
         return !((IEquatable<T>)value).Equals(value);
 
@@ -165,10 +165,10 @@ So the boxing can be avoided in most cases by changing the method to
         return false;
       else if ((value == null) || (_valueIfSet == null))
         return true;
-    
+
       return !value.Equals(_valueIfSet);
     }
-    
+
 I'm chalking up these two recommendations as even more evidence that code reviewing can be helpful.. :)
 
 ### So how *does* it perform?
@@ -186,7 +186,7 @@ There are three candidates to conside when weighing up the automagical **Default
     {
       return updater(this, title, startDate);
     }
-    
+
 To get an idea of the raw performance of these methods, I wrote a console app that would repeatedly call a variation of an "UpdateWith" method. I've named the three varieties that I'm interested in: "ManualWith" (the hand-written version), "SimpleWith" (the one-liner) and "StaticWith" (shown above; the one-liner where the result is stored in a static reference to avoid multiple calls to "GetGenerator").
 
 Having a console app meant that the process would be started fresh and then torn down for each run, hopefully ensuring an even playing field. This is particularly in relation to GC, which can introduce variance into longer-running processes. In this case, I'm interested in the direct execution performance of the various methods and I'm not trying to compare GC overhead (which is something that *can* be investigated, but which can be very complicated to do correctly).
@@ -218,7 +218,7 @@ This was *another* thing that came from the comments on my blog (thanks Ian Yate
       string color;
       int skinThickness;
     }
-    
+
 and transforms it into a fully-fledged immutable class *with* a "With" method (which is exactly like the "UpdateWith" method I've been talking about). It has its own **Optional** struct, the same as in Roslyn's source. The generated types even have a nested **Builder** type which has mutable properties and a "ToImmutable" method which returns an immutable type with the described data - for times when it's just easier to prepare a reference in a few steps before "freezing" it (or for "efficient multi-step mutation", according to the README). It's little indications of attention to detail such as this that I liked when I looked into the project: [github.com/AArnott/ImmutableObjectGraph](https://github.com/AArnott/ImmutableObjectGraph).
 
 The idea of constructing T4 templates like this is one that I've kicked around before but never gotten round to actually implementing, so finding this was a nice surprise!

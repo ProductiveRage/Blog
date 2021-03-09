@@ -1,4 +1,4 @@
-﻿## The Full Text Indexer - Automating Index Generation
+## The Full Text Indexer - Automating Index Generation
 
 In the introductory [Full Text Indexer](Post30) post I showed how to build an Index Generator by defining "Content Retrievers" for each property of the source data type. I didn't think that, in itself, this was a huge amount of code to get started but it did have a generous spattering of potentially-cryptic class instantiations that implied a large assumed knowledge before you could use it.
 

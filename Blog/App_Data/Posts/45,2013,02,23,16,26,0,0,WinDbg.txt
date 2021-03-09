@@ -1,4 +1,4 @@
-﻿## WinDbg Rides Again
+## WinDbg Rides Again
 
 I've been trying to get a .Net COM component working in a Classic ASP site and was consistently getting an error the first time it was accessed:
 
@@ -99,4 +99,4 @@ This should display some summary information but what we want to do from here is
 
 If you're examining a dump generated from code such as the example above, you'll want to select the Main Thread from the Threads window and then can jump to the current frame by clicking on the top entry in the Call Stack window.
 
-At this point, you can examine values or jump around the call stack or do pretty much anything (not including clicking continuing execution - you'll get an error "The debugger cannot continue running the process. This operation is not supported when debugging dump files.") you could do if you were in the middle of pausing execution of code executed by Visual Studio - much easier than trying to poke around values in WinDbg! In the example here, I could hover over "a" and see that its value was 123 (similarly, this information is visible in the "Locals" window). 
+At this point, you can examine values or jump around the call stack or do pretty much anything (not including clicking continuing execution - you'll get an error "The debugger cannot continue running the process. This operation is not supported when debugging dump files.") you could do if you were in the middle of pausing execution of code executed by Visual Studio - much easier than trying to poke around values in WinDbg! In the example here, I could hover over "a" and see that its value was 123 (similarly, this information is visible in the "Locals" window).

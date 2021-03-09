@@ -8,7 +8,7 @@ Today, I'm going to address some of the "future developments" I left at the end 
 
 ### Wrapping up in a method
 
-Part one is easy. Take the code from the last article and wrap in 
+Part one is easy. Take the code from the last article and wrap in
 
     public static T WrapObject<T>(object src)
     {

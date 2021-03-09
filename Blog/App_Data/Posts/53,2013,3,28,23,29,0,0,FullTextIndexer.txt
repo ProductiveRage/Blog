@@ -1,4 +1,4 @@
-﻿## The Full Text Indexer: Source Locations
+## The Full Text Indexer: Source Locations
 
 After adding the [Structured Queries](Post51) functionality to my [Full Text Indexer](Post40) project I've been looking back at the mechanism for matching runs of tokens - eg. matching
 

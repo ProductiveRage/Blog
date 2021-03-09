@@ -121,7 +121,7 @@ and to change the exception class slightly -
         : base(message, UNIQUE_HRESULT)
       {
         // .. the rest of the class is unaltered..
-        
+
 *(Note: Inheriting from **COMException** doesn't magically allow for the exception class to be recognised when it pops out of a COM component, but it does have a constructor that takes a message and a HRESULT value, which is handy here).*
 
 This still feels too error-prone for my liking, though. What if I add a range of custom exceptions that need to be supported? Then I'd need to check for all of these different HRESULT values in my try..catch blocks.
@@ -195,7 +195,7 @@ Let's jump straight into a possible solution -
         private const int CUSTOMERROR_BASE
           = (1 << 31) /* Severity = 1 */
           | (1 << 29) /* Customer = 1 */;
-          
+
         public static int GetHResult(ushort errorCode)
         {
           return CUSTOMERROR_BASE | errorCode;
@@ -208,7 +208,7 @@ Let's jump straight into a possible solution -
         }
       }
     }
-    
+
 This is a base class that exceptions may be derived from if they must be able to survive travelling through COM components.
 
 Each derived class will be responsible for declaring a unique error code and a "reviver". The error code is of type **ushort**, which is a 16 bit .net type - there's no point making the derived types do the maths around working out how to set the is-failure, is-custom-error, etc.. bits in a HRESULT. A reviver is basically just a way to de-serialise data that is stored in the message property.
@@ -254,9 +254,9 @@ In practice, this means that we could implement **WidgetiserException** as
         return new WidgetiserException(messageParts[0], messageParts[1]);
       }
     }
-    
+
 and then change the COM component calling code to
-    
+
     public string GetMagicName(int id)
     {
       try
@@ -288,7 +288,7 @@ and then change the COM component calling code to
         throw;
       }
     }
-    
+
 Note that the "GetMagicName" function has now returned to the idealised version that I started with.
 
 There are a couple of sacrifices - the **WidgetiserException** has expanded a little and it has become aware that it must be "COM-survivable". This adds some maintenance burden in that all exceptions that may have to pass through a COM component need to know that this may happen. And, in the glorious future in which all COM components have been rewritten with efficient, clean, testable, *beautiful* .net versions, it will look strange that there are still exceptions in use which identify themselves as COM-survivable. When this day arrives, it should not be much work to change the custom exceptions to *not* derive from **COMSurvivableException** - and doing so should be a pleasingly cathartic way to celebrate the completed migration :)

@@ -39,7 +39,7 @@ If I was writing something like this for real use, I would probably try to make 
           throw new ArgumentException("title");
         if ((endDateIfAny != null) && (endDateIfAny <= startDate))
           throw new ArgumentException("title");
-          
+
         Title = title.Trim();
         StartDate = startDate;
         EndDateIfAny = endDateIfAny;
@@ -49,15 +49,15 @@ If I was writing something like this for real use, I would probably try to make 
       /// This will never be null or blank, it will not have any leading or trailing whitespace
       /// </summary>
       public string Title { get; private set; }
-      
+
       public DateTime StartDate { get; private set; }
-      
+
       /// <summary>
       /// If non-null, this will greater than the StartDate
       /// </summary>
       public DateTime? EndDateIfAny { get; private set; }
     }
-    
+
 As I've said before, this validation and commenting is really a poor substitute for code contracts which would allow for compile time detection of invalid data rather than relying on runtime exceptions (speaking of which, I need to give the .net code contracts solution another go - last time I got stuck in I hit some problems which hopefully they've ironed out by now).
 
 Another variation on the "aggressive validation" illustrated above would be a type that represents a non-blank string to prevent duplicating calls to *IsNullOrWhiteSpace* and *trim*. This concept could be taken even further to "strongly type" string values so that a "Title" can not be passed into a function that expects a "Notes" string value, for example. This is far from an original idea but it was something I was experimenting again with recently.
@@ -65,7 +65,7 @@ Another variation on the "aggressive validation" illustrated above would be a ty
 Incidentally, there is talk of a future version of C# getting a record type which would reduce boilerplate code when defining simple immutable types. For example (from the InfoQ article [Easier Immutable Objects in C# 6 and VB 12](http://www.infoq.com/news/2014/08/Record-Class)) -
 
     public record class Cartesian(double x: X, double y: Y);
-    
+
 This will define an immutable class with two read-only properties that are set through a constructor call. This future C# specification is also apparently going to allow read-only auto properties - so in my RoleDetails class above instead of "get; private set;" properties, which are externally unalterable but could actually be changed within the instance, the properties could be truly readonly. This *is* possible currently but it requires a private readonly field and a property with a getter that returns that field's value, which is even *more* boring boilerplate.
 
 ### The obvious, verbose and potentially more GC-churny way
@@ -84,7 +84,7 @@ To prevent callers from having to call the constructor every time a property nee
       public string Title { get; private set; }
       public DateTime StartDate { get; private set; }
       public DateTime? EndDateIfAny { get; private set; }
-      
+
       public RoleDetails Update(string title)
       {
         return (title == Title)
@@ -104,19 +104,19 @@ To prevent callers from having to call the constructor every time a property nee
           : new RoleDetails(Title, StartDate, endDateIfAny);
       }
     }
-    
+
 To update two properties on a given instance, you would need to call
 
     var updatedRoleDetails = existingRoleDetails
       .UpdateStartDate(new DateTime(2014, 9, 21))
       .UpdateEndDateIfAny(new DateTime(2014, 11, 21));
-      
+
 If either of the new values is the same as the property value that it should be replacing, then no new instance is required for that property update - since the Update*{Whatever}* method will return back the same instance. But if both properties are changed then *two* new instances are required even though the first, intermediate value is immediately discarded and so is "wasted".
 
 There could be an Update method that takes multiple parameters for the different properties but then you're basically just mirroing the constructor. Or there could be various Update methods that took combinations of properties to try to cover either the most common cases or *all* combinations of cases, but neither of these are particularly elegant and they would all result in quite a lot of code duplication.
 
 ### A better way
-    
+
 It struck me that it should be possible to do something with named and optional method arguments (support for which was added to C# when .net 4 came out, if I remember correctly). Something like
 
     public RoleDetails UpdateWith(
@@ -149,7 +149,7 @@ Another thought that briefly crossed my mind was for the default argument values
     if ((title == null) && (startDate == null) && (endDateIfAny == null))
       return this;
     return new RoleDetails(title ?? Title, startDate ?? StartDate, endDateIfAny ?? EndDateIfAny);
-    
+
 But that is too restrictive a constraint since in this case we have a non-reference type argument (startDate) and we also have a reference type for which null is a valid value (endDateIfAny).
 
 So what we really need is a wrapper type around the arguments that indicates when no value has been specified. Since we're being conscious of avoiding GC churn, this should be a struct since structs essentially avoid adding GC pressure since they are always copied when passed around - this means that no struct is referenced by multiple scopes and so they don't have to be traced in the same way as reference types; when the scope that has access to the struct is terminated, the struct can safely be forgotten as well. This is not a particularly precise description of what happens and more details can be found in the MSDN article [Choosing Between Class and Struct](http://msdn.microsoft.com/en-us/library/ms229017(v=vs.110).aspx). Particularly see the paragraph
@@ -190,9 +190,9 @@ The other guidelines in that article around cases where structs may be appropria
         };
       }
     }
-    
+
 This type allows us to write an UpdateWith method
-    
+
     public RoleDetails UpdateWith(
       Optional<string> title = new Optional<string>(),
       Optional<DateTime> startDate = new Optional<DateTime>(),
@@ -202,26 +202,26 @@ This type allows us to write an UpdateWith method
       && !startDate.IndicatesChangeFromValue(StartDate)
       && !endDateIfAny.IndicatesChangeFromValue(EndDateIfAny))
         return this;
-        
+
       return new RoleDetails(
         title.GetValue(Title),
         startDate.GetValue(StartDate),
         endDateIfAny.GetValue(EndDateIfAny)
       );
     }
-    
+
 The **Optional** type *could* have exposed properties for has-a-value-been-set and get-value-if-any but since each property comparison (to detemine whether a new instance is actually required) would have to follow the pattern if-value-has-been-set-and-if-value-that-has-been-set-does-not-equal-current-value, it made sense to me to hide the properties and to instead expose only the access methods "IndicatesChangeFromValue" and "GetValue". The "IndicatesChangeFromValue" method returns true if the **Optional** describes a value that is different to that passed in and "GetValue" returns the wrapped value if there is one, and returns the input argument if not. This enables the relatively succinct "UpdateWith" method format shown above.
 
 The other method on the struct is an implicit operator for the wrapped type which makes the "UpdateWith" calling code simpler. Instead of having to do something like
 
     var updatedRoleDetails = existingRoleDetails
       .UpdateWith(startDate = Optional<DateTime>(new DateTime(2014, 9, 21)));
-      
+
 the implicit conversion allows you to write
 
     var updatedRoleDetails = existingRoleDetails
       .UpdateWith(startDate = new DateTime(2014, 9, 21));
-      
+
 because the **DateTime** will be implicitly converted into an **Optional&lt;DateTime&gt;**. In fact, I went one step further and made it such that this is the *only* way to create an **Optional** that wraps a value. There is no constructor that may be used to initialise an **Optional** *with* a value, you *must* rely upon the implicit conversion. This means that it's very clear that there's only one way to use this type. It also happens to be very similar to the most common way that the **Nullable** type is used in C# - although that does have a public constructor that accepts the value to wrap, in practice I've only ever seen values cast to **Nullable** (as opposed to the **Nullable** constructor being passed the value).
 
 ### Turning it up to eleven
@@ -237,7 +237,7 @@ But I just couldn't resist trying to push it a bit further since there's *still*
     {
       return magicUpdater(title, startDate, endDateIfAny);
     }
-    
+
 Wouldn't it?? Yes it would.
 
 And we can.. if we dip into some of the .net framework's crazier parts - reflection and stack tracing. With some LINQ expressions thrown in to make it work efficiently when called more than once or twice.
@@ -247,11 +247,11 @@ What this "magicUpdater" needs to do is take the names and values of the argumen
 This is handled by two steps. The first based around this line:
 
     var callingMethod = new StackFrame(1).GetMethod();
-    
+
 It returns a **MethodBase** with metadata about the method that called the "magicUpdater" (the "1" in the call above is how many steps back to go in the call stack). From this the names of the arguments can be extracted and a delegate returned which will take the argument values themselves. So the call would actually look more like (if this "magicUpdater" method return a delegate which then must itself be called):
-    
+
     return magicUpdater()(title, startDate, endDateIfAny);
-    
+
 Before we move on to the second step, there are some important considerations in relation to the use of **StackFrame**. Firstly, there *is* some expense to performing analysis like this, as with using reflection - but we'll not worry about that here, some optimisations will be covered later which hopefully mean we can ignore it. What's more important is that analysing the call stack can seem somewhat.. unreliable, in a sense. In the real world, the code that gets executed is not always the code as it appears in the C# source. A release build will apply optimisations that won't be applied to debug builds *and* when code is manipulated by the JIT compiler more optimisations again may occur - one of the more well-known of which is "method inlining". Method inlining is when the compiler sees a chain of Method1 -> Method2 -> Method3 -> Method4 and observes that Method2 is so small that instead of being a distinct method call (which has a cost, as every method call does - the arguments have to be passed into a new scope and this must be considered by the garbage collector; as a very basic example of one of these costs) the code inside Method2 can be copied inside Method1. This would mean that if Method3 tried to access Method2's metadata through the **StackFrame** class, it would be unable to - it would be told it was called by Method1!
 
 There's a short but informative article about this by Eric Gunnerson: [More on inlining](http://blogs.msdn.com/b/ericgu/archive/2004/01/29/64717.aspx). In a nutshell it says that -
@@ -271,7 +271,7 @@ which tells the JIT compiler not to inline it and so, since the caller isn't inl
 
 This "GetGenerator" method, then, has access to the argument names and argument types of the method that called it. The generic type param T is the immutable type that is being targeted by the "UpdateWith" method. **UpdateWithSignature&lt;T&gt;** is a delegate with the signature
 
-	public delegate T UpdateWithSignature<T>(T source, params object[] updateValues);
+    public delegate T UpdateWithSignature<T>(T source, params object[] updateValues);
 
 This delegate is what takes the property update values and creates a new instance (or returns the source instance if no changes are required). It does this by considering every public constructor that T has and determining what constructor arguments it can satisfy with update arguments. It does this by matching the update argument names to the constructor argument names and ensuring that the types are compatible. If a constructor is encountered with arguments that don't match any update arguments but T has a property whose name and type matches the constructor argument, then *that* will be used. If a constructor argument is encountered that can't be matched to an update argument *or* a property on T but the constructor argument has a default value, then the default value may be used if the constructor.
 
@@ -295,7 +295,7 @@ Note that in the above example, the **DefaultUpdateWithHelper** is used. This is
       ParameterInfo updateArgument,
       ConstructorInfo constructor,
       ParameterInfo constructorArgument);
-    
+
 so a custom implementation could implement any complex scheme based upon target type or constructor or update argument type.
 
 The **UpdateWithHelper** also requires a cache implementation for maintaining the compiled expressions, as well as matchers for other comparisons (such as property name to constructor argument name, for constructor arguments that can't be matched by an update argument). If a custom **UpdateWithHelper** is desired that only needs to override *some* behaviour, the **DefaultUpdateWithHelper** class has a static nested class **DefaultValues** with properties that are the references that it uses for the **UpdateWithHelper** constructor arguments - some of these may be reused by the custom configuration, if appropriate.
@@ -316,7 +316,7 @@ It's also worthy of note that the "GetGenerator" methods support extension metho
     }
 
 The analysis detects that the first argument is not an **OptionalType&lt;T&gt;** and asserts that its type is assignable to the type param T and then ignores it when generating the translation expression. The extension method will pass through the "source" reference where "this" was used in the instance method implementation shown earlier.
-    
+
 ### Further performance optimisations
 
 Although the compiled "generator" expressions are cached, the cache key is based upon the "UpdateWith" method's metadata. This means that the cost of accessing the **StackFrame** is paid for every "UpdateWith" call, along with the reflection access to get the UpdateWith argument's metadata. If you feel that this might be an unbearable toll, a simple alternative is something like
@@ -339,14 +339,14 @@ If you really want to get crazy, you can go one step further. If part of the rea
     public UpdateWithSignature2<T> GetUncachedGenerator2<T>(MethodBase updateMethod)
     public UpdateWithSignature3<T> GetUncachedGenerator3<T>(MethodBase updateMethod)
     // .. etc, up to 9
-    
+
 and the delegates are of the form
 
     public delegate T UpdateWithSignature1<T>(T source, object arg0);
     public delegate T UpdateWithSignature2<T>(T source, object arg0, object arg1);
     public delegate T UpdateWithSignature3<T>(T source, object arg0, object arg1, object arg2);
     // .. etc, up to 9
-    
+
 They may be used in a similar manner to that already shown, but you must be careful to match the number of arguments required by the "UpdateWith" method. In a way, there is actually a compile-time advantage here - if you choose the wrong one, then the compiler will warn you that you have specified three update arguments when the delegate requires four (for example). With the generic form (the non-numbered "GetGenerator" method), the params array means that you can specify any number of update arguments and you won't find out until runtime that you specified the wrong amount.
 
 So, to illustrate -
@@ -354,7 +354,7 @@ So, to illustrate -
     private static UpdateWithSignature3<RoleDetails> updater
       = DefaultUpdateWithHelper.GetUncachedGenerator3<RoleDetails>(
         typeof(RoleDetails).GetMethod("UpdateWith"));
-    
+
     public RoleDetails UpdateWith(
       Optional<string> title = new Optional<string>(),
       Optional<DateTime> startDate = new Optional<DateTime>(),
@@ -362,7 +362,7 @@ So, to illustrate -
     {
       return updater(this, title, startDate, endDateIfAny);
     }
-    
+
 If I'm being honest, however, if you *really* think that this optimisation is beneficial (by which, I mean you've done performance analysis and found it to be a bottleneck worth addressing), you're probably better replacing this automated approach with the hand-written code that I showed earlier. It's not all that long and it removes all of this "magic" and also gives the compiler more opportunity to pick up on mistakes. But most importantly (in terms of performance) may be the fact that all update arguments are passed as "object" in these delegates. This means that any value types (ints, structs, etc..) will be boxed when they are passed around and then unboxed when used as constructor arguments. This is explained very clearly in the article [5 Basic Ways to Improve Performance in C#](http://www.techgalaxy.net/Docs/Dev/5ways.htm) and more information about the use of the heap and stack can be found at [Six important .NET concepts: Stack, heap, value types, reference types, boxing, and unboxing](http://www.codeproject.com/Articles/76153/Six-important-NET-concepts-Stack-heap-value-types) - I'd not seen this article before today but I thought it explained things really clearly.
 
 Chances are that you won't have to worry about such low level details as whether values are being boxed-unboxed 99% of the time and I think there's a lot of mileage to be had from how convenient this automated approach is. But it's worth bearing in mind the "what ifs" of performance for the times when they *do* make a difference.
@@ -377,7 +377,7 @@ In summary, until I find a good reason *not* to use this library going forward, 
 
     // F#
     let p2 = {p1 with first="Jim";last="Smith"}
-    
+
     // C#
     var p2 = p1.UpdateWith(first:"Jim",last:"Smith");
 

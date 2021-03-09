@@ -29,32 +29,32 @@ Instead of writing something like this:
       public EmployeeDetails(PersonId id, NameDetails name)
       {
         if (id == null)
-		  throw new ArgumentNullException("id");
+          throw new ArgumentNullException("id");
         if (name == null)
-		  throw new ArgumentNullException("name");
-		  
+          throw new ArgumentNullException("name");
+
         Id = id;
-		Name = name;
+        Name = name;
       }
-	  
+
       /// <summary>
       /// This will never be null
       /// </summary>
       public PersonId Id { get; }
-      
+
       /// <summary>
       /// This will never be null
       /// </summary>
       public NameDetails Name { get; }
-      
-	  public EmployeeDetails WithId(PersonId id)
-	  {
-		return Id.Equals(id) ? this : return new EmployeeDetails(id, Name);
-	  }
-	  public EmployeeDetails WithName(NameDetails name)
-	  {
-		return Name.Equals(name) ? this : return new EmployeeDetails(Id, name);
-	  }
+
+      public EmployeeDetails WithId(PersonId id)
+      {
+        return Id.Equals(id) ? this : return new EmployeeDetails(id, Name);
+      }
+      public EmployeeDetails WithName(NameDetails name)
+      {
+        return Name.Equals(name) ? this : return new EmployeeDetails(Id, name);
+      }
     }
 
 .. you can express it just as:
@@ -72,7 +72,7 @@ Instead of writing something like this:
 
 The if-null-then-throw validation is encapsulated in the CtorSet call (since the library takes the view that no value should ever be null - it introduces an **Optional** struct so that you can identify properties that may be without a value). And it saves you from having to write "With" methods for the updates as **IAmImmutable** implementations may use the "With" extension method whenever you want to create a new instance with an altered property - eg.
 
-	var updatedEmployee = employee.With(_ => _.Name, newName);
+    var updatedEmployee = employee.With(_ => _.Name, newName);
 
 The library can only work if certain conditions are met. For example, every property must have a getter and a setter - otherwise, the "CtorSet" extension method won't know how to actually set the value "under the hood" when populating the initial instance (nor would the "With" method know how to set the value on the new instance that it would create).
 
@@ -87,7 +87,7 @@ If you forgot this and wrote the following (note the "DisplayNameLength" propert
       }
       public PersonId Id { get; }
       public NameDetails Name { get; }
-	  public int DisplayNameLength { get { return Name.DisplayName.Length; } }
+      public int DisplayNameLength { get { return Name.DisplayName.Length; } }
     }
 
 .. then you would see the following errors reported by Visual Studio (presuming you are using 2015 or later) -
@@ -126,7 +126,7 @@ Selecting the "Populate class from constructor" option -
 .. will take the constructor arguments and generate the "CtorSet" calls and the public properties automatically. Now you can have all of the safety of the immutable type with no more typing effort than the mutable version!
 
     // This is what you have to type of the immutable version,
-	// then the code fix will expand it for you
+    // then the code fix will expand it for you
     public sealed class EmployeeDetails : IAmImmutable
     {
       public EmployeeDetails(PersonId id, NameDetails name)
@@ -135,12 +135,12 @@ Selecting the "Populate class from constructor" option -
     }
 
     // This is what you would have typed if you were feeling
-	// lazy and creating mutable types because you couldn't
-	// be bothered with the typing overhead of immutability
+    // lazy and creating mutable types because you couldn't
+    // be bothered with the typing overhead of immutability
     public sealed class EmployeeDetails
     {
       public PersonId Id;
-	  public NameDetails name;
+      public NameDetails name;
     }
 
 ### To summarise

@@ -20,38 +20,38 @@ I'm going to describe some ways to improve the example application and, in doing
 
 Let's jump straight in with a simple example. We have a **TextInput** component that renders a text input element and passes up any requests by the user that the input's content be changed. The main primary purpose of this class is to provide a simple interface. Many of the html attributes that *may* be applied to a text input are not relevant (this exposes only the basics, such as "ClassName"). Similarly, the "OnChange" that a text input raises has a relatively complicated event reference (it allows you to identify the element that changed and then get the requested "new value" from it, but I want a **TextInput**'s "OnChange" event to simply provide the new string and nothing else).
 
-	using System;
-	using Bridge.Html5;
-	using Bridge.React;
+    using System;
+    using Bridge.Html5;
+    using Bridge.React;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class TextInput : StatelessComponent<TextInput.Props>
-	  {
-		public TextInput(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class TextInput : StatelessComponent<TextInput.Props>
+      {
+        public TextInput(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  return DOM.Input(new InputAttributes
-		  {
-			Type = InputType.Text,
-			ClassName = props.ClassName,
-			Disabled = props.Disabled,
-			Value = props.Content,
-			OnChange = e => props.OnChange(e.CurrentTarget.Value)
-		  });
-		}
+        public override ReactElement Render()
+        {
+          return DOM.Input(new InputAttributes
+          {
+            Type = InputType.Text,
+            ClassName = props.ClassName,
+            Disabled = props.Disabled,
+            Value = props.Content,
+            OnChange = e => props.OnChange(e.CurrentTarget.Value)
+          });
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public bool Disabled;
-		  public string Content;
-		  public Action<string> OnChange;
-		}
-	  }
-	}
-	
+        public class Props
+        {
+          public string ClassName;
+          public bool Disabled;
+          public string Content;
+          public Action<string> OnChange;
+        }
+      }
+    }
+
 In the context of this small class, looking at the code, I would say that it's fairly clear what each line of code does and what each of the properties of the **Props** class is required for and how it will be used. However, even within such a small class, there are several implicit assumptions that are being made - eg.
 
 1. ClassName is optional, it may be null.. or it may be blank - React will actually treat these two cases differently, do we really want that? If it's null then no "class" attribute will be present on the input element, but if it's blank then a "class" attribute *will* be added (but with no value).
@@ -60,83 +60,83 @@ In the context of this small class, looking at the code, I would say that it's f
 
 First off, I don't like the should-or-shouldn't-be-allowed-to-be-null confusion around the "ClassName" and "Content" values. Secondly, I don't like the fact that, as it stands, you need to read (or already be familiar with) the code inside the **TextInput** component. One way to try to address these issues would be to consider using summary comments on the **Props** class - eg.
 
-	public class Props
-	{
-	  /// <summary>
-	  /// This is optional and so may be null (if non-null, then it should be a valid class
-	  /// name - ie. non-blank)
-	  /// </summary>
-	  public string ClassName;
-	  
-	  public bool Disabled;
-	  
-	  /// <summary>
-	  /// An input may not always have a value and so this may be blank (but it should never
-	  /// be null)
-	  /// </summary>
-	  public string Content;
-	  
-	  /// <summary>
-	  /// This is mandatory and may never be null
-	  /// </summary>
-	  public Action<string> OnChange;
-	}
+    public class Props
+    {
+      /// <summary>
+      /// This is optional and so may be null (if non-null, then it should be a valid class
+      /// name - ie. non-blank)
+      /// </summary>
+      public string ClassName;
+
+      public bool Disabled;
+
+      /// <summary>
+      /// An input may not always have a value and so this may be blank (but it should never
+      /// be null)
+      /// </summary>
+      public string Content;
+
+      /// <summary>
+      /// This is mandatory and may never be null
+      /// </summary>
+      public Action<string> OnChange;
+    }
 
 The problem with this approach is that, if the comments are ignored, runtime problems will occur at some point and it may not be very easy to trace them back to where they originated. If the "OnChange" value is null, for example, then the problem won't be noticed until the user interacts with the input box - and the code that raises the exception (the "props.OnChange" call with **TextInput**'s "Render" method) will be completely removed from the code that incorrectly set the null value (the code that instantiated and populated **Props** instance).
 
 So another alternative would be to combine these comments with some validation - eg.
 
-	public class Props
-	{
-	  private string _className, _content;
-	  private Action<string> _onChange;
-	
-	  /// <summary>
-	  /// This is optional and so may be null (if non-null, then it should be a valid class
-	  /// name - ie. non-blank)
-	  /// </summary>
-	  public string ClassName
-	  {
-	    get { return _className; }
-		set
-		{
-		  if (value == "")
-		    throw new ArgumentException("ClassName should not be set to a blank string");
-		  _className = value;
-		}
-	  }
-	  
-	  public bool Disabled { get; set; }
-	  
-	  /// <summary>
-	  /// An input may not always have a value and so this may be blank (but it should never
-	  /// be null)
-	  /// </summary>
-	  public string Content
-	  {
-	    get { return _content; }
-		set
-		{
-		  if (value == null)
-		    throw new ArgumentNullException("Content should not be set to null");
-		  _content = value;
-		}
-	  }
-	  
-	  /// <summary>
-	  /// This is mandatory and may never be null
-	  /// </summary>
-	  public Action<string> OnChange
-	  {
-	    get { return _onChange; }
-		set
-		{
-		  if (value == null)
-		    throw new ArgumentNullException("OnChange should not be set to null");
-		  _onChange = value;
-		}
-	  }
-	}
+    public class Props
+    {
+      private string _className, _content;
+      private Action<string> _onChange;
+
+      /// <summary>
+      /// This is optional and so may be null (if non-null, then it should be a valid class
+      /// name - ie. non-blank)
+      /// </summary>
+      public string ClassName
+      {
+        get { return _className; }
+        set
+        {
+          if (value == "")
+            throw new ArgumentException("ClassName should not be set to a blank string");
+          _className = value;
+        }
+      }
+
+      public bool Disabled { get; set; }
+
+      /// <summary>
+      /// An input may not always have a value and so this may be blank (but it should never
+      /// be null)
+      /// </summary>
+      public string Content
+      {
+        get { return _content; }
+        set
+        {
+          if (value == null)
+            throw new ArgumentNullException("Content should not be set to null");
+          _content = value;
+        }
+      }
+
+      /// <summary>
+      /// This is mandatory and may never be null
+      /// </summary>
+      public Action<string> OnChange
+      {
+        get { return _onChange; }
+        set
+        {
+          if (value == null)
+            throw new ArgumentNullException("OnChange should not be set to null");
+          _onChange = value;
+        }
+      }
+    }
 
 This way, it would not be possible to explicitly set "OnChange" to null - if this was attempted then an exception would be thrown immediately, right at the point in the code that was attempting to assign this invalid value. This is much better than it failing later on, at some point that depends upon how the user does or doesn't interact with the UI component. This is potentially the sort of mistake that goes unnoticed for some time. For cases that are clearly a "programmer error" bug like this, I much prefer to "fail fast".
 
@@ -144,58 +144,58 @@ There's still a problem, though, because the initial state of the **Props** clas
 
 Attempt three could be to set appropriate defaults - eg.
 
-	public class Props
-	{
-	  private string _className = null;
-	  private string _content = "";
-	  private Action<string> _onChange = newValue => { };
-	
-	  /// <summary>
-	  /// This is optional and so may be null (if non-null, then it should be a valid class
-	  /// name - ie. non-blank)
-	  /// </summary>
-	  public string ClassName
-	  {
-	    get { return _className; }
-		set
-		{
-		  if (value == "")
-		    throw new ArgumentException("ClassName should not be set to a blank string");
-		  _className = value;
-		}
-	  }
-	  
-	  public bool Disabled { get; set; }
-	  
-	  /// <summary>
-	  /// An input may not always have a value and so this may be blank (but it should never
-	  /// be null)
-	  /// </summary>
-	  public string Content
-	  {
-	    get { return _content; }
-		set
-		{
-		  if (value == null)
-		    throw new ArgumentNullException("Content should not be set to null");
-		  _content = value;
-		}
-	  }
-	  
-	  /// <summary>
-	  /// This is mandatory and may never be null
-	  /// </summary>
-	  public Action<string> OnChange
-	  {
-	    get { return _onChange; }
-		set
-		{
-		  if (value == null)
-		    throw new ArgumentNullException("OnChange should not be set to null");
-		  _onChange = value;
-		}
-	  }
-	}
+    public class Props
+    {
+      private string _className = null;
+      private string _content = "";
+      private Action<string> _onChange = newValue => { };
+
+      /// <summary>
+      /// This is optional and so may be null (if non-null, then it should be a valid class
+      /// name - ie. non-blank)
+      /// </summary>
+      public string ClassName
+      {
+        get { return _className; }
+        set
+        {
+          if (value == "")
+            throw new ArgumentException("ClassName should not be set to a blank string");
+          _className = value;
+        }
+      }
+
+      public bool Disabled { get; set; }
+
+      /// <summary>
+      /// An input may not always have a value and so this may be blank (but it should never
+      /// be null)
+      /// </summary>
+      public string Content
+      {
+        get { return _content; }
+        set
+        {
+          if (value == null)
+            throw new ArgumentNullException("Content should not be set to null");
+          _content = value;
+        }
+      }
+
+      /// <summary>
+      /// This is mandatory and may never be null
+      /// </summary>
+      public Action<string> OnChange
+      {
+        get { return _onChange; }
+        set
+        {
+          if (value == null)
+            throw new ArgumentNullException("OnChange should not be set to null");
+          _onChange = value;
+        }
+      }
+    }
 
 Now it's *not* possible for "OnChange" to be null, so a null reference exception can *not* be thrown when the user tries to interact with the component.
 
@@ -203,42 +203,42 @@ This still isn't fantastic, though. Is it really likely that there's ever a time
 
 So, maybe most properties should *have* to be specified in order to get a new **Props** instance. Since values have to be provided at the point of initialisation, they may as well be validated at that point. This is a very good argument for making the **Props** class immutable - eg.
 
-	public class Props
-	{
-	  public Props(string className, string content, bool disabled, Action<string> onChange)
-	  {
-	    if (className == "")
-		  throw new ArgumentException("className should not be set to a blank string");
-		if (content == null)
-		  throw new ArgumentNullException("content");
-		if (onChange == null)
-		  throw new ArgumentNullException("onChange");
-		
-		ClassName = className;
-		Content = content;
-		Disabled = disabled;
-		OnChange = onChange;
-	  }
-	  
-	  /// <summary>
-	  /// This is optional and so may be null (if non-null, then it will never be blank)
-	  /// </summary>
-	  public string ClassName { get; }
-	  
-	  public bool Disabled { get; }
-	  
-	  /// <summary>
-	  /// An input may not always have a value and so this may be blank (but it should never
-	  /// be null)
-	  /// </summary>
-	  public string Content { get; }
-	  
-	  /// <summary>
-	  /// This is mandatory and will never be null
-	  /// </summary>
-	  public Action<string> OnChange { get; }
-	}
-	
+    public class Props
+    {
+      public Props(string className, string content, bool disabled, Action<string> onChange)
+      {
+        if (className == "")
+          throw new ArgumentException("className should not be set to a blank string");
+        if (content == null)
+          throw new ArgumentNullException("content");
+        if (onChange == null)
+          throw new ArgumentNullException("onChange");
+
+        ClassName = className;
+        Content = content;
+        Disabled = disabled;
+        OnChange = onChange;
+      }
+
+      /// <summary>
+      /// This is optional and so may be null (if non-null, then it will never be blank)
+      /// </summary>
+      public string ClassName { get; }
+
+      public bool Disabled { get; }
+
+      /// <summary>
+      /// An input may not always have a value and so this may be blank (but it should never
+      /// be null)
+      /// </summary>
+      public string Content { get; }
+
+      /// <summary>
+      /// This is mandatory and will never be null
+      /// </summary>
+      public Action<string> OnChange { get; }
+    }
+
 Two nice benefits arise from this. Firstly, the comments may be tighted up - so "OnChange" is no longer described as
 
 > This is mandatory and should never be null
@@ -253,110 +253,110 @@ The second benefit is that the **Props** class now communicates one of the React
 
 One final tweak to this sort of approach is to enable optional values to truly be optional. In this example, I'm talking about "className". The constructor may be changed from:
 
-	public Props(string className, string content, bool disabled, Action<string> onChange)
-	{
-	  if (className == "")
-	    throw new ArgumentException("className should not be set to a blank string");
-	  if (content == null)
-	    throw new ArgumentNullException("content");
-	  if (onChange == null)
-	    throw new ArgumentNullException("onChange");
+    public Props(string className, string content, bool disabled, Action<string> onChange)
+    {
+      if (className == "")
+        throw new ArgumentException("className should not be set to a blank string");
+      if (content == null)
+        throw new ArgumentNullException("content");
+      if (onChange == null)
+        throw new ArgumentNullException("onChange");
 
-	  ClassName = className;
-	  Content = content;
-	  Disabled = disabled;
-	  OnChange = onChange;
-	}
+      ClassName = className;
+      Content = content;
+      Disabled = disabled;
+      OnChange = onChange;
+    }
 
 to:
 
-	public Props(string content, bool disabled, Action<string> onChange, string className = "")
-	{
-	  if (content == null)
-	    throw new ArgumentNullException("content");
-	  if (onChange == null)
-	    throw new ArgumentNullException("onChange");
-	  if (className == "")
-	    throw new ArgumentException("className should not be set to a blank string");
+    public Props(string content, bool disabled, Action<string> onChange, string className = "")
+    {
+      if (content == null)
+        throw new ArgumentNullException("content");
+      if (onChange == null)
+        throw new ArgumentNullException("onChange");
+      if (className == "")
+        throw new ArgumentException("className should not be set to a blank string");
 
-	  Content = content;
-	  Disabled = disabled;
-	  OnChange = onChange;
-	  ClassName = className;
-	}
-	
+      Content = content;
+      Disabled = disabled;
+      OnChange = onChange;
+      ClassName = className;
+    }
+
 This means that an instance of **TextInput.Props** may be created, if no class name is required, like this:
 
     new TextInput.Props(title, isSaveInProgress, onTitleChange)
-	
+
 Or, if a class name *is* required:
 
     new TextInput.Props(title, isSaveInProgress, onTitleChange, "title")
-	
+
 Personally, I like to use named constructor arguments when creating **Props** instances, so I would probably write:
 
     new TextInput.Props(
-	  className: "title",
-	  value: title,
-	  disabled: isSaveInProgress,
-	  onChange: onTitleChange
-	)
-	
+      className: "title",
+      value: title,
+      disabled: isSaveInProgress,
+      onChange: onTitleChange
+    )
+
 I think that this makes the code easier to read (I don't need to resort to looking at the **Props** constructor to see that "title" is a class name and not an ID or any other use for a string) *and* means that it doesn't matter that the "className" argument moved from the start of the constructor argument list to the end, since the position of arguments doesn't matter when their names are used. (As an added benefit, this makes the code slightly more similar to the React component initialisation code that you might see in non-Bridge/C# projects, where JSON objects are used to set properties - but, here, we have the added benefit that's it all typed).
 
 This is a big step forward in terms of including additional information in the type system (and in terms of catching errors quickly - and as close to the root cause of the error as possible), meaning that I can more reliably use a component without having to know everything about how it works (which, in a lot of ways, is like the idea of coding against an interface - you want to know about how to communicate with an interface to get the desired result without having to know all of the details of its implementation).
 
 I'm not completely happy with the code at this point, though. It feels like the **Props** class has ballooned considerably from:
 
-	public class Props
-	{
-	  public string ClassName;
-	  public bool Disabled;
-	  public string Content;
-	  public Action<string> OnChange;
-	}
+    public class Props
+    {
+      public string ClassName;
+      public bool Disabled;
+      public string Content;
+      public Action<string> OnChange;
+    }
 
 to:
 
-	public class Props
-	{
-	  public Props(
-	    string content,
-		bool disabled,
-		Action<string> onChange,
-		string className = "")
-	  {
-		if (content == null)
-		  throw new ArgumentNullException("content");
-		if (onChange == null)
-		  throw new ArgumentNullException("onChange");
-	    if (className == "")
-		  throw new ArgumentException("className should not be set to a blank string");
-		
-		Content = content;
-		Disabled = disabled;
-		OnChange = onChange;
-		ClassName = className;
-	  }
-	  
-	  /// <summary>
-	  /// This is optional and so may be null (if non-null, then it will never be blank)
-	  /// </summary>
-	  public string ClassName { get; }
-	  
-	  public bool Disabled { get; }
-	  
-	  /// <summary>
-	  /// An input may not always have a value and so this may be blank (but it should never
-	  /// be null)
-	  /// </summary>
-	  public string Content { get; }
-	  
-	  /// <summary>
-	  /// This is mandatory and will never be null
-	  /// </summary>
-	  public Action<string> OnChange { get; }
-	}
+    public class Props
+    {
+      public Props(
+        string content,
+        bool disabled,
+        Action<string> onChange,
+        string className = "")
+      {
+        if (content == null)
+          throw new ArgumentNullException("content");
+        if (onChange == null)
+          throw new ArgumentNullException("onChange");
+        if (className == "")
+          throw new ArgumentException("className should not be set to a blank string");
+
+        Content = content;
+        Disabled = disabled;
+        OnChange = onChange;
+        ClassName = className;
+      }
+
+      /// <summary>
+      /// This is optional and so may be null (if non-null, then it will never be blank)
+      /// </summary>
+      public string ClassName { get; }
+
+      public bool Disabled { get; }
+
+      /// <summary>
+      /// An input may not always have a value and so this may be blank (but it should never
+      /// be null)
+      /// </summary>
+      public string Content { get; }
+
+      /// <summary>
+      /// This is mandatory and will never be null
+      /// </summary>
+      public Action<string> OnChange { get; }
+    }
 
 While I am willing to make a certain trade-off between the cost of writing the code to begin with against the long term benefits of it being easier to quickly understand and then reason about\*, I don't want to have to write any more of this monotonous form of code than absolutely necessary - in particular, I think I would get bored of writing "This is mandatory and will never be null" over and over again on different properties on different classes\*\*.
 
@@ -372,20 +372,20 @@ Since this whole series is about "The Dan Way", I think that it is entirely reas
 
 If a class implements an empty interface **IAmImmutable** then it may access extension methods that make the constructor easier to write. Something along the lines of:
 
-	public class Props : IAmImmutable
-	{
-	  public Props(string content, bool disabled, Action<string> onChange, string className = "")
-	  {
-	    this.CtorSet(_ => _.Content, content);
-	    this.CtorSet(_ => _.Disabled, disabled);
-	    this.CtorSet(_ => _.OnChange, onChange);
-	    this.CtorSet(_ => _.ClassName, className);
-	  }
-	  public string ClassName { get; }
-	  public bool Disabled { get; }
-	  public string Content { get; }
-	  public Action<string> OnChange { get; }
-	}
+    public class Props : IAmImmutable
+    {
+      public Props(string content, bool disabled, Action<string> onChange, string className = "")
+      {
+        this.CtorSet(_ => _.Content, content);
+        this.CtorSet(_ => _.Disabled, disabled);
+        this.CtorSet(_ => _.OnChange, onChange);
+        this.CtorSet(_ => _.ClassName, className);
+      }
+      public string ClassName { get; }
+      public bool Disabled { get; }
+      public string Content { get; }
+      public Action<string> OnChange { get; }
+    }
 
 The extension method is "CtorSet" and it takes a lambda that specifies a property on the class and it takes a new value for that property. The type of the property and the type of the new value must be consistent - so, although there's apparently a little magic involved, we're not sacrificing any type safety.
 
@@ -393,25 +393,25 @@ One interesting feature of "CtorSet" is that it will never allow a null value. T
 
 This actually doesn't work for the **Props** class we're looking at here since we want "ClassName" to be allowed to be null. To enable that, the library comes with a new struct - **Optional&lt;T&gt;**. Any time that you want to have a constructor argument be null, you have to wrap its type in this struct - ie.
 
-	public class Props : IAmImmutable
-	{
-	  public Props(
-	    string content,
-		bool disabled,
-		Action<string> onChange,
-		Optional<string> className = new Optional<string>())
-	  {
-	    this.CtorSet(_ => _.Content, content);
-	    this.CtorSet(_ => _.Disabled, disabled);
-	    this.CtorSet(_ => _.OnChange, onChange);
-	    this.CtorSet(_ => _.ClassName, className);
-	  }
-	  public Optional<string> ClassName { get; }
-	  public bool Disabled { get; }
-	  public string Content { get; }
-	  public Action<string> OnChange { get; }
-	}
-	
+    public class Props : IAmImmutable
+    {
+      public Props(
+        string content,
+        bool disabled,
+        Action<string> onChange,
+        Optional<string> className = new Optional<string>())
+      {
+        this.CtorSet(_ => _.Content, content);
+        this.CtorSet(_ => _.Disabled, disabled);
+        this.CtorSet(_ => _.OnChange, onChange);
+        this.CtorSet(_ => _.ClassName, className);
+      }
+      public Optional<string> ClassName { get; }
+      public bool Disabled { get; }
+      public string Content { get; }
+      public Action<string> OnChange { get; }
+    }
+
 Once again, we've made a step forward to encoding additional information in the class itself. In terms of being able to more easily reason about the code, this is a great win - classes such as these will never have null values to worry about; any property that may or may not have a value will be of type **Optional&lt;T&gt;**, which has properties "IsDefined" (a boolean indicating whether or not it has a value) and "Value" (which is the value itself, so long as "IsDefined" is true).
 
 If you were in an argumentative mood, then you might say that **Optional&lt;T&gt;** can't save you from nulls in all cases since any code that deals with them could choose not to check "IsDefined" and to just try to access "className.Value" in all cases. This is true, but this faulty style of calling code had to be explicitly written to "work around" the **Optional&lt;T&gt;** wrapper. If the person who wrote it had sufficiently little interest to try to understand why **Optional&lt;T&gt;** was used then they may need some help in getting back on to the right path in their programming. This wrapper type acts as a sign post at each point where a null may be encountered, if the sign posts are ignored then that's unfortunate (but the benefit remains that there *is* a sign post for every potentially-null value whereas, in normal C# code, you need to be wary that nulls may leap out at you at any point, without warning).
@@ -419,121 +419,121 @@ If you were in an argumentative mood, then you might say that **Optional&lt;T&gt
 This change doesn't affect how you call the constructor if you used the named arguments approach from above, so the following works fine:
 
     new TextInput.Props(
-	  className: "title",
-	  value: title,
-	  disabled: isSaveInProgress,
-	  onChange: onTitleChange
-	)
+      className: "title",
+      value: title,
+      disabled: isSaveInProgress,
+      onChange: onTitleChange
+    )
 
 as does:
 
     new TextInput.Props(
-	  value: title,
-	  disabled: isSaveInProgress,
-	  onChange: onTitleChange
-	)
+      value: title,
+      disabled: isSaveInProgress,
+      onChange: onTitleChange
+    )
 
 If you wanted to really deliberately indicate that a **TextInput** should have no title then you could use any of the following three -
 
     // The explicit way
     new TextInput.Props(
-	  className: Optional<string>.Missing,
-	  value: title,
-	  disabled: isSaveInProgress,
-	  onChange: onTitleChange
-	)
+      className: Optional<string>.Missing,
+      value: title,
+      disabled: isSaveInProgress,
+      onChange: onTitleChange
+    )
 
     // The implicit way (there is an implicit cast from T to Optional<T>, which is why passing
-	// the string "title" in the earlier example works, because the "title" string is implicitly
-	// cast to an Optional<string> with value "title" - similarly null is implicitly cast to
-	// an Optional<string> with value null, which is the same as Optional<string>.Missing)
+    // the string "title" in the earlier example works, because the "title" string is implicitly
+    // cast to an Optional<string> with value "title" - similarly null is implicitly cast to
+    // an Optional<string> with value null, which is the same as Optional<string>.Missing)
     new TextInput.Props(
-	  className: null,
-	  value: title,
-	  disabled: isSaveInProgress,
-	  onChange: onTitleChange
-	)
+      className: null,
+      value: title,
+      disabled: isSaveInProgress,
+      onChange: onTitleChange
+    )
 
     // Using the struct's constructor - the most verbose and least-prefered way. Note that this
-	// is the only way that a "Missing" value may be specified as a constructor argument's
-	// default value, as may be seen in the Props constructor above (this is because default
-	// argument values must be compile time constants, which a new instance of a struct is but
-	// the static "Missing" property is not. Null can't be used as a constructor argument's
-	// default value for an Optional as the implicit cast is a runtime operation and so is
-	// not available at compile time).
+    // is the only way that a "Missing" value may be specified as a constructor argument's
+    // default value, as may be seen in the Props constructor above (this is because default
+    // argument values must be compile time constants, which a new instance of a struct is but
+    // the static "Missing" property is not. Null can't be used as a constructor argument's
+    // default value for an Optional as the implicit cast is a runtime operation and so is
+    // not available at compile time).
     new TextInput.Props(
-	  className: new Optional<string>(),
-	  value: title,
-	  disabled: isSaveInProgress,
-	  onChange: onTitleChange
-	)
+      className: new Optional<string>(),
+      value: title,
+      disabled: isSaveInProgress,
+      onChange: onTitleChange
+    )
 
 I'm *still* not happy with this, though. I talked earlier about the ambiguity between null and blank string - for the "Value" property, this is solved since it can never be null now. It's valid for it to be a blank string (if there is no content in the input box) but it's not valid for it to be null (an **ArgumentNullException** will be raised in the constructor for a null "value"). Problem solved. However, the "ClassName" property can be "**Optional&lt;string&gt;**.Missing" (which is similar to null) or it can be a value that is a blank string. It would be much better to say that "ClassName" is "Missing" (meaning that it has no value and that the DOM element should have a "class" attribute at all) *or* that it has a value that is not blank.
 
 One way to try to address this would be with *another* type -
 
-	using System;
-	
-	namespace BridgeReactTutorial.API
-	{
-	  public class NonBlankTrimmedString
-	  {
-	    public NonBlankTrimmedString(string value)
-	    {
-	      if (string.IsNullOrWhiteSpace(value))
-	        throw new ArgumentException("Null, blank or whitespace-only value specified");
-	      Value = value.Trim();
-	    }
+    using System;
 
-	    /// <summary>
-	    /// This will never be null, blank or have any leading or trailing whitespace
-	    /// </summary>
-	    public string Value { get; }
+    namespace BridgeReactTutorial.API
+    {
+      public class NonBlankTrimmedString
+      {
+        public NonBlankTrimmedString(string value)
+        {
+          if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("Null, blank or whitespace-only value specified");
+          Value = value.Trim();
+        }
 
-	    /// <summary>
-	    /// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
-	    /// that requires a string
-	    /// </summary>
-	    public static implicit operator string(NonBlankTrimmedString value)
-	    {
-	      if (value == null)
-	        throw new ArgumentNullException("value");
-	      return value.Value;
-	    }
-	  }
-	}
+        /// <summary>
+        /// This will never be null, blank or have any leading or trailing whitespace
+        /// </summary>
+        public string Value { get; }
+
+        /// <summary>
+        /// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
+        /// that requires a string
+        /// </summary>
+        public static implicit operator string(NonBlankTrimmedString value)
+        {
+          if (value == null)
+            throw new ArgumentNullException("value");
+          return value.Value;
+        }
+      }
+    }
 
 I said that I wasn't keen on writing out more of this type of "This will never be null.." summary comment if I could avoid it, but the idea with this class it that it will be applicable in multiple places. So I have had to type "This will never be null, blank or have any leading or trailing whitespace" *once again* but I will take advantage of this one comment over and over again throughout my code.
 
 *Now* the **TextInput.Props** class becomes:
 
-	public class Props : IAmImmutable
-	{
-	  public Props(
-	    string content,
-	    bool disabled,
-	    Action<string> onChange,
-	    Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
-	  {
-	    this.CtorSet(_ => _.Content, content);
-	    this.CtorSet(_ => _.Disabled, disabled);
-	    this.CtorSet(_ => _.OnChange, onChange);
-	    this.CtorSet(_ => _.ClassName, className);
-	  }
-	  public Optional<NonBlankTrimmedString> ClassName { get; }
-	  public bool Disabled { get; }
-	  public string Content { get; }
-	  public Action<string> OnChange { get; }
-	}
-	
+    public class Props : IAmImmutable
+    {
+      public Props(
+        string content,
+        bool disabled,
+        Action<string> onChange,
+        Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
+      {
+        this.CtorSet(_ => _.Content, content);
+        this.CtorSet(_ => _.Disabled, disabled);
+        this.CtorSet(_ => _.OnChange, onChange);
+        this.CtorSet(_ => _.ClassName, className);
+      }
+      public Optional<NonBlankTrimmedString> ClassName { get; }
+      public bool Disabled { get; }
+      public string Content { get; }
+      public Action<string> OnChange { get; }
+    }
+
 If you wanted to instantiate one then you would need to change the calling code slightly - eg.
 
     new TextInput.Props(
-	  className: new NonBlankTrimmedString("title"),
-	  value: title,
-	  disabled: isSaveInProgress,
-	  onChange: onTitleChange
-	)
+      className: new NonBlankTrimmedString("title"),
+      value: title,
+      disabled: isSaveInProgress,
+      onChange: onTitleChange
+    )
 
 This *does* make this code a little more verbose. But we have the benefit that the **Props** class contains more information about what is and isn't acceptable for its property values. Also, making the calling code more explicit like this forces the writer to consider whether an appropriate value will always be passed to it - they should be careful to pass null or "**Optional&lt;NonBlankTrimmedString&gt;**.Missing" if they don't want to set a class name and to provide a populated, non-blank string if they *do* want a class name.
 
@@ -543,111 +543,111 @@ Note: This is probably the most controversial part of my recommended approach - 
 
 I want to extend this ostracising of nulls to the **TextInput** class itself, though. At the end of [Part Two](Post97), the component looked like this:
 
-	using System;
-	using Bridge.Html5;
-	using Bridge.React;
-	using ProductiveRage.Immutable;
+    using System;
+    using Bridge.Html5;
+    using Bridge.React;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class TextInput : StatelessComponent<TextInput.Props>
-	  {
-		public TextInput(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class TextInput : StatelessComponent<TextInput.Props>
+      {
+        public TextInput(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  return DOM.Input(new InputAttributes
-		  {
-			Type = InputType.Text,
-			ClassName = props.ClassName,
-			Disabled = props.Disabled,
-			Value = props.Content,
-			OnChange = e => props.OnChange(e.CurrentTarget.Value)
-		  });
-		}
+        public override ReactElement Render()
+        {
+          return DOM.Input(new InputAttributes
+          {
+            Type = InputType.Text,
+            ClassName = props.ClassName,
+            Disabled = props.Disabled,
+            Value = props.Content,
+            OnChange = e => props.OnChange(e.CurrentTarget.Value)
+          });
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public string ClassName;
-		  public bool Disabled;
-		  public string Content;
-		  public Action<string> OnChange;
-		}
-	  }
-	}
+        public class Props : IAmImmutable
+        {
+          public string ClassName;
+          public bool Disabled;
+          public string Content;
+          public Action<string> OnChange;
+        }
+      }
+    }
 
 My problem with this is that it's possible to call the constructor with a null "props" value - but, if you do so, then the "Render" method will throw a null reference exception. Unfortunately, it's not possible to check for a null "props" value in the component's constructor due to the way that the Bridge / React bindings work with the React library; the constructor is never actually executed and so a null-check in there would never run. What I suggest is that the **Props** constructor arguments be repeated in the component's constructor -
 
-	using System;
-	using Bridge.Html5;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using ProductiveRage.Immutable;
+    using System;
+    using Bridge.Html5;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class TextInput : StatelessComponent<TextInput.Props>
-	  {
-		public TextInput(
-		  string content,
-		  bool disabled,
-		  Action<string> onChange,
-		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
-		  : base(new Props(content, disabled, onChange, className)) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class TextInput : StatelessComponent<TextInput.Props>
+      {
+        public TextInput(
+          string content,
+          bool disabled,
+          Action<string> onChange,
+          Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
+          : base(new Props(content, disabled, onChange, className)) { }
 
-		public override ReactElement Render()
-		{
-		  return DOM.Input(new InputAttributes
-		  {
-			Type = InputType.Text,
-			ClassName = props.ClassName.IsDefined ? props.ClassName.Value : null,
-			Disabled = props.Disabled,
-			Value = props.Content,
-			OnChange = e => props.OnChange(e.CurrentTarget.Value)
-		  });
-		}
+        public override ReactElement Render()
+        {
+          return DOM.Input(new InputAttributes
+          {
+            Type = InputType.Text,
+            ClassName = props.ClassName.IsDefined ? props.ClassName.Value : null,
+            Disabled = props.Disabled,
+            Value = props.Content,
+            OnChange = e => props.OnChange(e.CurrentTarget.Value)
+          });
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public Props(
-			string content,
-			bool disabled,
-			Action<string> onChange,
-			Optional<NonBlankTrimmedString> className)
-		  {
-			this.CtorSet(_ => _.Content, content);
-			this.CtorSet(_ => _.Disabled, disabled);
-			this.CtorSet(_ => _.OnChange, onChange);
-			this.CtorSet(_ => _.ClassName, className);
-		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; }
-		  public bool Disabled { get; }
-		  public string Content { get; }
-		  public Action<string> OnChange { get; }
-		}
-	  }
-	}
+        public class Props : IAmImmutable
+        {
+          public Props(
+            string content,
+            bool disabled,
+            Action<string> onChange,
+            Optional<NonBlankTrimmedString> className)
+          {
+            this.CtorSet(_ => _.Content, content);
+            this.CtorSet(_ => _.Disabled, disabled);
+            this.CtorSet(_ => _.OnChange, onChange);
+            this.CtorSet(_ => _.ClassName, className);
+          }
+          public Optional<NonBlankTrimmedString> ClassName { get; }
+          public bool Disabled { get; }
+          public string Content { get; }
+          public Action<string> OnChange { get; }
+        }
+      }
+    }
 
 Again, this *has* expanded the amount of code that is required within the component class. But the real effect is magnified by the line-wrapping that I use on my blog post code samples - in Visual Studio, I would likely have the constructor arguments all on one line.
 
 If we can get past the cost of additional code within the component then we get two benefits. The first is that it's no longer possible for the **TextInput** to ever have a null "props" reference as a **Props** reference is no longer passed in, but is created in the call to the base constructor by using the individual arguments passed to the **TextInput** constructor. The second benefit is more marginal, but still nice (especially since it partially offsets the additional code added above) - the way that a new **TextInput** was declared previously required duplication of the word "**TextInput**" (with "new **TextInput**" and "new **TextInput.Props**") -
 
-	new TextInput(new TextInput.Props
-	{
-	  ClassName = "title"
-	  Disabled = props.Disabled,
-	  Content = props.Content,
-	  OnChange = props.OnChange
-	})
+    new TextInput(new TextInput.Props
+    {
+      ClassName = "title"
+      Disabled = props.Disabled,
+      Content = props.Content,
+      OnChange = props.OnChange
+    })
 
 With the updated **TextInput** implementation, this duplication is avoided -
 
-	new TextInput(
-	  className: new NonBlankTrimmedString("title"),
-	  disabled: props.Disabled,
-	  content: props.Content,
-	  onChange: props.OnChange
-	)
+    new TextInput(
+      className: new NonBlankTrimmedString("title"),
+      disabled: props.Disabled,
+      content: props.Content,
+      onChange: props.OnChange
+    )
 
 Even without this (admittedly minor) second benefit, I would still be much happier with the new version of **TextInput**. The additional code (the final version is definitely somewhat longer than the previous version) pays for itself in what it communicates to someone who wishes to consume that component. However, one of the themes that I've been pushing in this series is that components should be dumb and that the real logic of the application should be outside of any UI classes; in the application code that will deal with the complications of the business logic and how to deal with user interactions.. if there is a way to move some of the syntactic noise around component creation away from the complicated library code and into the dumb components, then that seems a sensible trade-off. And that's what has been done here!
 
@@ -659,53 +659,53 @@ Trick question! I am convinced that it *does* make sense to use **IAmImmutable**
 
 One obvious example is in the "SaveMessage" method in the **MessageApi** class. Currently, it starts like this:
 
-	private RequestId SaveMessage(MessageDetails message, Action optionalSaveCompletedCallback)
-	{
-	  if (message == null)
-	    throw new ArgumentNullException("message");
-	  if (string.IsNullOrWhiteSpace(message.Title))
-	    throw new ArgumentException("A title value must be provided");
-	  if (string.IsNullOrWhiteSpace(message.Content))
-	    throw new ArgumentException("A content value must be provided");
+    private RequestId SaveMessage(MessageDetails message, Action optionalSaveCompletedCallback)
+    {
+      if (message == null)
+        throw new ArgumentNullException("message");
+      if (string.IsNullOrWhiteSpace(message.Title))
+        throw new ArgumentException("A title value must be provided");
+      if (string.IsNullOrWhiteSpace(message.Content))
+        throw new ArgumentException("A content value must be provided");
 
 Not accepting a null **MessageDetails** instance is good - if someone tried to call this method with a null "message" argument then it should be rejected immediately. However, it feels wrong that it's necesary to then check the "Title" and "Content" properties - should there ever be a case where a **MessageDetails** instance exists *without* these values being populated? In this application, the answer is no - the **MessageEditor** component only allows a new message to be saved if both its Title and Content have values.
 
 This is another opportunity to encode this additional information into the type system. Instead of **MessageDetails** being implemented like this:
 
-	namespace BridgeReactTutorial.ViewModels
-	{
-	  public class MessageDetails
-	  {
-	    public string Title;
-	    public string Content;
-	  }
-	}
+    namespace BridgeReactTutorial.ViewModels
+    {
+      public class MessageDetails
+      {
+        public string Title;
+        public string Content;
+      }
+    }
 
 It should be rewritten thusly:
 
-	using BridgeReactTutorial.API;
-	using ProductiveRage.Immutable;
+    using BridgeReactTutorial.API;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.ViewModels
-	{
-	  public class MessageDetails : IAmImmutable
-	  {
-	    public MessageDetails(NonBlankTrimmedString title, NonBlankTrimmedString content)
-	    {
-	      this.CtorSet(_ => _.Title, title);
-	      this.CtorSet(_ => _.Content, content);
-	    }
-	    public NonBlankTrimmedString Title { get; }
-	    public NonBlankTrimmedString Content { get; }
-	  }
-	}
+    namespace BridgeReactTutorial.ViewModels
+    {
+      public class MessageDetails : IAmImmutable
+      {
+        public MessageDetails(NonBlankTrimmedString title, NonBlankTrimmedString content)
+        {
+          this.CtorSet(_ => _.Title, title);
+          this.CtorSet(_ => _.Content, content);
+        }
+        public NonBlankTrimmedString Title { get; }
+        public NonBlankTrimmedString Content { get; }
+      }
+    }
 
 Now, the "SaveMessage" validation is much simpler - all that is required is:
 
-	private RequestId SaveMessage(MessageDetails message, Action optionalSaveCompletedCallback)
-	{
-	  if (message == null)
-	    throw new ArgumentNullException("message");
+    private RequestId SaveMessage(MessageDetails message, Action optionalSaveCompletedCallback)
+    {
+      if (message == null)
+        throw new ArgumentNullException("message");
 
 Since a **MessageDetails** instance may no longer exist with missing Title or Content values, the property validation in "SaveMessage" is unnecessary. This has the benefit that there is less code at the point at which data is retrieved from a **MessageDetails** instance, which goes some way to offsetting the additional code required in defining the type. The real benefit, though, to removing that code is not just reducing line count but in removing potential duplication (the property validation code may have appeared elsewhere in the application if there were other methods that processed **MessageDetails** instances) *and* baking assumptions into the type system, rather than leaving them be implicit. Before, it was probably safe to assume that Title and Content would always have values since the code that would create a **MessageDetails** instance would always give them values - however, that was *only* an assumption and you would have had to have read all of the code that created **MessageDetails** instances to be confident. With this arrangement, you *know* that a **MessageDetails** has both Title and Content values at all times, since it's not possible for an instance to be created that doesn't!
 
@@ -713,520 +713,520 @@ When I talk about code being easy to reason about, it's not usually in terms of 
 
 Speaking of dealing with mutation brings me smoothly onto the third benefit of **IAmImmutable** that I hinted at earlier. Currently, the **MessageEditor** component in our example app looks like this:
 
-	using System;
-	using Bridge.React;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using Bridge.React;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
-	  {
-		public MessageEditor(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageEditor : StatelessComponent<MessageEditor.Props>
+      {
+        public MessageEditor(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  var formIsInvalid =
-			!string.IsNullOrWhiteSpace(props.Message.Title.ValidationError) ||
-			!string.IsNullOrWhiteSpace(props.Message.Content.ValidationError);
+        public override ReactElement Render()
+        {
+          var formIsInvalid =
+            !string.IsNullOrWhiteSpace(props.Message.Title.ValidationError) ||
+            !string.IsNullOrWhiteSpace(props.Message.Content.ValidationError);
 
-		  return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
-			DOM.Legend(null, props.Message.Caption),
-			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
-			new ValidatedTextInput(new ValidatedTextInput.Props
-			{
-			  ClassName = "title",
-			  Disabled = props.Message.IsSaveInProgress,
-			  Content = props.Message.Title.Text,
-			  OnChange = newTitle => props.OnChange(new MessageEditState
-			  {
-				Title = new TextEditState { Text = newTitle },
-				Content = props.Message.Content
-			  }),
-			  ValidationMessage = props.Message.Title.ValidationError
-			}),
-			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
-			new ValidatedTextInput(new ValidatedTextInput.Props
-			{
-			  ClassName = "content",
-			  Disabled = props.Message.IsSaveInProgress,
-			  Content = props.Message.Content.Text,
-			  OnChange = newContent => props.OnChange(new MessageEditState
-			  {
-				Title = props.Message.Title,
-				Content = new TextEditState { Text = newContent },
-			  }),
-			  ValidationMessage = props.Message.Content.ValidationError
-			}),
-			DOM.Button(
-			new ButtonAttributes
-			{
-			  Disabled = formIsInvalid || props.Message.IsSaveInProgress,
-			  OnClick = e => props.OnSave()
-			},
-			"Save"
-			)
-		  );
-		}
+          return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
+            DOM.Legend(null, props.Message.Caption),
+            DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+            new ValidatedTextInput(new ValidatedTextInput.Props
+            {
+              ClassName = "title",
+              Disabled = props.Message.IsSaveInProgress,
+              Content = props.Message.Title.Text,
+              OnChange = newTitle => props.OnChange(new MessageEditState
+              {
+                Title = new TextEditState { Text = newTitle },
+                Content = props.Message.Content
+              }),
+              ValidationMessage = props.Message.Title.ValidationError
+            }),
+            DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+            new ValidatedTextInput(new ValidatedTextInput.Props
+            {
+              ClassName = "content",
+              Disabled = props.Message.IsSaveInProgress,
+              Content = props.Message.Content.Text,
+              OnChange = newContent => props.OnChange(new MessageEditState
+              {
+                Title = props.Message.Title,
+                Content = new TextEditState { Text = newContent },
+              }),
+              ValidationMessage = props.Message.Content.ValidationError
+            }),
+            DOM.Button(
+            new ButtonAttributes
+            {
+              Disabled = formIsInvalid || props.Message.IsSaveInProgress,
+              OnClick = e => props.OnSave()
+            },
+            "Save"
+            )
+          );
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public MessageEditState Message;
-		  public Action<MessageEditState> OnChange;
-		  public Action OnSave;
-		}
-	  }
-	}
+        public class Props
+        {
+          public string ClassName;
+          public MessageEditState Message;
+          public Action<MessageEditState> OnChange;
+          public Action OnSave;
+        }
+      }
+    }
 
 The first thing I'm going to do is change the **Props** type and the component's constructor in the same way as I did for the **TextInput** -
 
-	using System;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using System;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
-	  {
-		public MessageEditor(
-		  MessageEditState message,
-		  Action<MessageEditState> onChange,
-		  Action onSave,
-		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
-		  : base(new Props(className, message, onChange, onSave)) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageEditor : StatelessComponent<MessageEditor.Props>
+      {
+        public MessageEditor(
+          MessageEditState message,
+          Action<MessageEditState> onChange,
+          Action onSave,
+          Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
+          : base(new Props(className, message, onChange, onSave)) { }
 
-		public override ReactElement Render()
-		{
-		  var formIsInvalid =
-			!string.IsNullOrWhiteSpace(props.Message.Title.ValidationError) ||
-			!string.IsNullOrWhiteSpace(props.Message.Content.ValidationError);
+        public override ReactElement Render()
+        {
+          var formIsInvalid =
+            !string.IsNullOrWhiteSpace(props.Message.Title.ValidationError) ||
+            !string.IsNullOrWhiteSpace(props.Message.Content.ValidationError);
 
-		  return DOM.FieldSet(
-		    new FieldSetAttributes {
-			  ClassName = props.ClassName.IsDefined ? props.ClassName.Value : null
-			},
-			DOM.Legend(null, props.Message.Caption),
-			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
-			new ValidatedTextInput(new ValidatedTextInput.Props
-			{
-			  ClassName = "title",
-			  Disabled = props.Message.IsSaveInProgress,
-			  Content = props.Message.Title.Text,
-			  OnChange = newTitle => props.OnChange(new MessageEditState
-			  {
-				Title = new TextEditState { Text = newTitle },
-				Content = props.Message.Content
-			  }),
-			  ValidationMessage = props.Message.Title.ValidationError
-			}),
-			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
-			new ValidatedTextInput(new ValidatedTextInput.Props
-			{
-			  ClassName = "content",
-			  Disabled = props.Message.IsSaveInProgress,
-			  Content = props.Message.Content.Text,
-			  OnChange = newContent => props.OnChange(new MessageEditState
-			  {
-				Title = props.Message.Title,
-				Content = new TextEditState { Text = newContent },
-			  }),
-			  ValidationMessage = props.Message.Content.ValidationError
-			}),
-			DOM.Button(
-			new ButtonAttributes
-			{
-			  Disabled = formIsInvalid || props.Message.IsSaveInProgress,
-			  OnClick = e => props.OnSave()
-			},
-			"Save"
-			)
-		  );
-		}
+          return DOM.FieldSet(
+            new FieldSetAttributes {
+              ClassName = props.ClassName.IsDefined ? props.ClassName.Value : null
+            },
+            DOM.Legend(null, props.Message.Caption),
+            DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+            new ValidatedTextInput(new ValidatedTextInput.Props
+            {
+              ClassName = "title",
+              Disabled = props.Message.IsSaveInProgress,
+              Content = props.Message.Title.Text,
+              OnChange = newTitle => props.OnChange(new MessageEditState
+              {
+                Title = new TextEditState { Text = newTitle },
+                Content = props.Message.Content
+              }),
+              ValidationMessage = props.Message.Title.ValidationError
+            }),
+            DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+            new ValidatedTextInput(new ValidatedTextInput.Props
+            {
+              ClassName = "content",
+              Disabled = props.Message.IsSaveInProgress,
+              Content = props.Message.Content.Text,
+              OnChange = newContent => props.OnChange(new MessageEditState
+              {
+                Title = props.Message.Title,
+                Content = new TextEditState { Text = newContent },
+              }),
+              ValidationMessage = props.Message.Content.ValidationError
+            }),
+            DOM.Button(
+            new ButtonAttributes
+            {
+              Disabled = formIsInvalid || props.Message.IsSaveInProgress,
+              OnClick = e => props.OnSave()
+            },
+            "Save"
+            )
+          );
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public Props(
-		    Optional<NonBlankTrimmedString> className,
-		    MessageEditState message,
-			Action<MessageEditState> onChange,
-			Action onSave)
-		  {
-			this.CtorSet(_ => _.ClassName, className);
-			this.CtorSet(_ => _.Message, message);
-			this.CtorSet(_ => _.OnChange, onChange);
-			this.CtorSet(_ => _.OnSave, onSave);
-		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; }
-		  public MessageEditState Message { get; }
-		  public Action<MessageEditState> OnChange { get; }
-		  public Action OnSave { get; }
-		}
-	  }
-	}
-	
-This means that the	**MessageEditor** instantiation code changes slightly from:
+        public class Props : IAmImmutable
+        {
+          public Props(
+            Optional<NonBlankTrimmedString> className,
+            MessageEditState message,
+            Action<MessageEditState> onChange,
+            Action onSave)
+          {
+            this.CtorSet(_ => _.ClassName, className);
+            this.CtorSet(_ => _.Message, message);
+            this.CtorSet(_ => _.OnChange, onChange);
+            this.CtorSet(_ => _.OnSave, onSave);
+          }
+          public Optional<NonBlankTrimmedString> ClassName { get; }
+          public MessageEditState Message { get; }
+          public Action<MessageEditState> OnChange { get; }
+          public Action OnSave { get; }
+        }
+      }
+    }
 
-	new MessageEditor(new MessageEditor.Props
-	{
-	  ClassName = "message",
-	  Message = state.Message,
-	  OnChange = newState => props.Dispatcher.Dispatch(
-		UserEditRequested.For(newState)
-	  ),
-	  OnSave = () => props.Dispatcher.Dispatch(
-		SaveRequested.For(
-		  new MessageDetails(
-			new NonBlankTrimmedString(state.Message.Title.Text),
-			new NonBlankTrimmedString(state.Message.Content.Text)
-		  )
-		)
-	  )
-	}),
+This means that the    **MessageEditor** instantiation code changes slightly from:
+
+    new MessageEditor(new MessageEditor.Props
+    {
+      ClassName = "message",
+      Message = state.Message,
+      OnChange = newState => props.Dispatcher.Dispatch(
+        UserEditRequested.For(newState)
+      ),
+      OnSave = () => props.Dispatcher.Dispatch(
+        SaveRequested.For(
+          new MessageDetails(
+            new NonBlankTrimmedString(state.Message.Title.Text),
+            new NonBlankTrimmedString(state.Message.Content.Text)
+          )
+        )
+      )
+    }),
 
 to:
 
-	new MessageEditor(
-	  className: new NonBlankTrimmedString("message"),
-	  message:  state.Message,
-	  onChange: newState => props.Dispatcher.Dispatch(
-		UserEditRequested.For(newState)
-	  ),
-	  onSave: () => props.Dispatcher.Dispatch(
-		SaveRequested.For(
-		  new MessageDetails(
-			new NonBlankTrimmedString(state.Message.Title.Text),
-			new NonBlankTrimmedString(state.Message.Content.Text)
-		  )
-		)
-	  )
-	),
+    new MessageEditor(
+      className: new NonBlankTrimmedString("message"),
+      message:  state.Message,
+      onChange: newState => props.Dispatcher.Dispatch(
+        UserEditRequested.For(newState)
+      ),
+      onSave: () => props.Dispatcher.Dispatch(
+        SaveRequested.For(
+          new MessageDetails(
+            new NonBlankTrimmedString(state.Message.Title.Text),
+            new NonBlankTrimmedString(state.Message.Content.Text)
+          )
+        )
+      )
+    ),
 
 There are several steps that need following now until I can reveal my point,  so bear with me. I'm going to change the **MessageEditState** data type, in the same way as I did the **MessageDetails** - from:
 
-	namespace BridgeReactTutorial.ViewModels
-	{
-	  public class MessageEditState
-	  {
-		public string Caption;
-		public TextEditState Title;
-		public TextEditState Content;
-		public bool IsSaveInProgress;
-	  }
-	}
-	
+    namespace BridgeReactTutorial.ViewModels
+    {
+      public class MessageEditState
+      {
+        public string Caption;
+        public TextEditState Title;
+        public TextEditState Content;
+        public bool IsSaveInProgress;
+      }
+    }
+
 to:
 
-	using BridgeReactTutorial.API;
-	using ProductiveRage.Immutable;
+    using BridgeReactTutorial.API;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.ViewModels
-	{
-	  public class MessageEditState : IAmImmutable
-	  {
-		public MessageEditState(
-		  NonBlankTrimmedString caption,
-		  TextEditState title,
-		  TextEditState content,
-		  bool isSaveInProgress)
-		{
-		  this.CtorSet(_ => _.Caption, caption);
-		  this.CtorSet(_ => _.Title, title);
-		  this.CtorSet(_ => _.Content, content);
-		  this.CtorSet(_ => _.IsSaveInProgress, isSaveInProgress);
-		}
-		public NonBlankTrimmedString Caption { get; }
-		public TextEditState Title { get; }
-		public TextEditState Content { get; }
-		public bool IsSaveInProgress { get; }
-	  }
-	}
+    namespace BridgeReactTutorial.ViewModels
+    {
+      public class MessageEditState : IAmImmutable
+      {
+        public MessageEditState(
+          NonBlankTrimmedString caption,
+          TextEditState title,
+          TextEditState content,
+          bool isSaveInProgress)
+        {
+          this.CtorSet(_ => _.Caption, caption);
+          this.CtorSet(_ => _.Title, title);
+          this.CtorSet(_ => _.Content, content);
+          this.CtorSet(_ => _.IsSaveInProgress, isSaveInProgress);
+        }
+        public NonBlankTrimmedString Caption { get; }
+        public TextEditState Title { get; }
+        public TextEditState Content { get; }
+        public bool IsSaveInProgress { get; }
+      }
+    }
 
 And do the same with **TextEditState**, from -
 
-	namespace BridgeReactTutorial.ViewModels
-	{
-		public class TextEditState
-		{
-			public string Text;
-			public string ValidationError;
-		}
-	}
-	
+    namespace BridgeReactTutorial.ViewModels
+    {
+        public class TextEditState
+        {
+            public string Text;
+            public string ValidationError;
+        }
+    }
+
 to:
 
-	using BridgeReactTutorial.API;
-	using ProductiveRage.Immutable;
+    using BridgeReactTutorial.API;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.ViewModels
-	{
-	  public class TextEditState : IAmImmutable
-	  {
-		public TextEditState(
-		  string text,
-		  Optional<NonBlankTrimmedString> validationError = new Optional<NonBlankTrimmedString>())
-		{
-		  this.CtorSet(_ => _.Text, text);
-		  this.CtorSet(_ => _.ValidationError, validationError);
-		}
-		public string Text { get; }
-		public Optional<NonBlankTrimmedString> ValidationError { get; }
-	  }
-	}
-	
+    namespace BridgeReactTutorial.ViewModels
+    {
+      public class TextEditState : IAmImmutable
+      {
+        public TextEditState(
+          string text,
+          Optional<NonBlankTrimmedString> validationError = new Optional<NonBlankTrimmedString>())
+        {
+          this.CtorSet(_ => _.Text, text);
+          this.CtorSet(_ => _.ValidationError, validationError);
+        }
+        public string Text { get; }
+        public Optional<NonBlankTrimmedString> ValidationError { get; }
+      }
+    }
+
 I'm going to change the **ValidatedTextInput** to
 
-	using System;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using ProductiveRage.Immutable;
+    using System;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class ValidatedTextInput : StatelessComponent<ValidatedTextInput.Props>
-	  {
-		public ValidatedTextInput(
-		  bool disabled,
-		  string content,
-		  Action<string> onChange,
-		  Optional<NonBlankTrimmedString> validationMessage,
-		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
-		  : base(new Props(className, disabled, content, onChange, validationMessage)) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class ValidatedTextInput : StatelessComponent<ValidatedTextInput.Props>
+      {
+        public ValidatedTextInput(
+          bool disabled,
+          string content,
+          Action<string> onChange,
+          Optional<NonBlankTrimmedString> validationMessage,
+          Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
+          : base(new Props(className, disabled, content, onChange, validationMessage)) { }
 
-		public override ReactElement Render()
-		{
-		  var className = props.ClassName;
-		  if (props.ValidationMessage.IsDefined)
-		    className = className.Add(" ", new NonBlankTrimmedString("invalid"));
-		  return DOM.Span(new Attributes { ClassName = className.ToStringIfDefined() },
-			new TextInput(
-			  className: props.ClassName,
-			  disabled: props.Disabled,
-			  content: props.Content,
-			  onChange: props.OnChange
-			),
-			props.ValidationMessage.IsDefined
-			? DOM.Span(
-			  new Attributes { ClassName = "validation-message" },
-			  props.ValidationMessage.ToStringIfDefined()
-			)
-			: null
-		  );
-		}
+        public override ReactElement Render()
+        {
+          var className = props.ClassName;
+          if (props.ValidationMessage.IsDefined)
+            className = className.Add(" ", new NonBlankTrimmedString("invalid"));
+          return DOM.Span(new Attributes { ClassName = className.ToStringIfDefined() },
+            new TextInput(
+              className: props.ClassName,
+              disabled: props.Disabled,
+              content: props.Content,
+              onChange: props.OnChange
+            ),
+            props.ValidationMessage.IsDefined
+            ? DOM.Span(
+              new Attributes { ClassName = "validation-message" },
+              props.ValidationMessage.ToStringIfDefined()
+            )
+            : null
+          );
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public Props(
-			Optional<NonBlankTrimmedString> className,
-			bool disabled,
-			string content,
-			Action<string> onChange,
-			Optional<NonBlankTrimmedString> validationMessage)
-		  {
-			this.CtorSet(_ => _.ClassName, className);
-			this.CtorSet(_ => _.Disabled, disabled);
-			this.CtorSet(_ => _.Content, content);
-			this.CtorSet(_ => _.OnChange, onChange);
-			this.CtorSet(_ => _.ValidationMessage, validationMessage);
-		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; }
-		  public bool Disabled { get; }
-		  public string Content { get; }
-		  public Action<string> OnChange { get; }
-		  public Optional<NonBlankTrimmedString> ValidationMessage { get; }
-		}
-	  }
-	}
-	
+        public class Props : IAmImmutable
+        {
+          public Props(
+            Optional<NonBlankTrimmedString> className,
+            bool disabled,
+            string content,
+            Action<string> onChange,
+            Optional<NonBlankTrimmedString> validationMessage)
+          {
+            this.CtorSet(_ => _.ClassName, className);
+            this.CtorSet(_ => _.Disabled, disabled);
+            this.CtorSet(_ => _.Content, content);
+            this.CtorSet(_ => _.OnChange, onChange);
+            this.CtorSet(_ => _.ValidationMessage, validationMessage);
+          }
+          public Optional<NonBlankTrimmedString> ClassName { get; }
+          public bool Disabled { get; }
+          public string Content { get; }
+          public Action<string> OnChange { get; }
+          public Optional<NonBlankTrimmedString> ValidationMessage { get; }
+        }
+      }
+    }
+
 .. which requires a new class be added to the "API" folder with some extension methods to make dealing with **Optional&lt;NonBlankTrimmedString&gt;** a little nicer -
 
-	using System;
-	using ProductiveRage.Immutable;
+    using System;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public static class OptionalNonBlankTrimmedStringExtensions
-	  {
-		/// <summary>
-		/// If the Optional NonBlankTrimmedString has a value then it will be unwrapped directly
-		/// into a string - if not, the null will be returned (this is one of the few places
-		/// where null will be an acceptable value in the app and it should be only used when
-		/// integrating with code that expects nulls - such as when setting attributes via
-		/// React html element factories)
-		/// </summary>
-		public static string ToStringIfDefined(this Optional<NonBlankTrimmedString> source)
-		{
-		  return source.IsDefined ? source.Value : null;
-		}
+    namespace BridgeReactTutorial.API
+    {
+      public static class OptionalNonBlankTrimmedStringExtensions
+      {
+        /// <summary>
+        /// If the Optional NonBlankTrimmedString has a value then it will be unwrapped directly
+        /// into a string - if not, the null will be returned (this is one of the few places
+        /// where null will be an acceptable value in the app and it should be only used when
+        /// integrating with code that expects nulls - such as when setting attributes via
+        /// React html element factories)
+        /// </summary>
+        public static string ToStringIfDefined(this Optional<NonBlankTrimmedString> source)
+        {
+          return source.IsDefined ? source.Value : null;
+        }
 
-		/// <summary>
-		/// This will join two Optional NonBlankTrimmedString with a specified delimiter if
-		/// they both have values. If only one of them has a value then this will be returned
-		/// unaltered. If neither of them have a value then a Missing value will be returned.
-		/// </summary>
-		public static Optional<NonBlankTrimmedString> Add(
-		  this Optional<NonBlankTrimmedString> source,
-		  string delimiter,
-		  Optional<NonBlankTrimmedString> other)
-		{
-		  if (delimiter == null)
-			throw new ArgumentNullException("delimiter");
+        /// <summary>
+        /// This will join two Optional NonBlankTrimmedString with a specified delimiter if
+        /// they both have values. If only one of them has a value then this will be returned
+        /// unaltered. If neither of them have a value then a Missing value will be returned.
+        /// </summary>
+        public static Optional<NonBlankTrimmedString> Add(
+          this Optional<NonBlankTrimmedString> source,
+          string delimiter,
+          Optional<NonBlankTrimmedString> other)
+        {
+          if (delimiter == null)
+            throw new ArgumentNullException("delimiter");
 
-		  if (!source.IsDefined && !other.IsDefined)
-			return Optional<NonBlankTrimmedString>.Missing;
-		  else if (!source.IsDefined)
-			return other;
-		  else if (!other.IsDefined)
-			return source;
+          if (!source.IsDefined && !other.IsDefined)
+            return Optional<NonBlankTrimmedString>.Missing;
+          else if (!source.IsDefined)
+            return other;
+          else if (!other.IsDefined)
+            return source;
 
-		  return new NonBlankTrimmedString(source.Value.Value + delimiter + other.Value.Value);
-		}
-	  }
-	}
-	
+          return new NonBlankTrimmedString(source.Value.Value + delimiter + other.Value.Value);
+        }
+      }
+    }
+
 and a further implicit operator adding to the **NonBlankTrimmedString** -
 
-		/// <summary>
-		/// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
-		/// that requires a ReactElement-or-string, such as for the children array of the React
-		/// DOM component factories
-		/// </summary>
-		public static implicit operator Union<ReactElement, string>(NonBlankTrimmedString value)
-		{
-			if (value == null)
-				throw new ArgumentNullException("value");
-			return value.Value;
-		}
+        /// <summary>
+        /// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
+        /// that requires a ReactElement-or-string, such as for the children array of the React
+        /// DOM component factories
+        /// </summary>
+        public static implicit operator Union<ReactElement, string>(NonBlankTrimmedString value)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+            return value.Value;
+        }
 
-	
+
 Ok, now I'm finally able to demonstrate this mysterious third benefit. The "OnChange" lambdas which were provided as **ValidatedTextInput.Props** values by the **MessageEditor**'s "Render" method were previously specified like this:
-	
-	OnChange = newTitle => props.OnChange(new MessageEditState
-	{
-	  Title = new TextEditState { Text = newTitle },
-	  Content = props.Message.Content
-	})
 
-	OnChange = newContent => props.OnChange(new MessageEditState
-	{
-	  Title = props.Message.Title,
-	  Content = new TextEditState { Text = newContent },
-	})
+    OnChange = newTitle => props.OnChange(new MessageEditState
+    {
+      Title = new TextEditState { Text = newTitle },
+      Content = props.Message.Content
+    })
+
+    OnChange = newContent => props.OnChange(new MessageEditState
+    {
+      Title = props.Message.Title,
+      Content = new TextEditState { Text = newContent },
+    })
 
 Within each "OnChange", we want to create a new **MessageEditState** instance with one of the properties changed. However, it get arduous having to repeat *all* of the property names each time that you want to change a single property - here it's not *that* bad because there are only two properties ("Title" and "Content"), but on classes with more properties this is annoying and, worse, error-prone.
 
 Now that **MessageEditState** implements **IAmImmutable**, we can take advantage of another extension method available; "With". This takes an argument that specifies the property to change and it takes an argument for the new property value. This means that
 
-	OnChange = newTitle => props.OnChange(new MessageEditState
-	{
-	  Title = new TextEditState { Text = newTitle },
-	  Content = props.Message.Content
-	})
-	
-is replaced with
-
-	OnChange = newTitle => props.OnChange(
-	   props.Message.With(_ => _.Title, new TextEditState(newTitle))
-	)
-	
-and 
-
-	OnChange = newContent => props.OnChange(new MessageEditState
-	{
-	  Title = props.Message.Title,
-	  Content = new TextEditState { Text = newContent }
-	})
+    OnChange = newTitle => props.OnChange(new MessageEditState
+    {
+      Title = new TextEditState { Text = newTitle },
+      Content = props.Message.Content
+    })
 
 is replaced with
-	
-	OnChange = newContent => props.OnChange(
-	  props.Message.With(_ => _.Content, new TextEditState(newContent))
-	)
-	
+
+    OnChange = newTitle => props.OnChange(
+       props.Message.With(_ => _.Title, new TextEditState(newTitle))
+    )
+
+and
+
+    OnChange = newContent => props.OnChange(new MessageEditState
+    {
+      Title = props.Message.Title,
+      Content = new TextEditState { Text = newContent }
+    })
+
+is replaced with
+
+    OnChange = newContent => props.OnChange(
+      props.Message.With(_ => _.Content, new TextEditState(newContent))
+    )
+
 *(Again, I'm only wrapping these lines for the sake of the formatting on my blog - if I was writing this code in Visual Studio then I would make those a single line each).*
 
 The "With" function takes an instance of an **IAmImmutable**-implementing class, clones it but changes the specified property value - unless the new value is the same as the old value, in which case it returns the original instance unaltered.
 
 All of these changes combined mean that the **MessageEditor** component now becomes:
 
-	using System;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using System;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
-	  {
-		public MessageEditor(
-		  MessageEditState message,
-		  Action<MessageEditState> onChange,
-		  Action onSave,
-		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
-		  : base(new Props(className, message, onChange, onSave)) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageEditor : StatelessComponent<MessageEditor.Props>
+      {
+        public MessageEditor(
+          MessageEditState message,
+          Action<MessageEditState> onChange,
+          Action onSave,
+          Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
+          : base(new Props(className, message, onChange, onSave)) { }
 
-		public override ReactElement Render()
-		{
-		  var formIsInvalid =
-			props.Message.Title.ValidationError.IsDefined ||
-			props.Message.Content.ValidationError.IsDefined;
+        public override ReactElement Render()
+        {
+          var formIsInvalid =
+            props.Message.Title.ValidationError.IsDefined ||
+            props.Message.Content.ValidationError.IsDefined;
 
-		  return DOM.FieldSet(
-		    new FieldSetAttributes { ClassName = props.ClassName.ToStringIfDefined() },
-			DOM.Legend(null, props.Message.Caption),
-			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
-			new ValidatedTextInput(
-			  className: new NonBlankTrimmedString("title"),
-			  disabled: props.Message.IsSaveInProgress,
-			  content: props.Message.Title.Text,
-			  onChange: newTitle => props.OnChange(
-				props.Message.With(_ => _.Title, new TextEditState(newTitle))
-			  ),
-			  validationMessage: props.Message.Title.ValidationError
-			),
-			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
-			new ValidatedTextInput(
-			  className: new NonBlankTrimmedString("content"),
-			  disabled: props.Message.IsSaveInProgress,
-			  content: props.Message.Content.Text,
-			  onChange: newContent => props.OnChange(
-				props.Message.With(_ => _.Content, new TextEditState(newContent))
-			  ),
-			  validationMessage: props.Message.Content.ValidationError
-			),
-			DOM.Button(
-			new ButtonAttributes
-			{
-			  Disabled = formIsInvalid || props.Message.IsSaveInProgress,
-			  OnClick = e => props.OnSave()
-			},
-			"Save"
-			)
-		  );
-		}
+          return DOM.FieldSet(
+            new FieldSetAttributes { ClassName = props.ClassName.ToStringIfDefined() },
+            DOM.Legend(null, props.Message.Caption),
+            DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+            new ValidatedTextInput(
+              className: new NonBlankTrimmedString("title"),
+              disabled: props.Message.IsSaveInProgress,
+              content: props.Message.Title.Text,
+              onChange: newTitle => props.OnChange(
+                props.Message.With(_ => _.Title, new TextEditState(newTitle))
+              ),
+              validationMessage: props.Message.Title.ValidationError
+            ),
+            DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+            new ValidatedTextInput(
+              className: new NonBlankTrimmedString("content"),
+              disabled: props.Message.IsSaveInProgress,
+              content: props.Message.Content.Text,
+              onChange: newContent => props.OnChange(
+                props.Message.With(_ => _.Content, new TextEditState(newContent))
+              ),
+              validationMessage: props.Message.Content.ValidationError
+            ),
+            DOM.Button(
+            new ButtonAttributes
+            {
+              Disabled = formIsInvalid || props.Message.IsSaveInProgress,
+              OnClick = e => props.OnSave()
+            },
+            "Save"
+            )
+          );
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public Props(
-		    Optional<NonBlankTrimmedString> className,
-			MessageEditState message,
-			Action<MessageEditState> onChange,
-			Action onSave)
-		  {
-			this.CtorSet(_ => _.ClassName, className);
-			this.CtorSet(_ => _.Message, message);
-			this.CtorSet(_ => _.OnChange, onChange);
-			this.CtorSet(_ => _.OnSave, onSave);
-		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; }
-		  public MessageEditState Message { get; }
-		  public Action<MessageEditState> OnChange { get; }
-		  public Action OnSave { get; }
-		}
-	  }
-	}
+        public class Props : IAmImmutable
+        {
+          public Props(
+            Optional<NonBlankTrimmedString> className,
+            MessageEditState message,
+            Action<MessageEditState> onChange,
+            Action onSave)
+          {
+            this.CtorSet(_ => _.ClassName, className);
+            this.CtorSet(_ => _.Message, message);
+            this.CtorSet(_ => _.OnChange, onChange);
+            this.CtorSet(_ => _.OnSave, onSave);
+          }
+          public Optional<NonBlankTrimmedString> ClassName { get; }
+          public MessageEditState Message { get; }
+          public Action<MessageEditState> OnChange { get; }
+          public Action OnSave { get; }
+        }
+      }
+    }
 
 ### One more example
 
@@ -1234,53 +1234,53 @@ Before moving on, I want to apply these changes to one more component to really 
 
 This is the **MessageHistory** component as it currently stands:
 
-	using System;
-	using System.Collections.Generic;
-	using System.Linq;
-	using Bridge.React;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using Bridge.React;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageHistory : StatelessComponent<MessageHistory.Props>
-	  {
-		public MessageHistory(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageHistory : StatelessComponent<MessageHistory.Props>
+      {
+        public MessageHistory(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  var className = props.ClassName;
-		  if (!props.Messages.Any())
-			className = (className + " zero-messages").Trim();
+        public override ReactElement Render()
+        {
+          var className = props.ClassName;
+          if (!props.Messages.Any())
+            className = (className + " zero-messages").Trim();
 
-		  // Any time a set of child components is dynamically-created (meaning that the
-		  // numbers of items may vary from one render to another), each must have a unique
-		  // "Key" property set (this may be a int or a string). Here, this is simple as
-		  // each message tuple is a unique ID and the contents of that message.
-		  var messageElements = props.Messages
-			.Select(idAndMessage => DOM.Div(new Attributes { Key = idAndMessage.Item1 },
-			DOM.Span(new Attributes { ClassName = "title" }, idAndMessage.Item2.Title),
-			DOM.Span(new Attributes { ClassName = "content" }, idAndMessage.Item2.Content)
-		  ));
+          // Any time a set of child components is dynamically-created (meaning that the
+          // numbers of items may vary from one render to another), each must have a unique
+          // "Key" property set (this may be a int or a string). Here, this is simple as
+          // each message tuple is a unique ID and the contents of that message.
+          var messageElements = props.Messages
+            .Select(idAndMessage => DOM.Div(new Attributes { Key = idAndMessage.Item1 },
+            DOM.Span(new Attributes { ClassName = "title" }, idAndMessage.Item2.Title),
+            DOM.Span(new Attributes { ClassName = "content" }, idAndMessage.Item2.Content)
+          ));
 
-		  // When child components are specified (as they are through the second argument of
-		  // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
-		  // element may be another component or it may be a simple text value)
-		  // - The React bindings have an extension method that transforms an IEnumerable set
-		  //   of components (such as "messageElements") into an Union<ReactElement, string>[]
-		  return DOM.FieldSet(new FieldSetAttributes { ClassName = className },
-			DOM.Legend(null, "Message History"),
-			DOM.Div(null, messageElements)
-		  );
-		}
+          // When child components are specified (as they are through the second argument of
+          // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
+          // element may be another component or it may be a simple text value)
+          // - The React bindings have an extension method that transforms an IEnumerable set
+          //   of components (such as "messageElements") into an Union<ReactElement, string>[]
+          return DOM.FieldSet(new FieldSetAttributes { ClassName = className },
+            DOM.Legend(null, "Message History"),
+            DOM.Div(null, messageElements)
+          );
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public IEnumerable<Tuple<int, MessageDetails>> Messages;
-		}
-	  }
-	}
-	
+        public class Props
+        {
+          public string ClassName;
+          public IEnumerable<Tuple<int, MessageDetails>> Messages;
+        }
+      }
+    }
+
 Despite this appearing very simple at first glance, there are various implicit assumptions that you should be aware of. Firstly, it is assumed that "props" will never be null ("Render" will throw an exception if this is not the case). It is also assumed that "props.ClassName" *may* be null (and, technically, it may also be a blank string, though this is not desirable) while "props.Messages" should *not* null. Nor should "props.Messages" contain any tuples with a null **MessageDetails** instance. But these assumptions are neither documented nor enforced.
 
 By this point, we've seen several examples of how to prevent "props" being null (ie. require that the props constructor arguments be passed as the component's constructor arguments) and we've seen how to better represent **Props** to allow "ClassName" to be optional but for "Messages" to not be ("ClassName" should be an **Optional&lt;NonBlankTrimmedString&gt;**). But there are two further tricks we can use for the **MessageHistory.Props**.
@@ -1295,63 +1295,63 @@ I've seen object models before which try to have a single data type to use in al
 
 So, instead of the **MessageHistory** using the generic **Tuple** class to represent a **MessageDetails**-plus-persisted-Key, I'm going to introduce something new. Create a new file under the "API" folder, "Saved.cs" -
 
-	using ProductiveRage.Immutable;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public class Saved<TKey, TValue> : IAmImmutable
-	  {
-		public Saved(TKey key, TValue value)
-		{
-		  this.CtorSet(_ => _.Key, key);
-		  this.CtorSet(_ => _.Value, value);
-		}
-		public TKey Key { get; }
-		public TValue Value { get; }
-	  }
-	  
-	  public static class Saved
-	  {
-		/// <summary>
-		/// This generic method makes code that creates generic Saved instances more succinct
-		/// by relying upon type inference (based upon the key and value argument types), so
-		/// that the calling code does not have to explicitly declare TKey and TValue
-		/// </summary>
-		public static Saved<TKey, TValue> For<TKey, TValue>(TKey key, TValue value)
-		{
-		  return new Saved<TKey, TValue>(key, value);
-		}
-	  }
-	}
+    namespace BridgeReactTutorial.API
+    {
+      public class Saved<TKey, TValue> : IAmImmutable
+      {
+        public Saved(TKey key, TValue value)
+        {
+          this.CtorSet(_ => _.Key, key);
+          this.CtorSet(_ => _.Value, value);
+        }
+        public TKey Key { get; }
+        public TValue Value { get; }
+      }
+
+      public static class Saved
+      {
+        /// <summary>
+        /// This generic method makes code that creates generic Saved instances more succinct
+        /// by relying upon type inference (based upon the key and value argument types), so
+        /// that the calling code does not have to explicitly declare TKey and TValue
+        /// </summary>
+        public static Saved<TKey, TValue> For<TKey, TValue>(TKey key, TValue value)
+        {
+          return new Saved<TKey, TValue>(key, value);
+        }
+      }
+    }
 
 The **Saved** class makes differentiating between record-that-has-a-persistence-id and record-that-may-or-may-not-have-a-persistence-id simple. If the message has been persisted, then it may be represented as a **Saved&lt;int, MessageDetails&gt;**. If it's *just* the message data, with no persisted-or-not-persisted state associated with it then it will be simply a **MessageDetails**.
 
 I'm *still* not happy, though. I think that **Saved&lt;int, MessageDetails&gt;** could still be more descriptive. This value represents a message with a unique persistence key for that message. Even if the underlying data store is a database which uses an integer column (in our example app, it's a simple in-browser-memory store, but a database on a server is likely much more common) that doesn't mean that we have to use such a vague term as "an integer" in our application's object model. I recommend strongly-typed ID representations. We need to add a new file "MessageId.cs" to the "API" folder:
 
-	namespace BridgeReactTutorial.API
-	{
-	  public struct MessageId
-	  {
-		public int Value { get; private set; }
+    namespace BridgeReactTutorial.API
+    {
+      public struct MessageId
+      {
+        public int Value { get; private set; }
 
-		public static explicit operator MessageId(int value)
-		{
-		  return new MessageId { Value = value };
-		}
-		
-		public static implicit operator int(MessageId id)
-		{
-		  return id.Value;
-		}
-	  }
-	}
+        public static explicit operator MessageId(int value)
+        {
+          return new MessageId { Value = value };
+        }
+
+        public static implicit operator int(MessageId id)
+        {
+          return id.Value;
+        }
+      }
+    }
 
 This is the final step in the move away from **IEnumerable&lt;Tuple&lt;int, MessageDetails&gt;&gt;**, we will now represent this data with the type **NonNullList&lt;Saved&lt;MessageId, MessageDetails&gt;&gt;**. This list will never contain any null "Saved" instances and a "Saved" instance will never contain a null message. This list of messages will never vary, which is another way that React's "consider props to be immutable" guidelines is described and enforced in the type system.
 
 Not only do I believe that having strongly-typed IDs makes the code clearer in cases like this but it can also avoid silly mistakes that have a nasty tendency to crop up from time to time - if you're writing code and having a bad day, then it's easy to accidentally pass the wrong ID around. For example, if I have a function:
 
     void RecordMessageAsHavingBeenReadBy(int messageId, int userId)
-	
+
 then it's possible in the calling code to mix up the IDs if you're having a bad day (this isn't *too* contrived an example, I *have* done something like this in the past!) - eg.
 
     RecordMessageAsHavingBeenReadBy(user.Id, message.id); // Whoops!
@@ -1366,64 +1366,64 @@ If the IDs were strongly-typed, meaning that the method signature would be..
 
 These changes lead the **MessageHistory** component's code to now look like this:
 
-	using System.Linq;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using System.Linq;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageHistory : StatelessComponent<MessageHistory.Props>
-	  {
-		public MessageHistory(
-		  NonNullList<Saved<MessageId, MessageDetails>> messages,
-		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
-		  : base(new Props(className, messages)) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageHistory : StatelessComponent<MessageHistory.Props>
+      {
+        public MessageHistory(
+          NonNullList<Saved<MessageId, MessageDetails>> messages,
+          Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
+          : base(new Props(className, messages)) { }
 
-		public override ReactElement Render()
-		{
-		  var className = props.ClassName;
-		  if (!props.Messages.Any())
-			className = className.Add(" ", new NonBlankTrimmedString("zero-messages"));
+        public override ReactElement Render()
+        {
+          var className = props.ClassName;
+          if (!props.Messages.Any())
+            className = className.Add(" ", new NonBlankTrimmedString("zero-messages"));
 
-		  // Any time a set of child components is dynamically-created (meaning that the
-		  // numbers of items may vary from one render to another), each must have a unique
-		  // "Key" property set (this may be a int or a string)
-		  var messageElements = props.Messages
-			.Select(savedMessage => DOM.Div(new Attributes { Key = (int)savedMessage.Key },
-			DOM.Span(new Attributes { ClassName = "title" }, savedMessage.Value.Title),
-			DOM.Span(new Attributes { ClassName = "content" }, savedMessage.Value.Content)
-			));
+          // Any time a set of child components is dynamically-created (meaning that the
+          // numbers of items may vary from one render to another), each must have a unique
+          // "Key" property set (this may be a int or a string)
+          var messageElements = props.Messages
+            .Select(savedMessage => DOM.Div(new Attributes { Key = (int)savedMessage.Key },
+            DOM.Span(new Attributes { ClassName = "title" }, savedMessage.Value.Title),
+            DOM.Span(new Attributes { ClassName = "content" }, savedMessage.Value.Content)
+            ));
 
-		  // When child components are specified (as they are through the second argument of
-		  // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
-		  // element may be another component or it may be a simple text value)
-		  // - The React bindings have an extension method that transforms an IEnumerable set
-		  //   of components (such as "messageElements") into an Union<ReactElement, string>[]
-		  return DOM.FieldSet(
-		    new FieldSetAttributes { ClassName = className.ToStringIfDefined() },
-			DOM.Legend(null, "Message History"),
-			DOM.Div(null, messageElements)
-		  );
-		}
+          // When child components are specified (as they are through the second argument of
+          // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
+          // element may be another component or it may be a simple text value)
+          // - The React bindings have an extension method that transforms an IEnumerable set
+          //   of components (such as "messageElements") into an Union<ReactElement, string>[]
+          return DOM.FieldSet(
+            new FieldSetAttributes { ClassName = className.ToStringIfDefined() },
+            DOM.Legend(null, "Message History"),
+            DOM.Div(null, messageElements)
+          );
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public Props(
-			Optional<NonBlankTrimmedString> className,
-			NonNullList<Saved<MessageId, MessageDetails>> messages)
-		  {
-			this.CtorSet(_ => _.ClassName, className);
-			this.CtorSet(_ => _.Messages, messages);
-		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; }
-		  public NonNullList<Saved<MessageId, MessageDetails>> Messages { get; }
-		}
-	  }
-	}
+        public class Props : IAmImmutable
+        {
+          public Props(
+            Optional<NonBlankTrimmedString> className,
+            NonNullList<Saved<MessageId, MessageDetails>> messages)
+          {
+            this.CtorSet(_ => _.ClassName, className);
+            this.CtorSet(_ => _.Messages, messages);
+          }
+          public Optional<NonBlankTrimmedString> ClassName { get; }
+          public NonNullList<Saved<MessageId, MessageDetails>> Messages { get; }
+        }
+      }
+    }
 
-All of those implicit assumptions are now explicitly described in the type system. This makes me feel much better. 
+All of those implicit assumptions are now explicitly described in the type system. This makes me feel much better.
 
 ### So, EVERYWHERE?
 
@@ -1443,79 +1443,79 @@ If you've been following along and creating your own project with the code in th
 
 Let's start with the **AppContainer**. Last we saw it, it looked like this:
 
-	using System;
-	using System.Collections.Generic;
-	using Bridge.React;
-	using BridgeReactTutorial.Actions;
-	using BridgeReactTutorial.ViewModels;
-	using BridgeReactTutorial.Stores;
-	using BridgeReactTutorial.API;
+    using System;
+    using System.Collections.Generic;
+    using Bridge.React;
+    using BridgeReactTutorial.Actions;
+    using BridgeReactTutorial.ViewModels;
+    using BridgeReactTutorial.Stores;
+    using BridgeReactTutorial.API;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class AppContainer : Component<AppContainer.Props, AppContainer.State>
-	  {
-		public AppContainer(AppContainer.Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class AppContainer : Component<AppContainer.Props, AppContainer.State>
+      {
+        public AppContainer(AppContainer.Props props) : base(props) { }
 
-		protected override void ComponentDidMount()
-		{
-		  props.Store.Change += StoreChanged;
-		}
-		protected override void ComponentWillUnmount()
-		{
-		  props.Store.Change -= StoreChanged;
-		}
-		private void StoreChanged()
-		{
-		  SetState(new State
-		  {
-			Message = props.Store.Message,
-			MessageHistory = props.Store.MessageHistory
-		  });
-		}
+        protected override void ComponentDidMount()
+        {
+          props.Store.Change += StoreChanged;
+        }
+        protected override void ComponentWillUnmount()
+        {
+          props.Store.Change -= StoreChanged;
+        }
+        private void StoreChanged()
+        {
+          SetState(new State
+          {
+            Message = props.Store.Message,
+            MessageHistory = props.Store.MessageHistory
+          });
+        }
 
-		public override ReactElement Render()
-		{
-		  if (state == null)
-			return null;
+        public override ReactElement Render()
+        {
+          if (state == null)
+            return null;
 
-		  return DOM.Div(null,
-			new MessageEditor(
-			  className: new NonBlankTrimmedString("message"),
-			  message:  state.Message,
-			  onChange: newState => props.Dispatcher.Dispatch(
-				UserEditRequested.For(newState)
-			  ),
-			  onSave: () => props.Dispatcher.Dispatch(
-				SaveRequested.For(
-				  new MessageDetails(
-					new NonBlankTrimmedString(state.Message.Title.Text),
-					new NonBlankTrimmedString(state.Message.Content.Text)
-				  )
-				)
-			  )
-			),
-			new MessageHistory(new MessageHistory.Props
-			{
-			  ClassName = "history",
-			  Messages = state.MessageHistory
-			})
-		  );
-		}
+          return DOM.Div(null,
+            new MessageEditor(
+              className: new NonBlankTrimmedString("message"),
+              message:  state.Message,
+              onChange: newState => props.Dispatcher.Dispatch(
+                UserEditRequested.For(newState)
+              ),
+              onSave: () => props.Dispatcher.Dispatch(
+                SaveRequested.For(
+                  new MessageDetails(
+                    new NonBlankTrimmedString(state.Message.Title.Text),
+                    new NonBlankTrimmedString(state.Message.Content.Text)
+                  )
+                )
+              )
+            ),
+            new MessageHistory(new MessageHistory.Props
+            {
+              ClassName = "history",
+              Messages = state.MessageHistory
+            })
+          );
+        }
 
-		public class Props
-		{
-		  public AppDispatcher Dispatcher;
-		  public MessageWriterStore Store;
-		}
+        public class Props
+        {
+          public AppDispatcher Dispatcher;
+          public MessageWriterStore Store;
+        }
 
-		public class State
-		{
-		  public MessageEditState Message;
-		  public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
-		}
-	  }
-	}
+        public class State
+        {
+          public MessageEditState Message;
+          public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
+        }
+      }
+    }
 
 It's nice and simple since we moved nearly all of the logic that it contained in [Part One](Post96) into the **MessageWriterStore** in [Part Two](Post97).
 
@@ -1525,115 +1525,115 @@ After that, there is one difference between this component and the other compone
 
 These changes result in this:
 
-	using Bridge.React;
-	using BridgeReactTutorial.Actions;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.Stores;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using Bridge.React;
+    using BridgeReactTutorial.Actions;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.Stores;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class AppContainer : Component<AppContainer.Props, Optional<AppContainer.State>>
-	  {
-		public AppContainer(AppDispatcher dispatcher, MessageWriterStore store)
-		  : base(new Props(dispatcher, store)) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class AppContainer : Component<AppContainer.Props, Optional<AppContainer.State>>
+      {
+        public AppContainer(AppDispatcher dispatcher, MessageWriterStore store)
+          : base(new Props(dispatcher, store)) { }
 
-		protected override void ComponentDidMount()
-		{
-		  props.Store.Change += StoreChanged;
-		}
-		protected override void ComponentWillUnmount()
-		{
-		  props.Store.Change -= StoreChanged;
-		}
-		private void StoreChanged()
-		{
-		  SetState(new State(
-			message: props.Store.Message,
-			messageHistory: props.Store.MessageHistory
-		  ));
-		}
+        protected override void ComponentDidMount()
+        {
+          props.Store.Change += StoreChanged;
+        }
+        protected override void ComponentWillUnmount()
+        {
+          props.Store.Change -= StoreChanged;
+        }
+        private void StoreChanged()
+        {
+          SetState(new State(
+            message: props.Store.Message,
+            messageHistory: props.Store.MessageHistory
+          ));
+        }
 
-		public override ReactElement Render()
-		{
-		  if (!state.IsDefined)
-			return null;
+        public override ReactElement Render()
+        {
+          if (!state.IsDefined)
+            return null;
 
-		  return DOM.Div(null,
-			new MessageEditor(
-			  className: new NonBlankTrimmedString("message"),
-			  message:  state.Value.Message,
-			  onChange: newState => props.Dispatcher.Dispatch(
-				UserEditRequested.For(newState)
-			  ),
-			  onSave: () => props.Dispatcher.Dispatch(
-				SaveRequested.For(
-				  new MessageDetails(
-					new NonBlankTrimmedString(state.Value.Message.Title.Text),
-					new NonBlankTrimmedString(state.Value.Message.Content.Text)
-				  )
-				)
-			  )
-			),
-			new MessageHistory(
-			  className: new NonBlankTrimmedString("history"),
-			  messages: state.Value.MessageHistory
-			)
-		  );
-		}
+          return DOM.Div(null,
+            new MessageEditor(
+              className: new NonBlankTrimmedString("message"),
+              message:  state.Value.Message,
+              onChange: newState => props.Dispatcher.Dispatch(
+                UserEditRequested.For(newState)
+              ),
+              onSave: () => props.Dispatcher.Dispatch(
+                SaveRequested.For(
+                  new MessageDetails(
+                    new NonBlankTrimmedString(state.Value.Message.Title.Text),
+                    new NonBlankTrimmedString(state.Value.Message.Content.Text)
+                  )
+                )
+              )
+            ),
+            new MessageHistory(
+              className: new NonBlankTrimmedString("history"),
+              messages: state.Value.MessageHistory
+            )
+          );
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public Props(AppDispatcher dispatcher, MessageWriterStore store)
-		  {
-			this.CtorSet(_ => _.Dispatcher, dispatcher);
-			this.CtorSet(_ => _.Store, store);
-		  }
-		  public AppDispatcher Dispatcher { get; }
-		  public MessageWriterStore Store { get; }
-		}
+        public class Props : IAmImmutable
+        {
+          public Props(AppDispatcher dispatcher, MessageWriterStore store)
+          {
+            this.CtorSet(_ => _.Dispatcher, dispatcher);
+            this.CtorSet(_ => _.Store, store);
+          }
+          public AppDispatcher Dispatcher { get; }
+          public MessageWriterStore Store { get; }
+        }
 
-		public class State : IAmImmutable
-		{
-		  public State(
-		    MessageEditState message,
-			NonNullList<Saved<MessageId, MessageDetails>> messageHistory)
-		  {
-			this.CtorSet(_ => _.Message, message);
-			this.CtorSet(_ => _.MessageHistory, messageHistory);
-		  }
-		  public MessageEditState Message { get; }
-		  public NonNullList<Saved<MessageId, MessageDetails>> MessageHistory { get; }
-		}
-	  }
-	}
+        public class State : IAmImmutable
+        {
+          public State(
+            MessageEditState message,
+            NonNullList<Saved<MessageId, MessageDetails>> messageHistory)
+          {
+            this.CtorSet(_ => _.Message, message);
+            this.CtorSet(_ => _.MessageHistory, messageHistory);
+          }
+          public MessageEditState Message { get; }
+          public NonNullList<Saved<MessageId, MessageDetails>> MessageHistory { get; }
+        }
+      }
+    }
 
 That transformation should have felt quite run-of-the-mill and predictable by this point - seen one component-tightening-up, seen them all. Let's move on to the **MessageWriterStore**. This is what deals with the events from the application, both from user-initiated events from DOM elements and from new-messages-data-available events from the **MessageApi**.
 
 At the bare minimum, it will need some changes since it was written when the **MessageEditState** type was mutable and so the "ValidateMessage" method was able to mutate it (such as setting or clearing validation warning messages) in-place. I've moved away from that so that mutations are *always* explicit - there will no longer be a method that may or may not mutate a reference, if a method needs to set values on something then it will take the initial reference as an input and return a new one as its return value. But there are more of those sneaky "implicit assumptions" tucked away in the store that we should address. In the last post, we left it implemented like this:
 
-	using System;
-	using System.Collections.Generic;
-	using Bridge.React;
-	using BridgeReactTutorial.Actions;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using System.Collections.Generic;
+    using Bridge.React;
+    using BridgeReactTutorial.Actions;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Stores
-	{
-	  public class MessageWriterStore
-	  {
-		private RequestId _saveActionRequestId, _lastDataUpdatedRequestId;
-		public MessageWriterStore(IReadAndWriteMessages messageApi, AppDispatcher dispatcher)
-		{
-		  if (messageApi == null)
-			throw new ArgumentNullException("messageApi");
-		  if (dispatcher == null)
-			throw new ArgumentNullException("dispatcher");
+    namespace BridgeReactTutorial.Stores
+    {
+      public class MessageWriterStore
+      {
+        private RequestId _saveActionRequestId, _lastDataUpdatedRequestId;
+        public MessageWriterStore(IReadAndWriteMessages messageApi, AppDispatcher dispatcher)
+        {
+          if (messageApi == null)
+            throw new ArgumentNullException("messageApi");
+          if (dispatcher == null)
+            throw new ArgumentNullException("dispatcher");
 
-		  Message = GetInitialMessageEditState();
-		  MessageHistory = new Tuple<int, MessageDetails>[0];
+          Message = GetInitialMessageEditState();
+          MessageHistory = new Tuple<int, MessageDetails>[0];
 
           dispatcher.Receive(a => a
             .If<StoreInitialised>(
@@ -1670,53 +1670,53 @@ At the bare minimum, it will need some changes since it was written when the **M
             )
             .IfAnyMatched(OnChange);
           );
-		}
+        }
 
-		public event Action Change;
-		public MessageEditState Message;
-		public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
+        public event Action Change;
+        public MessageEditState Message;
+        public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
 
-		private MessageEditState GetInitialMessageEditState()
-		{
-		  // Note: By using the ValidateMessage here, we don't need to duplicate the "Untitled"
-		  // string that should be used for the Caption value when the UI is first rendered
-		  // or when the user has entered some Title content but then deleted it again.
-		  // Similarly, we avoid having to repeat the validation messages that should be
-		  // displayed when the form is empty, since they will be set by ValidateMessage.
-		  var blankMessage = new MessageEditState
-		  {
-			Caption = "",
-			Title = new TextEditState { Text = "" },
-			Content = new TextEditState { Text = "" },
-			IsSaveInProgress = false
-		  };
-		  ValidateMessage(blankMessage);
-		  return blankMessage;
-		}
+        private MessageEditState GetInitialMessageEditState()
+        {
+          // Note: By using the ValidateMessage here, we don't need to duplicate the "Untitled"
+          // string that should be used for the Caption value when the UI is first rendered
+          // or when the user has entered some Title content but then deleted it again.
+          // Similarly, we avoid having to repeat the validation messages that should be
+          // displayed when the form is empty, since they will be set by ValidateMessage.
+          var blankMessage = new MessageEditState
+          {
+            Caption = "",
+            Title = new TextEditState { Text = "" },
+            Content = new TextEditState { Text = "" },
+            IsSaveInProgress = false
+          };
+          ValidateMessage(blankMessage);
+          return blankMessage;
+        }
 
-		private void ValidateMessage(MessageEditState message)
-		{
-		  if (message == null)
-			throw new ArgumentNullException("message");
+        private void ValidateMessage(MessageEditState message)
+        {
+          if (message == null)
+            throw new ArgumentNullException("message");
 
-		  message.Caption = string.IsNullOrWhiteSpace(message.Title.Text)
-			? "Untitled"
-			: message.Title.Text.Trim();
-		  message.Title.ValidationError = string.IsNullOrWhiteSpace(message.Title.Text)
-			? "Must enter a title"
-			: null;
-		  message.Content.ValidationError = string.IsNullOrWhiteSpace(message.Content.Text)
-			? "Must enter message content"
-			: null;
-		}
+          message.Caption = string.IsNullOrWhiteSpace(message.Title.Text)
+            ? "Untitled"
+            : message.Title.Text.Trim();
+          message.Title.ValidationError = string.IsNullOrWhiteSpace(message.Title.Text)
+            ? "Must enter a title"
+            : null;
+          message.Content.ValidationError = string.IsNullOrWhiteSpace(message.Content.Text)
+            ? "Must enter message content"
+            : null;
+        }
 
-		private void OnChange()
-		{
-		  if (Change != null)
-			Change();
-		}
-	  }
-	}
+        private void OnChange()
+        {
+          if (Change != null)
+            Change();
+        }
+      }
+    }
 
 Three things jump out at me here. Firstly, the "_saveActionRequestId" and "_lastDataUpdatedRequestId" references may not always be populated. If there is no save action in progress that we're waiting to complete, for example, then "_saveActionRequestId" won't have a value. Let's explicitly describe this in the type system by changing the type of these two values from **RequestId** to **Optional&lt;RequestId&gt;** (even though these values aren't part of a public API of the store class, there's still a benefit to indicating what may and may not have a value, for the sake of code clarity).
 
@@ -1726,22 +1726,22 @@ The third thing is that "Change" is an event and so may be null if no-one has su
 
 What is really going to be the most interesting part in updating the **MessageWriterStore** is, I think, how we change the validation / **MessageEditState**-mutating code -
 
-	private void ValidateMessage(MessageEditState message)
-	{
-	  if (message == null)
-		throw new ArgumentNullException("message");
+    private void ValidateMessage(MessageEditState message)
+    {
+      if (message == null)
+        throw new ArgumentNullException("message");
 
-	  message.Caption = string.IsNullOrWhiteSpace(message.Title.Text)
-		? "Untitled"
-		: message.Title.Text.Trim();
-	  message.Title.ValidationError = string.IsNullOrWhiteSpace(message.Title.Text)
-		? "Must enter a title"
-		: null;
-	  message.Content.ValidationError = string.IsNullOrWhiteSpace(message.Content.Text)
-		? "Must enter message content"
-		: null;
-	}
-	
+      message.Caption = string.IsNullOrWhiteSpace(message.Title.Text)
+        ? "Untitled"
+        : message.Title.Text.Trim();
+      message.Title.ValidationError = string.IsNullOrWhiteSpace(message.Title.Text)
+        ? "Must enter a title"
+        : null;
+      message.Content.ValidationError = string.IsNullOrWhiteSpace(message.Content.Text)
+        ? "Must enter message content"
+        : null;
+    }
+
 Probably the absolute simplest thing that we could do would be to rewrite it like this:
 
     private MessageEditState ValidateMessage(MessageEditState message)
@@ -1766,16 +1766,16 @@ Probably the absolute simplest thing that we could do would be to rewrite it lik
 
       return message;
     }
-	
+
     private TextEditState SetValidationMessage(
-	  TextEditState textEditState,
-	  Optional<NonBlankTrimmedString> message)
+      TextEditState textEditState,
+      Optional<NonBlankTrimmedString> message)
     {
       if (textEditState == null)
         throw new ArgumentNullException("textEditState");
 
       return textEditState.With(_ => _.ValidationError, message);
-    }	
+    }
 
 That is.. more verbose, I think would be a polite way to describe it. I would normally have wrapped some of the lines in order to fit the horizontal scrolling budget I allow on code samples on my blog but I wanted to give this arrangement the best change at looking succint that it could. And it's still not looking very good.
 
@@ -1812,77 +1812,77 @@ Instead of splitting the code up for clarity, we can try to make it clearer by u
 
 Let's start by introducing a method to abstract the setting-or-removing of validation messages from **TextEditState** instances -
 
-	private TextEditState Validate(
-	  TextEditState textEditState,
-	  Predicate<TextEditState> validIf,
-	  NonBlankTrimmedString messageIfInvalid)
-	{
-	  if (textEditState == null)
-	    throw new ArgumentNullException("textEditState");
-	  if (validIf == null)
-	    throw new ArgumentNullException("validIf");
-	  if (messageIfInvalid == null)
-	    throw new ArgumentNullException("messageIfInvalid");
+    private TextEditState Validate(
+      TextEditState textEditState,
+      Predicate<TextEditState> validIf,
+      NonBlankTrimmedString messageIfInvalid)
+    {
+      if (textEditState == null)
+        throw new ArgumentNullException("textEditState");
+      if (validIf == null)
+        throw new ArgumentNullException("validIf");
+      if (messageIfInvalid == null)
+        throw new ArgumentNullException("messageIfInvalid");
 
-	  return textEditState.With(_ => _.ValidationError, validIf(textEditState)
-	    ? null
-		: messageIfInvalid);
-	}
-	
+      return textEditState.With(_ => _.ValidationError, validIf(textEditState)
+        ? null
+        : messageIfInvalid);
+    }
+
 This will take a **TextEditState**, a rule that determines whether or not its "Text" value should be considered valid and a message to set if the value is *not* valid (if it *is* valid then the message will be cleared).
 
 This would allow us to set (or remove) the validation message on the "Title" property with code such as:
 
-	message = message.With(
-	  _ => _.Title,
-	  Validate(
-	    message.Title,
-		textEditState => string.IsNullOrWhiteSpace(textEditState.Text),
-		new NonBlankTrimmedString("Must enter a title")
-	  )
-	);
-	
+    message = message.With(
+      _ => _.Title,
+      Validate(
+        message.Title,
+        textEditState => string.IsNullOrWhiteSpace(textEditState.Text),
+        new NonBlankTrimmedString("Must enter a title")
+      )
+    );
+
 Since the validation logic for both "Title" and "Content" is the same and "textEditState => string.IsNullOrWhiteSpace(textEditState.Text)" is quite long and going to be responsible for a lot of the "syntactic noise" that I want to avoid, this could also be abstracted by defining another method -
 
-	private bool MustHaveValue(TextEditState textEditState)
-	{
-	  if (textEditState == null)
-	    throw new ArgumentNullException("textEditState");
+    private bool MustHaveValue(TextEditState textEditState)
+    {
+      if (textEditState == null)
+        throw new ArgumentNullException("textEditState");
 
-	  return !string.IsNullOrWhiteSpace(textEditState.Text);
-	}
-	
+      return !string.IsNullOrWhiteSpace(textEditState.Text);
+    }
+
 If we also move the constant messages (the two validation warnings and the "Untitled" caption string) into static class members -
 
-	private readonly static NonBlankTrimmedString _defaultCaption
-	  = new NonBlankTrimmedString("Untitled");
-	  
-	private readonly static NonBlankTrimmedString _noTitleWarning
-	  = new NonBlankTrimmedString("Must enter a title");
-	  
-	private readonly static NonBlankTrimmedString _noContentWarning
-	  = new NonBlankTrimmedString("Must enter message content");
+    private readonly static NonBlankTrimmedString _defaultCaption
+      = new NonBlankTrimmedString("Untitled");
+
+    private readonly static NonBlankTrimmedString _noTitleWarning
+      = new NonBlankTrimmedString("Must enter a title");
+
+    private readonly static NonBlankTrimmedString _noContentWarning
+      = new NonBlankTrimmedString("Must enter message content");
 
 .. then we can make the "Title" validation-message-setting/unsetting much clearer:
 
-	message = message
-	  .With(_ => _.Title, Validate(message.Title, MustHaveValue, _noTitleWarning));
+    message = message
+      .With(_ => _.Title, Validate(message.Title, MustHaveValue, _noTitleWarning));
 
 If we add a final helper method to make the setting of the "Caption" property simpler -
 
-	private NonBlankTrimmedString ToNonBlankTrimmedString(
-	  TextEditState textEditState,
-	  NonBlankTrimmedString fallback)
-	{
-	  if (textEditState == null)
-	    throw new ArgumentNullException("textEditState");
-	  if (fallback == null)
-	    throw new ArgumentNullException("fallback");
+    private NonBlankTrimmedString ToNonBlankTrimmedString(
+      TextEditState textEditState,
+      NonBlankTrimmedString fallback)
+    {
+      if (textEditState == null)
+        throw new ArgumentNullException("textEditState");
+      if (fallback == null)
+        throw new ArgumentNullException("fallback");
 
-	  return (textEditState.Text.Trim() == "")
-	    ? fallback
-	    : new NonBlankTrimmedString(textEditState.Text);
-	}
+      return (textEditState.Text.Trim() == "")
+        ? fallback
+        : new NonBlankTrimmedString(textEditState.Text);
+    }
 
 .. then the "ValidateMessage" can be reduced to the following:
 
@@ -1921,33 +1921,33 @@ The key difference, then, being that a function is absolutely guaranteed to alwa
 With C#, you can get no such guarantees. Just to really drive the point home, here are three example - first, an instance method:
 
     public class Adder
-	{
-	  private readonly int _amountToIncrement;
-	  public Adder(int amountToIncrement)
-	  {
-	    _amountToIncrement = amountToIncrement;
-	  }
-	  
-	  public int AddTo(int value)
-	  {
-	    return value + _amountToIncrement;
-	  }
-	}
+    {
+      private readonly int _amountToIncrement;
+      public Adder(int amountToIncrement)
+      {
+        _amountToIncrement = amountToIncrement;
+      }
+
+      public int AddTo(int value)
+      {
+        return value + _amountToIncrement;
+      }
+    }
 
 Obviously, the return value from "AddTo" depends on more than the argument passed in - it also depends upon the "_amountToIncrement" that the **Adder** instance has.
 
 And a couple of static examples:
 
     public static class Adder
-	{
-	  private static int _amountToIncrement = 0;
-	  
-	  public static int AddTo(int value)
-	  {
-	    _amountToIncrement++;
-	    return value + _amountToIncrement;
-	  }
-	}
+    {
+      private static int _amountToIncrement = 0;
+
+      public static int AddTo(int value)
+      {
+        _amountToIncrement++;
+        return value + _amountToIncrement;
+      }
+    }
 
     public static class DayNameRetriever
     {
@@ -1973,28 +1973,28 @@ It seems, in general, that people write methods as instance methods by default a
 
 *(To be honest, this is still something that I'm trying to consistently apply to my own work - it's very easy to unconsciously write instance methods by default by omitting the "static" keyword; old habits die hard!)*
 
-	using System;
-	using System.Collections.Generic;
-	using Bridge.React;
-	using BridgeReactTutorial.Actions;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using System;
+    using System.Collections.Generic;
+    using Bridge.React;
+    using BridgeReactTutorial.Actions;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Stores
-	{
-	  public class MessageWriterStore
-	  {
-		private Optional<RequestId> _saveActionRequestId, _lastDataUpdatedRequestId;
-		public MessageWriterStore(IReadAndWriteMessages messageApi, AppDispatcher dispatcher)
-		{
-		  if (messageApi == null)
-			throw new ArgumentNullException("messageApi");
-		  if (dispatcher == null)
-			throw new ArgumentNullException("dispatcher");
+    namespace BridgeReactTutorial.Stores
+    {
+      public class MessageWriterStore
+      {
+        private Optional<RequestId> _saveActionRequestId, _lastDataUpdatedRequestId;
+        public MessageWriterStore(IReadAndWriteMessages messageApi, AppDispatcher dispatcher)
+        {
+          if (messageApi == null)
+            throw new ArgumentNullException("messageApi");
+          if (dispatcher == null)
+            throw new ArgumentNullException("dispatcher");
 
-		  Message = GetInitialMessageEditState();
-		  MessageHistory = NonNullList<Saved<MessageId, MessageDetails>>.Empty;
+          Message = GetInitialMessageEditState();
+          MessageHistory = NonNullList<Saved<MessageId, MessageDetails>>.Empty;
 
           dispatcher.Receive(a => a
             .If<StoreInitialised>(
@@ -2031,104 +2031,104 @@ It seems, in general, that people write methods as instance methods by default a
           );
         }
 
-		public event Action Change;
-		public MessageEditState Message { get; private set; }
-		public NonNullList<Saved<MessageId, MessageDetails>> MessageHistory { get; private set; }
+        public event Action Change;
+        public MessageEditState Message { get; private set; }
+        public NonNullList<Saved<MessageId, MessageDetails>> MessageHistory { get; private set; }
 
-		private readonly static NonBlankTrimmedString _defaultCaption
-		  = new NonBlankTrimmedString("Untitled");
-		private readonly static NonBlankTrimmedString _noTitleWarning
-		  = new NonBlankTrimmedString("Must enter a title");
-		private readonly static NonBlankTrimmedString _noContentWarning
-		  = new NonBlankTrimmedString("Must enter message content");
+        private readonly static NonBlankTrimmedString _defaultCaption
+          = new NonBlankTrimmedString("Untitled");
+        private readonly static NonBlankTrimmedString _noTitleWarning
+          = new NonBlankTrimmedString("Must enter a title");
+        private readonly static NonBlankTrimmedString _noContentWarning
+          = new NonBlankTrimmedString("Must enter message content");
 
-		private static MessageEditState GetInitialMessageEditState()
-		{
-		  return new MessageEditState(
-			caption: _defaultCaption,
-			title: new TextEditState("", _noTitleWarning),
-			content: new TextEditState("", _noContentWarning),
-			isSaveInProgress: false
-		  );
-		}
+        private static MessageEditState GetInitialMessageEditState()
+        {
+          return new MessageEditState(
+            caption: _defaultCaption,
+            title: new TextEditState("", _noTitleWarning),
+            content: new TextEditState("", _noContentWarning),
+            isSaveInProgress: false
+          );
+        }
 
-		private static MessageEditState ValidateMessage(MessageEditState message)
-		{
-		  if (message == null)
-			throw new ArgumentNullException("message");
+        private static MessageEditState ValidateMessage(MessageEditState message)
+        {
+          if (message == null)
+            throw new ArgumentNullException("message");
 
-		  return message
-			.With(_ => _.Caption, ToNonBlankTrimmedString(message.Title, _defaultCaption))
-			.With(_ => _.Title, Validate(message.Title, MustHaveValue, _noTitleWarning))
-			.With(_ => _.Content, Validate(message.Content, MustHaveValue, _noContentWarning));
-		}
+          return message
+            .With(_ => _.Caption, ToNonBlankTrimmedString(message.Title, _defaultCaption))
+            .With(_ => _.Title, Validate(message.Title, MustHaveValue, _noTitleWarning))
+            .With(_ => _.Content, Validate(message.Content, MustHaveValue, _noContentWarning));
+        }
 
-		private static NonBlankTrimmedString ToNonBlankTrimmedString(
-		  TextEditState textEditState,
-		  NonBlankTrimmedString fallback)
-		{
-		  if (textEditState == null)
-			throw new ArgumentNullException("textEditState");
-		  if (fallback == null)
-			throw new ArgumentNullException("fallback");
+        private static NonBlankTrimmedString ToNonBlankTrimmedString(
+          TextEditState textEditState,
+          NonBlankTrimmedString fallback)
+        {
+          if (textEditState == null)
+            throw new ArgumentNullException("textEditState");
+          if (fallback == null)
+            throw new ArgumentNullException("fallback");
 
-		  return (textEditState.Text.Trim() == "")
-			? fallback
-			: new NonBlankTrimmedString(textEditState.Text);
-		}
+          return (textEditState.Text.Trim() == "")
+            ? fallback
+            : new NonBlankTrimmedString(textEditState.Text);
+        }
 
-		private static TextEditState Validate(
-		  TextEditState textEditState,
-		  Predicate<TextEditState> validIf,
-		  NonBlankTrimmedString messageIfInvalid)
-		{
-		  if (textEditState == null)
-			throw new ArgumentNullException("textEditState");
-		  if (validIf == null)
-			throw new ArgumentNullException("validIf");
-		  if (messageIfInvalid == null)
-			throw new ArgumentNullException("messageIfInvalid");
+        private static TextEditState Validate(
+          TextEditState textEditState,
+          Predicate<TextEditState> validIf,
+          NonBlankTrimmedString messageIfInvalid)
+        {
+          if (textEditState == null)
+            throw new ArgumentNullException("textEditState");
+          if (validIf == null)
+            throw new ArgumentNullException("validIf");
+          if (messageIfInvalid == null)
+            throw new ArgumentNullException("messageIfInvalid");
 
-		  return textEditState.With(_ => _.ValidationError, validIf(textEditState)
-		    ? null
-			: messageIfInvalid);
-		}
+          return textEditState.With(_ => _.ValidationError, validIf(textEditState)
+            ? null
+            : messageIfInvalid);
+        }
 
-		private static bool MustHaveValue(TextEditState textEditState)
-		{
-		  if (textEditState == null)
-			throw new ArgumentNullException("textEditState");
+        private static bool MustHaveValue(TextEditState textEditState)
+        {
+          if (textEditState == null)
+            throw new ArgumentNullException("textEditState");
 
-		  return !string.IsNullOrWhiteSpace(textEditState.Text);
-		}
-	  }
-	}
+          return !string.IsNullOrWhiteSpace(textEditState.Text);
+        }
+      }
+    }
 
 Note that, since the **RequestId** values are now **Optional&lt;RequestId&gt;** instances, we need to change the "IsEqualToOrComesAfter" extension method -
 
-	using System;
-	using ProductiveRage.Immutable;
+    using System;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public static class RequestIdExtensions
-	  {
-		public static bool IsEqualToOrComesAfter(
-		  this RequestId source,
-		  Optional<RequestId> other)
-		{
-		  if (source == null)
-			throw new ArgumentNullException("source");
+    namespace BridgeReactTutorial.API
+    {
+      public static class RequestIdExtensions
+      {
+        public static bool IsEqualToOrComesAfter(
+          this RequestId source,
+          Optional<RequestId> other)
+        {
+          if (source == null)
+            throw new ArgumentNullException("source");
 
-		  // If the "other" reference is no-RequestId then the "source" may be considered to
-		  // come after it
-		  if (!other.IsDefined)
-			return true;
+          // If the "other" reference is no-RequestId then the "source" may be considered to
+          // come after it
+          if (!other.IsDefined)
+            return true;
 
-		  return (source == other.Value) || source.ComesAfter(other.Value);
-		}
-	  }
-	}
+          return (source == other.Value) || source.ComesAfter(other.Value);
+        }
+      }
+    }
 
 ### The rest of the gaps
 
@@ -2138,356 +2138,356 @@ Changing the **MessageEditor**, **MessageHistory**, **AppContainer** and **Messa
 
 And, while we're making everything immutable, let's change the action classes. Currently, we have actions such as:
 
-	using Bridge.React;
-	using BridgeReactTutorial.API;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
 
-	namespace BridgeReactTutorial.Actions
-	{
-	  public class DataUpdated<T> : IDispatcherAction
-	  {
-		public RequestId RequestId;
-		public T Data;
-	  }
-	  public static class DataUpdated
-	  {
-		public static DataUpdated<T> For<T>(RequestId requestId, T data)
-		{
-		  return new DataUpdated<T> { RequestId = requestId, Data = data };
-		}
-	  }
-	}
+    namespace BridgeReactTutorial.Actions
+    {
+      public class DataUpdated<T> : IDispatcherAction
+      {
+        public RequestId RequestId;
+        public T Data;
+      }
+      public static class DataUpdated
+      {
+        public static DataUpdated<T> For<T>(RequestId requestId, T data)
+        {
+          return new DataUpdated<T> { RequestId = requestId, Data = data };
+        }
+      }
+    }
 
 This should be:
 
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using ProductiveRage.Immutable;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Actions
-	{
-	  public class DataUpdated<T> : IDispatcherAction, IAmImmutable
-	  {
-		public DataUpdated(RequestId requestId, T data)
-		{
-		  this.CtorSet(_ => _.RequestId, requestId);
-		  this.CtorSet(_ => _.Data, data);
-		}
-		public RequestId RequestId { get; }
-		public T Data { get; }
-	  }
-	  public static class DataUpdated
-	  {
-		public static DataUpdated<T> For<T>(RequestId requestId, T data)
-		{
-		  return new DataUpdated<T>(requestId, data);
-		}
-	  }
-	}
+    namespace BridgeReactTutorial.Actions
+    {
+      public class DataUpdated<T> : IDispatcherAction, IAmImmutable
+      {
+        public DataUpdated(RequestId requestId, T data)
+        {
+          this.CtorSet(_ => _.RequestId, requestId);
+          this.CtorSet(_ => _.Data, data);
+        }
+        public RequestId RequestId { get; }
+        public T Data { get; }
+      }
+      public static class DataUpdated
+      {
+        public static DataUpdated<T> For<T>(RequestId requestId, T data)
+        {
+          return new DataUpdated<T>(requestId, data);
+        }
+      }
+    }
 
 The others require similar changes -
 
-	using Bridge.React;
-	using ProductiveRage.Immutable;
+    using Bridge.React;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Actions
-	{
-	  public class SaveRequested<T> : IDispatcherAction, IAmImmutable
-	  {
-		public SaveRequested(T data)
-		{
-		  this.CtorSet(_ => _.Data, data);
-		}
-		public T Data { get; }
-	  }
-	  public static class SaveRequested
-	  {
-		public static SaveRequested<T> For<T>(T data)
-		{
-		  return new SaveRequested<T>(data);
-		}
-	  }
-	}
+    namespace BridgeReactTutorial.Actions
+    {
+      public class SaveRequested<T> : IDispatcherAction, IAmImmutable
+      {
+        public SaveRequested(T data)
+        {
+          this.CtorSet(_ => _.Data, data);
+        }
+        public T Data { get; }
+      }
+      public static class SaveRequested
+      {
+        public static SaveRequested<T> For<T>(T data)
+        {
+          return new SaveRequested<T>(data);
+        }
+      }
+    }
 
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using ProductiveRage.Immutable;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Actions
-	{
-	  public class SaveSucceeded : IDispatcherAction, IAmImmutable
-	  {
-		public SaveSucceeded(RequestId requestId)
-		{
-		  this.CtorSet(_ => _.RequestId, requestId);
-		}
-		public RequestId RequestId { get; }
-	  }
-	}
+    namespace BridgeReactTutorial.Actions
+    {
+      public class SaveSucceeded : IDispatcherAction, IAmImmutable
+      {
+        public SaveSucceeded(RequestId requestId)
+        {
+          this.CtorSet(_ => _.RequestId, requestId);
+        }
+        public RequestId RequestId { get; }
+      }
+    }
 
-	using Bridge.React;
-	using ProductiveRage.Immutable;
+    using Bridge.React;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Actions
-	{
-	  public class StoreInitialised : IDispatcherAction, IAmImmutable
-	  {
-		public StoreInitialised(object store)
-		{
-		  this.CtorSet(_ => _.Store, store);
-		}
-		public object Store { get; }
-	  }
-	}
+    namespace BridgeReactTutorial.Actions
+    {
+      public class StoreInitialised : IDispatcherAction, IAmImmutable
+      {
+        public StoreInitialised(object store)
+        {
+          this.CtorSet(_ => _.Store, store);
+        }
+        public object Store { get; }
+      }
+    }
 
-	using Bridge.React;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using Bridge.React;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Actions
-	{
-	  public class UserEditRequested<T> : IDispatcherAction, IAmImmutable
-	  {
-		public UserEditRequested(T newState)
-		{
-		  this.CtorSet(_ => _.NewState, newState);
-		}
-		public T NewState { get; }
-	  }
-	  public static class UserEditRequested
-	  {
-		public static UserEditRequested<T> For<T>(T newState)
-		{
-		  return new UserEditRequested<T>(newState);
-		}
-	  }
-	}
+    namespace BridgeReactTutorial.Actions
+    {
+      public class UserEditRequested<T> : IDispatcherAction, IAmImmutable
+      {
+        public UserEditRequested(T newState)
+        {
+          this.CtorSet(_ => _.NewState, newState);
+        }
+        public T NewState { get; }
+      }
+      public static class UserEditRequested
+      {
+        public static UserEditRequested<T> For<T>(T newState)
+        {
+          return new UserEditRequested<T>(newState);
+        }
+      }
+    }
 
 The **App** class requires only minor tweaks, from:
 
-	using System.Linq;
-	using Bridge.Html5;
-	using Bridge.React;
-	using BridgeReactTutorial.Actions;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.Components;
-	using BridgeReactTutorial.Stores;
+    using System.Linq;
+    using Bridge.Html5;
+    using Bridge.React;
+    using BridgeReactTutorial.Actions;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.Components;
+    using BridgeReactTutorial.Stores;
 
-	namespace BridgeReactTutorial
-	{
-	  public class App
-	  {
-		[Ready]
-		public static void Go()
-		{
-		  var container = Document.GetElementById("main");
-		  container.ClassName = string.Join(
-			" ",
-			container.ClassName.Split().Where(c => c != "loading")
-		  );
+    namespace BridgeReactTutorial
+    {
+      public class App
+      {
+        [Ready]
+        public static void Go()
+        {
+          var container = Document.GetElementById("main");
+          container.ClassName = string.Join(
+            " ",
+            container.ClassName.Split().Where(c => c != "loading")
+          );
 
-		  var dispatcher = new AppDispatcher();
-		  var messageApi = new MessageApi(dispatcher);
-		  var store = new MessageWriterStore(messageApi, dispatcher);
-		  React.Render(
-			new AppContainer(new AppContainer.Props
-			{
-			  Dispatcher = dispatcher,
-			  Store = store
-			}),
-			container
-		  );
-		  dispatcher.Dispatch(new StoreInitialised { Store = store });
-		}
-	  }
-	}
+          var dispatcher = new AppDispatcher();
+          var messageApi = new MessageApi(dispatcher);
+          var store = new MessageWriterStore(messageApi, dispatcher);
+          React.Render(
+            new AppContainer(new AppContainer.Props
+            {
+              Dispatcher = dispatcher,
+              Store = store
+            }),
+            container
+          );
+          dispatcher.Dispatch(new StoreInitialised { Store = store });
+        }
+      }
+    }
 
 to:
 
-	using System.Linq;
-	using Bridge.Html5;
-	using Bridge.React;
-	using BridgeReactTutorial.Actions;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.Components;
-	using BridgeReactTutorial.Stores;
+    using System.Linq;
+    using Bridge.Html5;
+    using Bridge.React;
+    using BridgeReactTutorial.Actions;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.Components;
+    using BridgeReactTutorial.Stores;
 
-	namespace BridgeReactTutorial
-	{
-	  public class App
-	  {
-		[Ready]
-		public static void Go()
-		{
-		  var container = Document.GetElementById("main");
-		  container.ClassName = string.Join(
-			" ",
-			container.ClassName.Split().Where(c => c != "loading")
-		  );
+    namespace BridgeReactTutorial
+    {
+      public class App
+      {
+        [Ready]
+        public static void Go()
+        {
+          var container = Document.GetElementById("main");
+          container.ClassName = string.Join(
+            " ",
+            container.ClassName.Split().Where(c => c != "loading")
+          );
 
-		  var dispatcher = new AppDispatcher();
-		  var messageApi = new MessageApi(dispatcher);
-		  var store = new MessageWriterStore(messageApi, dispatcher);
-		  React.Render(
-			new AppContainer(dispatcher, store),
-			container
-		  );
-		  dispatcher.Dispatch(new StoreInitialised(store));
-		}
-	  }
-	}
-	
+          var dispatcher = new AppDispatcher();
+          var messageApi = new MessageApi(dispatcher);
+          var store = new MessageWriterStore(messageApi, dispatcher);
+          React.Render(
+            new AppContainer(dispatcher, store),
+            container
+          );
+          dispatcher.Dispatch(new StoreInitialised(store));
+        }
+      }
+    }
+
 Finally, the **MessageApi** needs various alterations to deal with the fact that all data types (such as the **MessageDetails**, the message history and the action classes) are immutable -
 
-	using System;
-	using Bridge;
-	using Bridge.Html5;
-	using Bridge.React;
-	using BridgeReactTutorial.Actions;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using System;
+    using Bridge;
+    using Bridge.Html5;
+    using Bridge.React;
+    using BridgeReactTutorial.Actions;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public class MessageApi : IReadAndWriteMessages
-	  {
-		private readonly AppDispatcher _dispatcher;
-		private NonNullList<Saved<MessageId, MessageDetails>> _messages;
-		public MessageApi(AppDispatcher dispatcher)
-		{
-		  if (dispatcher == null)
-			throw new ArgumentException("dispatcher");
+    namespace BridgeReactTutorial.API
+    {
+      public class MessageApi : IReadAndWriteMessages
+      {
+        private readonly AppDispatcher _dispatcher;
+        private NonNullList<Saved<MessageId, MessageDetails>> _messages;
+        public MessageApi(AppDispatcher dispatcher)
+        {
+          if (dispatcher == null)
+            throw new ArgumentException("dispatcher");
 
-		  _dispatcher = dispatcher;
-		  _messages = NonNullList<Saved<MessageId, MessageDetails>>.Empty;
+          _dispatcher = dispatcher;
+          _messages = NonNullList<Saved<MessageId, MessageDetails>>.Empty;
 
-		  // To further mimic a server-based API (where other people may be recording messages
-		  // of their own), after a 10s delay a periodic task will be executed to retrieve a
-		  // new message
-		  Window.SetTimeout(
-			() => Window.SetInterval(GetChuckNorrisFact, 5000),
-			10000
-		  );
-		}
+          // To further mimic a server-based API (where other people may be recording messages
+          // of their own), after a 10s delay a periodic task will be executed to retrieve a
+          // new message
+          Window.SetTimeout(
+            () => Window.SetInterval(GetChuckNorrisFact, 5000),
+            10000
+          );
+        }
 
-		public RequestId SaveMessage(MessageDetails message)
-		{
-		  return SaveMessage(message, optionalSaveCompletedCallback: null);
-		}
+        public RequestId SaveMessage(MessageDetails message)
+        {
+          return SaveMessage(message, optionalSaveCompletedCallback: null);
+        }
 
-		private RequestId SaveMessage(
-		  MessageDetails message,
-		  Action optionalSaveCompletedCallback)
-		{
-		  if (message == null)
-			throw new ArgumentNullException("message");
+        private RequestId SaveMessage(
+          MessageDetails message,
+          Action optionalSaveCompletedCallback)
+        {
+          if (message == null)
+            throw new ArgumentNullException("message");
 
-		  var requestId = new RequestId();
-		  Window.SetTimeout(
-			() =>
-			{
-			  _messages = _messages.Add(Saved.For(
-				(MessageId)(int)_messages.Count,
-				message
-			  ));
-			  _dispatcher.Dispatch(new SaveSucceeded(requestId));
-			  if (optionalSaveCompletedCallback != null)
-				optionalSaveCompletedCallback();
-			},
-			1000 // Simulate a roundtrip to the server
-		  );
-		  return requestId;
-		}
+          var requestId = new RequestId();
+          Window.SetTimeout(
+            () =>
+            {
+              _messages = _messages.Add(Saved.For(
+                (MessageId)(int)_messages.Count,
+                message
+              ));
+              _dispatcher.Dispatch(new SaveSucceeded(requestId));
+              if (optionalSaveCompletedCallback != null)
+                optionalSaveCompletedCallback();
+            },
+            1000 // Simulate a roundtrip to the server
+          );
+          return requestId;
+        }
 
-		public RequestId GetMessages()
-		{
-		  var requestId = new RequestId();
-		  Window.SetTimeout(
-			() => _dispatcher.Dispatch(DataUpdated.For(requestId, _messages)),
-			1000 // Simulate a roundtrip to the server
-		  );
-		  return requestId;
-		}
+        public RequestId GetMessages()
+        {
+          var requestId = new RequestId();
+          Window.SetTimeout(
+            () => _dispatcher.Dispatch(DataUpdated.For(requestId, _messages)),
+            1000 // Simulate a roundtrip to the server
+          );
+          return requestId;
+        }
 
-		private void GetChuckNorrisFact()
-		{
-		  var request = new XMLHttpRequest();
-		  request.ResponseType = XMLHttpRequestResponseType.Json;
-		  request.OnReadyStateChange = () =>
-		  {
-			if (request.ReadyState != AjaxReadyState.Done)
-			  return;
+        private void GetChuckNorrisFact()
+        {
+          var request = new XMLHttpRequest();
+          request.ResponseType = XMLHttpRequestResponseType.Json;
+          request.OnReadyStateChange = () =>
+          {
+            if (request.ReadyState != AjaxReadyState.Done)
+              return;
 
-			if ((request.Status == 200) || (request.Status == 304))
-			{
-			  try
-			  {
-				var apiResponse = (ChuckNorrisFactApiResponse)request.Response;
-				if ((apiResponse.Type == "success")
-				&& (apiResponse.Value != null)
-				&& !string.IsNullOrWhiteSpace(apiResponse.Value.Joke))
-				{
-				  // The Chuck Norris Facts API (http://www.icndb.com/api/) returns strings
-				  // html-encoded, so they need decoding before be wrapped up in a
-				  // MessageDetails instance
-				  // - Note: After the save has been processed, GetMessages is called so
-				  //   that a MessageHistoryUpdate action is dispatched
-				  SaveMessage(
-					new MessageDetails(
-					  title: new NonBlankTrimmedString("Fact"),
-					  content: new NonBlankTrimmedString(HtmlDecode(apiResponse.Value.Joke))
-					),
-					() => GetMessages()
-				  );
-				  return;
-				}
-			  }
-			  catch
-			  {
-				// Ignore any error and drop through to the fallback message-generator below
-			  }
-			}
-			SaveMessage(new MessageDetails(
-			  title: new NonBlankTrimmedString("Fact"),
-			  content: new NonBlankTrimmedString("API call failed when polling for content :(")
-			));
-		  };
-		  request.Open("GET", "http://api.icndb.com/jokes/random");
-		  request.Send();
-		}
+            if ((request.Status == 200) || (request.Status == 304))
+            {
+              try
+              {
+                var apiResponse = (ChuckNorrisFactApiResponse)request.Response;
+                if ((apiResponse.Type == "success")
+                && (apiResponse.Value != null)
+                && !string.IsNullOrWhiteSpace(apiResponse.Value.Joke))
+                {
+                  // The Chuck Norris Facts API (http://www.icndb.com/api/) returns strings
+                  // html-encoded, so they need decoding before be wrapped up in a
+                  // MessageDetails instance
+                  // - Note: After the save has been processed, GetMessages is called so
+                  //   that a MessageHistoryUpdate action is dispatched
+                  SaveMessage(
+                    new MessageDetails(
+                      title: new NonBlankTrimmedString("Fact"),
+                      content: new NonBlankTrimmedString(HtmlDecode(apiResponse.Value.Joke))
+                    ),
+                    () => GetMessages()
+                  );
+                  return;
+                }
+              }
+              catch
+              {
+                // Ignore any error and drop through to the fallback message-generator below
+              }
+            }
+            SaveMessage(new MessageDetails(
+              title: new NonBlankTrimmedString("Fact"),
+              content: new NonBlankTrimmedString("API call failed when polling for content :(")
+            ));
+          };
+          request.Open("GET", "http://api.icndb.com/jokes/random");
+          request.Send();
+        }
 
-		private string HtmlDecode(string value)
-		{
-		  if (value == null)
-			throw new ArgumentNullException("value");
+        private string HtmlDecode(string value)
+        {
+          if (value == null)
+            throw new ArgumentNullException("value");
 
-		  var wrapper = Document.CreateElement("div");
-		  wrapper.InnerHTML = value;
-		  return wrapper.TextContent;
-		}
+          var wrapper = Document.CreateElement("div");
+          wrapper.InnerHTML = value;
+          return wrapper.TextContent;
+        }
 
-		[IgnoreCast]
-		private class ChuckNorrisFactApiResponse
-		{
-		  public extern string Type { [Template("type")] get; }
-		  public extern FactDetails Value { [Template("value")] get; }
+        [IgnoreCast]
+        private class ChuckNorrisFactApiResponse
+        {
+          public extern string Type { [Template("type")] get; }
+          public extern FactDetails Value { [Template("value")] get; }
 
-		  [IgnoreCast]
-		  public class FactDetails
-		  {
-			public extern int Id { [Template("id")] get; }
-			public extern string Joke { [Template("joke")]get; }
-		  }
-		}
-	  }
-	}
-	
+          [IgnoreCast]
+          public class FactDetails
+          {
+            public extern int Id { [Template("id")] get; }
+            public extern string Joke { [Template("joke")]get; }
+          }
+        }
+      }
+    }
+
 One pleasant change was the removal of code that was previously in the **MessageApi** with the following comment:
 
-	// ToArray is used to return a clone of the message set - otherwise, the caller would
-	// end up with a list that is updated when the internal reference within this class
-	// is updated (which sounds convenient but it's not the behaviour that would be
-	// exhibited if this was really persisting messages to a server somewhere)
-	
+    // ToArray is used to return a clone of the message set - otherwise, the caller would
+    // end up with a list that is updated when the internal reference within this class
+    // is updated (which sounds convenient but it's not the behaviour that would be
+    // exhibited if this was really persisting messages to a server somewhere)
+
 Since the message list is described by an immutable structure, there is no way that a particular reference's data could change. There is no way that a component could have a reference to this data type and then find that the data in that reference had changed by the time that an event bubbled up to that component from one of its child components. Similarly, when the **MessageApi** passes its message history data out, there is no action that may be performed by any code that receives the message history reference that could "pollute" the data that the **MessageApi** stores internally.
 
 Previously, when the **MessageApi** wanted to share its message history data, we had two options - we could hope that the mutable list of mutable **MessageDetails** would never be manipulated when it was passed out from the **MessageApi** or we could try to make it impossible for other code to pollute the **MessageApi**'s copy of the data, which is what the "ToArray" call went some way towards (note that this wouldn't have saved us from code that received the mutable message history and then changed one of the fields on any of the individual mutable **MessageDetails** instances - this *would* have polluted to **MessageApi**'s internal data).
@@ -2534,72 +2534,72 @@ The bad news is that the **StatelessComponent** base class in the Bridge / React
 
 To illustrate, add the following line to the start of the **MessageHistory** "Render" method -
 
-	Console.WriteLine("MessageHistory.Render");
+    Console.WriteLine("MessageHistory.Render");
 
 Now, run the application in the browser and bring up the browser console in the dev tools. *Every* time that the app re-renders in the Virtual DOM, "MessageHistory.Render" will be written to the console. Every time that a key is pressed to change one of the text input elements, the entire UI will be re-rendered and "MessageHistory.Render" will be displayed in the console.
 
 Now, change the base class of the **MessageHistory** from **StatelessComponent&lt;MessageHistory.Props&gt;** to **PureComponent&lt;MessageHistory.Props&gt;**. It will look like this:
 
-	using System;
-	using System.Linq;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using System;
+    using System.Linq;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageHistory : StatelessComponent<MessageHistory.Props>
-	  {
-		public MessageHistory(
-		  NonNullList<Saved<MessageId, MessageDetails>> messages,
-		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
-		  : base(new Props(className, messages)) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageHistory : StatelessComponent<MessageHistory.Props>
+      {
+        public MessageHistory(
+          NonNullList<Saved<MessageId, MessageDetails>> messages,
+          Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
+          : base(new Props(className, messages)) { }
 
-		public override ReactElement Render()
-		{
-		  Console.WriteLine("MessageHistory.Render");
+        public override ReactElement Render()
+        {
+          Console.WriteLine("MessageHistory.Render");
 
-		  var className = props.ClassName;
-		  if (!props.Messages.Any())
-			className = className.Add(" ", new NonBlankTrimmedString("zero-messages"));
+          var className = props.ClassName;
+          if (!props.Messages.Any())
+            className = className.Add(" ", new NonBlankTrimmedString("zero-messages"));
 
-		  // Any time a set of child components is dynamically-created (meaning that the
-		  // numbers of items may vary from one render to another), each must have a unique
-		  // "Key" property set (this may be a int or a string). Here, this is simple as
-		  // each message tuple is a unique ID and the contents of that message.
-		  var messageElements = props.Messages
-			.Select(savedMessage => DOM.Div(new Attributes { Key = (int)savedMessage.Key },
-			DOM.Span(new Attributes { ClassName = "title" }, savedMessage.Value.Title),
-			DOM.Span(new Attributes { ClassName = "content" }, savedMessage.Value.Content)
-			));
+          // Any time a set of child components is dynamically-created (meaning that the
+          // numbers of items may vary from one render to another), each must have a unique
+          // "Key" property set (this may be a int or a string). Here, this is simple as
+          // each message tuple is a unique ID and the contents of that message.
+          var messageElements = props.Messages
+            .Select(savedMessage => DOM.Div(new Attributes { Key = (int)savedMessage.Key },
+            DOM.Span(new Attributes { ClassName = "title" }, savedMessage.Value.Title),
+            DOM.Span(new Attributes { ClassName = "content" }, savedMessage.Value.Content)
+            ));
 
-		  // When child components are specified (as they are through the second argument of
-		  // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
-		  // element may be another component or it may be a simple text value)
-		  // - The React  bindings have an extension method that transforms an IEnumerable set
-		  //   of components (such as "messageElements") into an Union<ReactElement, string>[]
-		  return DOM.FieldSet(
-		    new FieldSetAttributes { ClassName = className.ToStringIfDefined() },
-			DOM.Legend(null, "Message History"),
-			DOM.Div(null, messageElements)
-		  );
-		}
+          // When child components are specified (as they are through the second argument of
+          // DOM.Div), the argument is of type Union<ReactElement, string>[] (meaning that each
+          // element may be another component or it may be a simple text value)
+          // - The React  bindings have an extension method that transforms an IEnumerable set
+          //   of components (such as "messageElements") into an Union<ReactElement, string>[]
+          return DOM.FieldSet(
+            new FieldSetAttributes { ClassName = className.ToStringIfDefined() },
+            DOM.Legend(null, "Message History"),
+            DOM.Div(null, messageElements)
+          );
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public Props(
-			Optional<NonBlankTrimmedString> className,
-			NonNullList<Saved<MessageId, MessageDetails>> messages)
-		  {
-			this.CtorSet(_ => _.ClassName, className);
-			this.CtorSet(_ => _.Messages, messages);
-		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; }
-		  public NonNullList<Saved<MessageId, MessageDetails>> Messages { get; }
-		}
-	  }
-	}
+        public class Props : IAmImmutable
+        {
+          public Props(
+            Optional<NonBlankTrimmedString> className,
+            NonNullList<Saved<MessageId, MessageDetails>> messages)
+          {
+            this.CtorSet(_ => _.ClassName, className);
+            this.CtorSet(_ => _.Messages, messages);
+          }
+          public Optional<NonBlankTrimmedString> ClassName { get; }
+          public NonNullList<Saved<MessageId, MessageDetails>> Messages { get; }
+        }
+      }
+    }
 
 Re-build the application and refresh it in the browser. Now change the text input values while keeping an eye on the console. The "MessageHistory.Render" message will initially only appear in the console when the **MessageHistory** component is first rendered, the changes to the text inputs no longer require the **MessageHistory** component be redrawn by the Virtual DOM. When the message data actually changes (whether due to you saving a new message or due to a new Chuck Norris fact arriving), the **MessageHistory** component *will* update - indicated by another "MessageHistory.Render" message being displayed in the console.
 
@@ -2613,9 +2613,9 @@ When the **PureComponent** implements "shouldComponentUpdate" behind the scenes,
 
 On the whole, this means that things largely work completely intuitively. *Particularly* due to the way that the "With" extension methods works for **IAmImmutable**-implementing class. If "With" is called with a property value update where the new value is the same as the old value, then "With" returns the original instance unaltered. This is most easily explained with an example:
 
-	var title = new TextEditState(text: "hello", validationError: null);
-	var title2 = title.With(_ => _.Text, "hello");
-	var title3 = title.With(_ => _.Text, "hell");
+    var title = new TextEditState(text: "hello", validationError: null);
+    var title2 = title.With(_ => _.Text, "hello");
+    var title3 = title.With(_ => _.Text, "hell");
 
 The "title2" instance will be the same as the "title" reference - the text value was asked to changed from "hello" to "hello", which is no change at all. Since the **TextEditState** type is immutable, there is no pointing copying "title" to create a new "title2" reference with all of the same data. "title3" *will* be a new instance, since the text value needs to change from "hello" to "hell".
 
@@ -2627,99 +2627,99 @@ However, React raises change events from text inputs for user interactions *even
 
 Maybe it's worth examining the **MessageEditor** code again to try to make this seem less abstract:
 
-	using System;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
-	using ProductiveRage.Immutable;
+    using System;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
+    using ProductiveRage.Immutable;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
-	  {
-		public MessageEditor(
-		  MessageEditState message,
-		  Action<MessageEditState> onChange,
-		  Action onSave,
-		  Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
-		  : base(new Props(className, message, onChange, onSave)) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageEditor : StatelessComponent<MessageEditor.Props>
+      {
+        public MessageEditor(
+          MessageEditState message,
+          Action<MessageEditState> onChange,
+          Action onSave,
+          Optional<NonBlankTrimmedString> className = new Optional<NonBlankTrimmedString>())
+          : base(new Props(className, message, onChange, onSave)) { }
 
-		public override ReactElement Render()
-		{
-		  var formIsInvalid =
-			props.Message.Title.ValidationError.IsDefined ||
-			props.Message.Content.ValidationError.IsDefined;
+        public override ReactElement Render()
+        {
+          var formIsInvalid =
+            props.Message.Title.ValidationError.IsDefined ||
+            props.Message.Content.ValidationError.IsDefined;
 
-		  return DOM.FieldSet(
-		    new FieldSetAttributes { ClassName = props.ClassName.ToStringIfDefined() },
-			DOM.Legend(null, props.Message.Caption),
-			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
-			new ValidatedTextInput(
-			  className: new NonBlankTrimmedString("title"),
-			  disabled: props.Message.IsSaveInProgress,
-			  content: props.Message.Title.Text,
-			  onChange: newTitle => props.OnChange(
-				props.Message.With(_ => _.Title, new TextEditState(newTitle))
-			  ),
-			  validationMessage: props.Message.Title.ValidationError
-			),
-			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
-			new ValidatedTextInput(
-			  className: new NonBlankTrimmedString("content"),
-			  disabled: props.Message.IsSaveInProgress,
-			  content: props.Message.Content.Text,
-			  onChange: newContent => props.OnChange(
-				props.Message.With(_ => _.Content, new TextEditState(newContent))
-			  ),
-			  validationMessage: props.Message.Content.ValidationError
-			),
-			DOM.Button(
-			new ButtonAttributes
-			{
-			  Disabled = formIsInvalid || props.Message.IsSaveInProgress,
-			  OnClick = e => props.OnSave()
-			},
-			"Save"
-			)
-		  );
-		}
+          return DOM.FieldSet(
+            new FieldSetAttributes { ClassName = props.ClassName.ToStringIfDefined() },
+            DOM.Legend(null, props.Message.Caption),
+            DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+            new ValidatedTextInput(
+              className: new NonBlankTrimmedString("title"),
+              disabled: props.Message.IsSaveInProgress,
+              content: props.Message.Title.Text,
+              onChange: newTitle => props.OnChange(
+                props.Message.With(_ => _.Title, new TextEditState(newTitle))
+              ),
+              validationMessage: props.Message.Title.ValidationError
+            ),
+            DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+            new ValidatedTextInput(
+              className: new NonBlankTrimmedString("content"),
+              disabled: props.Message.IsSaveInProgress,
+              content: props.Message.Content.Text,
+              onChange: newContent => props.OnChange(
+                props.Message.With(_ => _.Content, new TextEditState(newContent))
+              ),
+              validationMessage: props.Message.Content.ValidationError
+            ),
+            DOM.Button(
+            new ButtonAttributes
+            {
+              Disabled = formIsInvalid || props.Message.IsSaveInProgress,
+              OnClick = e => props.OnSave()
+            },
+            "Save"
+            )
+          );
+        }
 
-		public class Props : IAmImmutable
-		{
-		  public Props(
-		    Optional<NonBlankTrimmedString> className,
-			MessageEditState message,
-			Action<MessageEditState> onChange,
-			Action onSave)
-		  {
-			this.CtorSet(_ => _.ClassName, className);
-			this.CtorSet(_ => _.Message, message);
-			this.CtorSet(_ => _.OnChange, onChange);
-			this.CtorSet(_ => _.OnSave, onSave);
-		  }
-		  public Optional<NonBlankTrimmedString> ClassName { get; }
-		  public MessageEditState Message { get; }
-		  public Action<MessageEditState> OnChange { get; }
-		  public Action OnSave { get; }
-		}
-	  }
-	}
+        public class Props : IAmImmutable
+        {
+          public Props(
+            Optional<NonBlankTrimmedString> className,
+            MessageEditState message,
+            Action<MessageEditState> onChange,
+            Action onSave)
+          {
+            this.CtorSet(_ => _.ClassName, className);
+            this.CtorSet(_ => _.Message, message);
+            this.CtorSet(_ => _.OnChange, onChange);
+            this.CtorSet(_ => _.OnSave, onSave);
+          }
+          public Optional<NonBlankTrimmedString> ClassName { get; }
+          public MessageEditState Message { get; }
+          public Action<MessageEditState> OnChange { get; }
+          public Action OnSave { get; }
+        }
+      }
+    }
 
 If the user attempted this copy-paste-same-value thing in the "Title" input, then the "onChange" event from the **ValidatedTextInput** that renders the Title value would be raised -
 
-	onChange: newTitle => props.OnChange(
-	  props.Message.With(_ => _.Title, new TextEditState(newTitle))
-	)
+    onChange: newTitle => props.OnChange(
+      props.Message.With(_ => _.Title, new TextEditState(newTitle))
+    )
 
 This will result in the **MessageEditor**'s "OnChange" event being raised, with a new **MessageEditState** instance. The key thing is that we want the new **MessageEditState** instance to be the same as the current **MessageEditState** instance if the new "Title" string is exactly the same as the current "Title" string.
 
 One way to do this would be to not worry about how "With" does or doesn't work and to add a condition into the lambda - eg.
 
-	onChange: newTitle =>
-	{
-	  if (newTitle != props.Message.Title.text)
-	    props.OnChange(props.Message.With(_ => _.Title, new TextEditState(newTitle)));
-	}
+    onChange: newTitle =>
+    {
+      if (newTitle != props.Message.Title.text)
+        props.OnChange(props.Message.With(_ => _.Title, new TextEditState(newTitle)));
+    }
 
 However, this means that more logic has to go in the components (which I want to avoid). Worse, it's boring and repetitive logic, which is the kind that I find is most likely to be done incorrectly by accident because you almost feel like you can write it on auto-pilot. It would be best if this could be handled automatically.
 
@@ -2727,15 +2727,15 @@ Well, it *can* be if we always use "With" to update values. In the code above, I
 
 So, this code:
 
-	onChange: newTitle => props.OnChange(
-	  props.Message.With(_ => _.Title, new TextEditState(newTitle))
-	)
+    onChange: newTitle => props.OnChange(
+      props.Message.With(_ => _.Title, new TextEditState(newTitle))
+    )
 
 should really be this:
 
-	onChange: newTitle => props.OnChange(
-	  props.Message.With(_ => _.Title, props.Message.Title.With(_ => _.Text, newContent))
-	)
+    onChange: newTitle => props.OnChange(
+      props.Message.With(_ => _.Title, props.Message.Title.With(_ => _.Text, newContent))
+    )
 
 This *only* changes the "Text" property on the "Title" **TextEditState** - which means that, in our copy-paste-same-value case, no new **TextEditState** instance will be created. This still means that the **MessageEditor**'s "OnChange" event will be raised (which will result in an action being sent through the Dispatcher and received by the **MessageWriterStore**, which will raise a "Change" event and cause the **AppContainer** to re-render the UI), but when the **MessageEditor** is asked to re-render then it will realise that the new data is the same as its current data and it will tell React not to bother re-rendering it. The code still had to do one full pass of the raise-event-up-to-top-level-component-and-send-change-message-through-Dispatcher-to-the-Store, even though the data hadn't changed, but that sort of work is very cheap (certainly much cheaper than any DOM or even Virtual DOM interactions).
 
@@ -2755,8 +2755,8 @@ All of the above came "for free" by using **IAmImmutable**-implementing classes 
 This always set the "Caption" based upon the "Title" value. If there is a "Title" value in the text input of the message editor form of "My New Message" then the "Caption" value will also be "My New Message". The "ToNonBlankTrimmedString" method is implemented as:
 
     private static NonBlankTrimmedString ToNonBlankTrimmedString(
-	  TextEditState textEditState,
-	  NonBlankTrimmedString fallback)
+      TextEditState textEditState,
+      NonBlankTrimmedString fallback)
     {
       if (textEditState == null)
         throw new ArgumentNullException("textEditState");
@@ -2777,11 +2777,11 @@ We could try to prevent this by changing "ValidateMessage" such that it tries to
       if (message == null)
         throw new ArgumentNullException("message");
 
-	  if (message.Title.Text.Trim() == "")
-	    message = message.With(_ => _.Caption, _defaultCaption);
-	  else if (message.Title.Text.Trim() != message.Caption)
-	    message = message.With(_ => _.Caption, new NonBlankTrimmedString(message.Title.Text));
-		
+      if (message.Title.Text.Trim() == "")
+        message = message.With(_ => _.Caption, _defaultCaption);
+      else if (message.Title.Text.Trim() != message.Caption)
+        message = message.With(_ => _.Caption, new NonBlankTrimmedString(message.Title.Text));
+
       return message
         .With(_ => _.Title, Validate(message.Title, MustHaveValue, _noTitleWarning))
         .With(_ => _.Content, Validate(message.Content, MustHaveValue, _noContentWarning));
@@ -2789,70 +2789,70 @@ We could try to prevent this by changing "ValidateMessage" such that it tries to
 
 .. but this brings us back round to "ValidateMessage" being very noisy. This will have a tendency to make it prone to error and it definitely moves away from the goal of code clarity that I'm aiming for.
 
-An alternative is to implement an "Equals" override for the **NonBlankTrimmedString** class. The "With" extension method, like the **PureComponent**'s "shouldComponentUpdate" logic", will consider an "Equals" method if referential equality fails. This means that if we call 
+An alternative is to implement an "Equals" override for the **NonBlankTrimmedString** class. The "With" extension method, like the **PureComponent**'s "shouldComponentUpdate" logic", will consider an "Equals" method if referential equality fails. This means that if we call
 
-	.With(_ => _.Caption, ToNonBlankTrimmedString(message.Title, fallback: _defaultCaption))
+    .With(_ => _.Caption, ToNonBlankTrimmedString(message.Title, fallback: _defaultCaption))
 
 .. and if the return value from "ToNonBlankTrimmedString" is a **NonBlankTrimmedString** instance that is equivalent to the current "Caption" value (according to the **NonBlankTrimmedString** "Equals" implementation below), then "With" will return the same reference.
 
-	using System;
-	using Bridge;
-	using Bridge.React;
+    using System;
+    using Bridge;
+    using Bridge.React;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public sealed class NonBlankTrimmedString
-	  {
-		public NonBlankTrimmedString(string value)
-		{
-		  if (string.IsNullOrWhiteSpace(value))
-			throw new ArgumentException("Null, blank or whitespace-only value specified");
+    namespace BridgeReactTutorial.API
+    {
+      public sealed class NonBlankTrimmedString
+      {
+        public NonBlankTrimmedString(string value)
+        {
+          if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("Null, blank or whitespace-only value specified");
 
-		  Value = value.Trim();
-		}
+          Value = value.Trim();
+        }
 
-		/// <summary>
-		/// This will never be null, blank or have any leading or trailing whitespace
-		/// </summary>
-		public string Value { get; }
+        /// <summary>
+        /// This will never be null, blank or have any leading or trailing whitespace
+        /// </summary>
+        public string Value { get; }
 
-		/// <summary>
-		/// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
-		/// that requires a string
-		/// </summary>
-		public static implicit operator string(NonBlankTrimmedString value)
-		{
-		  if (value == null)
-			throw new ArgumentNullException("value");
-		  return value.Value;
-		}
+        /// <summary>
+        /// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
+        /// that requires a string
+        /// </summary>
+        public static implicit operator string(NonBlankTrimmedString value)
+        {
+          if (value == null)
+            throw new ArgumentNullException("value");
+          return value.Value;
+        }
 
-		/// <summary>
-		/// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
-		/// that requires a ReactElement-or-string, such as for the children array of the React
-		/// DOM component factories
-		/// </summary>
-		public static implicit operator Union<ReactElement, string>(NonBlankTrimmedString value)
-		{
-		  if (value == null)
-			throw new ArgumentNullException("value");
-		  return value.Value;
-		}
+        /// <summary>
+        /// It's convenient to be able to pass a NonBlankTrimmedString instance as any argument
+        /// that requires a ReactElement-or-string, such as for the children array of the React
+        /// DOM component factories
+        /// </summary>
+        public static implicit operator Union<ReactElement, string>(NonBlankTrimmedString value)
+        {
+          if (value == null)
+            throw new ArgumentNullException("value");
+          return value.Value;
+        }
 
-		public override bool Equals(object o)
-		{
-		  var otherNonBlankTrimmedString = o as NonBlankTrimmedString;
-		  return
-		    (otherNonBlankTrimmedString != null) &&
-			(otherNonBlankTrimmedString.Value == Value);
-		}
+        public override bool Equals(object o)
+        {
+          var otherNonBlankTrimmedString = o as NonBlankTrimmedString;
+          return
+            (otherNonBlankTrimmedString != null) &&
+            (otherNonBlankTrimmedString.Value == Value);
+        }
 
-		public override int GetHashCode()
-		{
-		  return Value.GetHashCode();
-		}
-	  }
-	}
+        public override int GetHashCode()
+        {
+          return Value.GetHashCode();
+        }
+      }
+    }
 
 Having an "Equals" implementation on types such as **NonBlankTrimmedString** makes a lot of sense because we essentially want them to be treated as "value types" - if two references describe the same data then they should be treated as the same value. Note that a custom "Equals" implementation was not necessary for **MessageId**, since that is a struct - in C#, structs [automatically get an "Equals" implementation created for them](http://csharp.2000things.com/2011/09/14/411-overriding-the-equals-method-for-a-value-type/) that considers two struct instances to be equivalent if all of their properties have the same values and the JavaScript generated by Bridge does the same in order to maintain compatibility.
 
@@ -2902,6 +2902,6 @@ I'm not sure that there's anything earth-shatteringly original about any one of 
 
 There are some other things to consider when writing complete Bridge / React applications. I keep saying that it's important for code to be testable, but I haven't offered any way to write the actual unit tests. I've also not had to offer any URL-routing capabilities, since the example application is so simple. But routing *is* something that is almost certainly going to be required in any real browser-based application.
 
-These are both technologies that I would like to cover in future posts, but probably as shorter follow-up pieces. In terms of *how* to write React applications in C#, I am happy with what I've covered in these three posts - I wanted to get the example code to where it is now but without jumping straight to the final architecture; I wanted to illustrate *why* one-way data binding is so beneficial and then why a Flux-like structure is so helpful and then *why* immutable types are such a good idea. Hopefully, by starting from the basics and introducing new concepts and approaches only when there was a way to illustrate the improvements that they yield, you all agree with me that this is the way to do things! 
+These are both technologies that I would like to cover in future posts, but probably as shorter follow-up pieces. In terms of *how* to write React applications in C#, I am happy with what I've covered in these three posts - I wanted to get the example code to where it is now but without jumping straight to the final architecture; I wanted to illustrate *why* one-way data binding is so beneficial and then why a Flux-like structure is so helpful and then *why* immutable types are such a good idea. Hopefully, by starting from the basics and introducing new concepts and approaches only when there was a way to illustrate the improvements that they yield, you all agree with me that this is the way to do things!
 
 Of course, if you disagree in general, or on any particular points, or you have any tweaks to what I've suggested then I would be very interested to hear. That's what the comments section is for!

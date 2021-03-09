@@ -1,4 +1,4 @@
-﻿## Auto-releasing Event Listeners
+## Auto-releasing Event Listeners
 
 Last month, in [Parsing CSS](Post57), I talked about a way to parse CSS and identify character-by-character what "type" it was (eg. "SelectorOrStyleProperty", "Value", "Whitespace", etc..). The interesting things, I think, are more what I intend to do with the work (trying to validate the rules from [Non-cascading CSS: A revolution!](Post42)) and *how* the processing was performed. The input content is traversed through this interface:
 
@@ -323,7 +323,7 @@ It would be possible to write an alternate version that does not have a typepara
       bool ExecuteCallbackIfTargetStillAlive(object sender, TEventArgs e);
     }
 
-An **InstanceCallbackData** can now be created for any given **EventHandler&lt;MyEventArgs&gt;** with 
+An **InstanceCallbackData** can now be created for any given **EventHandler&lt;MyEventArgs&gt;** with
 
     private static IMakeEventCallbacks GetWeakCallback<TEventArgs>(EventHandler<TEventArgs> handler)
       where TEventArgs : EventArgs
@@ -374,7 +374,7 @@ So all we need to do is ensure that the RegisterForMyEvent method does something
 
 The RegisterForMyEvent approach above isn't that bad, I think it's a viable way to go if this "Weak Event Source" is something that is required for one event on one class. But I want to tidy it up so that the callback set need not be maintained by the event publisher and I want to make it match the pattern of standard .net events more closely.
 
-So the first thing to do is create a **WeakEventSource&lt;TEventsArgs&gt;** class that wraps up the functionality. 
+So the first thing to do is create a **WeakEventSource&lt;TEventsArgs&gt;** class that wraps up the functionality.
 
     public class WeakEventSource<TEventArgs> where TEventArgs : EventArgs
     {
@@ -489,7 +489,7 @@ It's not complicated, though. To work out whether an **InstanceCallbackData** sh
       {
         if (eventHandler == null)
           throw new ArgumentNullException("eventHandler");
-        
+
         // If the target is no longer accessible then we can't confirm whether there's a match or not
         // (and this instance should be removed from the event callback list next time it is raised)
         var target = _target.Target;
@@ -771,7 +771,7 @@ That's fairly straight-forward, the only thing really of note is the use of the 
         : this(new TextReaderWithReadAheadEvent(reader), 0, new List<char>()) { }
 
       /// <summary>
-      /// All instances returned from requests to the Next property will share the same 
+      /// All instances returned from requests to the Next property will share the same
       /// TextReaderWithReadAheadEvent instance and use this as the synchronisation object when any
       /// operations that must be thread-safe will occur. This includes any calls to Read since it must be
       /// guaranteed that each Read call can transmit the character(s) it has read to any

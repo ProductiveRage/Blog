@@ -21,11 +21,11 @@ To reduce it down to the most simple case, imagine that my module only exposed a
     }
 
     export = SimpleExample;
-    
+
 This allows for the module to be used in TypeScript elsewhere with code such as
 
     import simpleExample = require("simpleExample");
-    
+
     console.log(simpleExample.GetLength("test"));
 
 So easy! So straight-forward! And yet it seemed like it took me a long time to get to this point :(
@@ -50,7 +50,7 @@ In this simple case, the TypeScript example still works - the module may be cons
 So that's a simple example, now to get back to the case I was actually working on. The first method that I want to expose is "ParseCss". This takes in a string and returns an array of "categorised character strings" - these are strings of content with a "Value" string, an "IndexInSource" number and a "CharacterCategorisation" number. So the string
 
     body { color: red; }
-    
+
 is broken down into
 
     Value: "body", IndexInSource: 0, CharacterCategorisation: 4
@@ -64,7 +64,7 @@ is broken down into
     Value: ";", IndexInSource: 17, CharacterCategorisation: 3
     Value: " ", IndexInSource: 18, CharacterCategorisation: 7
     Value: "}", IndexInSource: 19, CharacterCategorisation: 1
-    
+
 The CharacterCategorisation values come from a enum-like type in the library; an object named "CharacterCategorisationOptions" with properties named "Comment", "CloseBrace", "OpenBrace", etc.. that are mapped onto numeric values. These values are an ideal candidates for representation by the TypeScript "const enum" construct - and since there are a fixed set of values it's no problem to explicitly include them in the type definition. (Note that the "const enum" was introduced with TypeScript 1.4 and is not available in previous versions).
 
 This leads to the following:
@@ -77,7 +77,7 @@ This leads to the following:
         IndexInSource: number;
         CharacterCategorisation: CharacterCategorisationOptions;
       }
-      
+
       export const enum CharacterCategorisationOptions {
         Comment = 0,
         CloseBrace = 1,
@@ -119,18 +119,18 @@ To try to make this a bit clearer, what we *could* do is
 
     declare var parser: CssParser;
     export = parser;
-    
+
 and then we *could* consume this with
 
     import parser = require("cssparser/CssParserJs");
-    
+
     var content = parser.ParseCss("body { color: red; }");
-    
+
 but we could *not* do something like
 
     var firstFragmentIsWhitespace =
       (content[0].CharacterCategorisation === parser.CharacterCategorisationOptions.Whitespace);
-    
+
 since the "CharacterCategorisationOptions" type is not exported from the module.
 
 Using the "declare module" approach allows us to nest the enum in that module which then *is* exported and then so *can* be accessed by the calling code.
@@ -147,7 +147,7 @@ The type definition now looks like
         IndexInSource: number;
         CharacterCategorisation: CharacterCategorisationOptions;
       }
-      
+
       export const enum CharacterCategorisationOptions {
         Comment = 0,
         CloseBrace = 1,
@@ -158,13 +158,13 @@ The type definition now looks like
         Value = 6,
         Whitespace = 7
       }
-      
+
       export class ParseError implements Error {
         constructor(message: string, indexInSource: number);
         name: string;
         message: string;
         indexInSource: number;
-      }      
+      }
     }
 
     export = CssParser;
@@ -174,7 +174,7 @@ There are complications around extending the Error object in both JavaScript and
 This type definition now supports the following consuming code -
 
     import parser = require("cssparser/CssParserJs");
-    
+
     try {
       var content = parser.ParseCss("body { color: red; }");
       console.log("Parsed into " + content.length + " segment(s)");
@@ -188,7 +188,7 @@ This type definition now supports the following consuming code -
         console.log(e.message);
       }
     }
-    
+
 The library has two other methods to expose yet. As well as "ParseCss" there is a "ParseLess" function - this applies slightly different rules, largely around the handling of comments ([Less](http://lesscss.org/) supports single line comments that start with "//" whereas CSS only allows the "/* .. */" format).
 
 And then there is the "ExtendedLessParser.ParseIntoStructuredData" method. "ParseCss" and "ParseLess" do a very cheap pass through style content to try to break it down and categorise sections while "ParseIntoStructuredData" takes that data, processes it more thoroughly and returns a hierarchical representation of the styles.
@@ -247,7 +247,7 @@ The final type definition becomes
     }
 
     export = CssParser;
-    
+
 The "ExtendedLessParser.ParseIntoStructuredData" nested method is exposed as a function within a nested module. Similarly, the interface and enum for its return type are both nested in there. The method signature is somewhat interesting in that the library will accept either a string being passed into "ParseIntoStructuredData" or the result of a "ParseLess" call. TypeScript has support for this and the method signature indicates that it will accept either "string" or "CategorisedCharacterString[]" (this relies upon "union type" support that became available in TypeScript 1.4). There is also an optional argument to indicate that comments should be excluded from the return content, this is also easy to express in TypeScript (by including the question mark after the argument name).
 
 ### Limitations
@@ -292,7 +292,7 @@ Interestingly, this should *also* not be too surprising (although it surprised m
 
     var example = new ClassWithGetOnlyName();
     example.name = "Bob"; // Setting a property that only has a getter!
-    
+
     alert(example.name);
 
 Here, the alert will show "Jim" since that is what the property getter returns. But it is not illegal to try to *set* the property (it's just that the "setting" action is effectively ignored). So TypeScript doesn't support the notion of a "get-only" (or "readonly") property.

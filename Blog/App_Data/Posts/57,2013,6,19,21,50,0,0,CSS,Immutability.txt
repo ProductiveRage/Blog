@@ -1,4 +1,4 @@
-﻿## Parsing CSS
+## Parsing CSS
 
 A few months ago I wrote about some [extensions to the CSS Minifer](Post47) to support pseudo-Source-Mapping for compiled and minified content (among other things) and I've been meaning to write about the code I used to analyse the style sheet content.
 
@@ -203,7 +203,7 @@ A naive way approach would be trim the raw string content and see if it starts w
 
 To deal with cases like this which require "deep analysis", the "ExtendedLESSParser" project has a class, the **LessCssHierarchicalParser**, which takes the output from the CSSParser (a **CategorisedCharacterString** set) and tranforms it into hierarhical data describing selectors, media queries, import statements, style property names and style property values. Selectors and media queries are containers that have child "fragments" (these could be style properties or they could be nested selectors). All mention of whitespace and comments are removed and just a representation of the raw style data remains.
 
-    // Example 
+    // Example
     html
     {
       h1

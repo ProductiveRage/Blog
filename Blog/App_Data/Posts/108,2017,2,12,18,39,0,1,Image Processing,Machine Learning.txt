@@ -50,16 +50,16 @@ Fleck & Forsyth recommend pulling down the colour values so that the minimum val
 
 Next, I generate "RgByI" values for every pixel. This a trio of values; an RG (red-green) spectrum value, a BY (blue-yellow) spectrum value and an intensity. Since I'm going to spend a lot of time taking the pixels from an image and loading them into a 2D array and then performing a range of operations on them, I've written a **DataRectangle&lt;T&gt;** class that makes this easier. When I first read the data from an image, the pixels are loaded and used to populate a **DataRectangle** of RGB values. When I need to get RgByI values from them, I can do the following (using Kapur's formulae from "Face Detection in Colour Images) -
 
-	var rgByIValues = colourData.Transform(colour =>
-	{
-		Func<byte, double> L = x => (105 * Math.Log10(x + 1));
-		return new IRgBy(
-			rg: L(colour.R) - L(colour.G),
-			by: L(colour.B) - ((L(colour.G) + L(colour.R)) / 2),
-			i: (L(colour.R) + L(colour.B) + L(colour.G)) / 3
-		);
-	});
- 
+    var rgByIValues = colourData.Transform(colour =>
+    {
+        Func<byte, double> L = x => (105 * Math.Log10(x + 1));
+        return new IRgBy(
+            rg: L(colour.R) - L(colour.G),
+            by: L(colour.B) - ((L(colour.G) + L(colour.R)) / 2),
+            i: (L(colour.R) + L(colour.B) + L(colour.G)) / 3
+        );
+    });
+
 In order to reduce unhelpful detail in the image somewhat, the RgByI values have a "windowing median filter" applied to them. From "Face Detection in Colour Images" -
 
 > The Rg and By matrices are then filtered with a windowing median filter .. with sides of length 4*SCALE. The SCALE value is calculated as being the closest integer value to (height+width)/320
@@ -70,14 +70,14 @@ To do this, you go through every pixel and take its value and the values from th
 
 After smoothing the RG/BY data, their values are combined to generate hue and saturation -
 
-	var smoothedHues = smoothedRG.CombineWith(
-		smoothedBY,
-		(rg, by) => new
-		{
-			Hue = RadianToDegree(Math.Atan2(rg, by)),
-			Saturation = Math.Sqrt((rg * rg) + (by * by))
-		}
-	);
+    var smoothedHues = smoothedRG.CombineWith(
+        smoothedBY,
+        (rg, by) => new
+        {
+            Hue = RadianToDegree(Math.Atan2(rg, by)),
+            Saturation = Math.Sqrt((rg * rg) + (by * by))
+        }
+    );
 
 ![Hue](/Content/Images/Posts/SkinMaskGeneration-Hue.png)
 ![Saturation](/Content/Images/Posts/SkinMaskGeneration-Saturation.png)
@@ -88,18 +88,18 @@ In order to generate greyscale images, I had to translate the hue and saturation
 
 Generating texture amplitude is more complicated. We start with the intensity values from the RgByI data. We then run that through a median filter of 2 * SCALE and calculate the difference between every point in the median filter result and the original intensity. Finally, we run the result of the calculation through a median filter of 3 * SCALE. It may be clearer with some code -
 
-	var smoothedIntensity = rgByIValues.MedianFilter(
-		value => value.I,
-		2 * scale
-	);
-	var differenceBetweenOriginalIntensityAndSmoothedIntensity = rgByIValues.CombineWith(
-		smoothedIntensity,
-		(x, y) => Math.Abs(x.I - y)
-	);
-	var textureAmplitude = differenceBetweenOriginalIntensityAndSmoothedIntensity.MedianFilter(
-		value => value,
-		3 * scale
-	);
+    var smoothedIntensity = rgByIValues.MedianFilter(
+        value => value.I,
+        2 * scale
+    );
+    var differenceBetweenOriginalIntensityAndSmoothedIntensity = rgByIValues.CombineWith(
+        smoothedIntensity,
+        (x, y) => Math.Abs(x.I - y)
+    );
+    var textureAmplitude = differenceBetweenOriginalIntensityAndSmoothedIntensity.MedianFilter(
+        value => value,
+        3 * scale
+    );
 
 ![Texture Amplitude](/Content/Images/Posts/SkinMaskGeneration-TextureAmplitude.png)
 
@@ -109,21 +109,21 @@ Hopefully it's apparent that around the lower face there is low texture amplitud
 
 Now that we have all of the information required to guess whether a given pixel is within the acceptable bounds of "probably skin", we can create a skin mask (a **DataRectangle&lt;bool&gt;**) -
 
-	var skinMask = smoothedHues
-		.CombineWith(textureAmplitude, (hs, t) => new
-		{
-			Hue = hs.Hue,
-			Saturation = hs.Saturation,
-			TextureAmplitude = t
-		})
-		.Transform(hst =>
-		{
-			return (
-				((hst.Hue >= 105) && (hst.Hue <= 160) && (hst.Saturation >= 10) && (hst.Saturation <= 60)) ||
-				((hst.Hue >= 160) && (hst.Hue <= 180) && (hst.Saturation >= 30) && (hst.Saturation <= 30))
-			)
-			&& (hst.TextureAmplitude <= 5);
-		});
+    var skinMask = smoothedHues
+        .CombineWith(textureAmplitude, (hs, t) => new
+        {
+            Hue = hs.Hue,
+            Saturation = hs.Saturation,
+            TextureAmplitude = t
+        })
+        .Transform(hst =>
+        {
+            return (
+                ((hst.Hue >= 105) && (hst.Hue <= 160) && (hst.Saturation >= 10) && (hst.Saturation <= 60)) ||
+                ((hst.Hue >= 160) && (hst.Hue <= 180) && (hst.Saturation >= 30) && (hst.Saturation <= 30))
+            )
+            && (hst.TextureAmplitude <= 5);
+        });
 
 This is another point at which I have added my own tweaks to the processing. There are slightly different ranges of acceptable hue / saturation / texture amplitude suggested by Fleck & Forsyth than are suggested by Kaypur and I found that *I* wanted to change them a little based upon the test images that I was using.
 
@@ -139,16 +139,16 @@ The idea is that we look at negative values in the **DataRectangle&lt;bool&gt;**
 
 In order to get back some of the details that are within the skin mask areas, the original image is changed to greyscale and then the skin mask is combined with it to produce a new skin mask that is slightly more restrictive; any negative content from the skin mask remains negative while positive content is only allowed if the greyscale intensity is within an acceptable range. Everything from this point (including this step) comes from the "Face Detection in Color Images" article, since "Naked People Skin Filter" ends when the skin regions are detected (it has no interest in faces, specifically).
 
-	skinMask = colourData.CombineWith(
-		skinMask,
-		(colour, mask) =>
-		{
-			if (!mask)
-				return false;
-			var intensity = colour.ToGreyScale();
-			return (intensity >= 90) && (intensity <= 240);
-		}
-	);
+    skinMask = colourData.CombineWith(
+        skinMask,
+        (colour, mask) =>
+        {
+            if (!mask)
+                return false;
+            var intensity = colour.ToGreyScale();
+            return (intensity >= 90) && (intensity <= 240);
+        }
+    );
 
 In order to turn this **DataRectangle&lt;bool&gt;** mask into groups of points (where each group represents a distinct area of skin), I used a variation of the "Stack based implementation" from this article: [Flood Fill algorithm (using C#.Net)](https://simpledevcode.wordpress.com/2015/12/29/flood-fill-algorithm-using-c-net/). If you're looking my code, it's the "TryToGetPointsInObject" method in the [FaceDetector.cs]( https://github.com/ProductiveRage/FacialRecognition/blob/master/FaceDetection/FaceDetector.cs) class. I'm not stressing out about performance at this point, I just wanted to get things working and then considering measuring & improving in the future - so finding a nice simple flood fill algorithm was very helpful (I'm not saying that it's *not* a well-performing method, I'm just saying that at this point in time it's not critically important to me one way or the other).
 
@@ -170,7 +170,7 @@ In my Pictures folder, some photos from an Easter weekend\* night out I went to 
 
 ![Egg Man](/Content/Images/Posts/EggMan.jpg)
 
-Firstly, we have this fine gentleman. The skin tone pass has identified his face perfectly but it's also misidentified two regions that contain colours and textureus that the skin filter allows through. 
+Firstly, we have this fine gentleman. The skin tone pass has identified his face perfectly but it's also misidentified two regions that contain colours and textureus that the skin filter allows through.
 
 ![Egg Man Skin Mask](/Content/Images/Posts/EggMan-SkinMask.jpg)
 
@@ -203,7 +203,7 @@ Firstly, an SVM tends to be a "binary classifier". This means that it will be tr
 
 ![Manager Decision History](/Content/Images/Posts/ManagerDecisionHistory.jpg)
 
-To conjure up an example that almost sounds feasible, imagine that every development task at a software shop requires that its strategic benefit to the company be quantified, along with the percentage of the work that a customer is just dying to pay in order for it to be done (presuming that there *is* a customer who wants it and that it's not just a task for internal purposes). Since every task needs to have these pieces of information before your manager will decide whether or not the work will be scheduled, there exists historical records of estimated tasks which have two "features" (strategic value and percentage-that-will-be-immediately-paid-for-by-customers) and an outcome of either "yes, it was done" or "no, we didn't do it". 
+To conjure up an example that almost sounds feasible, imagine that every development task at a software shop requires that its strategic benefit to the company be quantified, along with the percentage of the work that a customer is just dying to pay in order for it to be done (presuming that there *is* a customer who wants it and that it's not just a task for internal purposes). Since every task needs to have these pieces of information before your manager will decide whether or not the work will be scheduled, there exists historical records of estimated tasks which have two "features" (strategic value and percentage-that-will-be-immediately-paid-for-by-customers) and an outcome of either "yes, it was done" or "no, we didn't do it".
 
 If something is of high strategic value to us *and* it happens to be a feature that a customer is chomping at the bit for (and so will contribute significantly towards) then it seems like a dead cert that we should do it. Unfortunately, this is not a very common case.. More often, a customer will want something that is important to *them* specifically. This may not be something that is necessarily very easy to resell to other customers (which would give it more strategic value) or something that will help us deal with internal issues, such as scaleability or technical debt (developments that *do* help with those will also have higher strategic value).
 
@@ -257,20 +257,20 @@ The premise is fairly simple, you need to:
 
 I think that steps 3 and 5 are probably the ones that require further explanation. Since we have a greyscale image by step 3, instead of colour data we effectively have "intensity" values for each pixel. To work out the angle in which the intensity is changing, take the intensity of the pixel below the current one and substract it from the intensity of the pixel above the current one. This is the "y difference" - or "delta y", so I'll name it "dy" (so that I can sound all maths-y). "dx", as you can probably imagine, is the difference between the intensity of the pixel to the right minus the intensity of the pixel to the left. We can calculate the angle at which intensity is changing (and how big the change is) with the following:
 
-	var angleInDegrees = RadiansToDegrees(Math.Atan2(dx, dy)));
-	var magnitude = Math.Sqrt((dx * dx) + (dy * dy));
-	
+    var angleInDegrees = RadiansToDegrees(Math.Atan2(dx, dy)));
+    var magnitude = Math.Sqrt((dx * dx) + (dy * dy));
+
 Note that "Math.Atan2" returns a value in radians. Radians are another unit of measurement of angles but instead of describing a full circle by going from 0-360 degrees, the scale goes from 0-2π radians. So, to convert from radians into easier-to-deal-with-in-this-case degrees we can do this:
 
-	private static double RadiansToDegrees(double angle)
-	{
-		return angle * (180d / Math.PI);
-	}
-	
+    private static double RadiansToDegrees(double angle)
+    {
+        return angle * (180d / Math.PI);
+    }
+
 Also note that Atan2 actually returns values in the range of -π to +π and so calling RadiansToDegrees on the result will give us a value from -180 to +180.
 
 *(When calculating gradient angles and magnitudes, any pixels on image edges won't have pixels surrounding in every direction and so I just record them as having both an angle and magnitude of zero)*
-	
+
 ![A Histogram](/Content/Images/Posts/HistogramExample.jpg)
 
 Now for step 5, we want to produce "histograms of oriented gradients" (one for each block that we've split the image into in step 4). I always envisage a histogram like a bar chart - it shows how values are distributed across a range.
@@ -291,34 +291,34 @@ Another nice thing about this representation of the data is that, if you sort of
 
 If you get curious and want to try generating HOGs for your own images, there is code in my [my GitHub project](https://github.com/ProductiveRage/FacialRecognition) to do this..
 
-	using (var image = new Bitmap(imagePath))
-	{
-		using (var resizedImage = new Bitmap(image, new Size(128, 128)))
-		{
-			// (Can ignore GetFor's return value when only interested in generating a preview image)
-			FaceClassifier.FeatureExtractor.GetFor(
-				resizedImage,
-				blockSize: 8,
-				optionalHogPreviewImagePath: "HOG.png",
-				normaliser: GlobalNormaliser.Normalise
-			);
-		}
-	}
+    using (var image = new Bitmap(imagePath))
+    {
+        using (var resizedImage = new Bitmap(image, new Size(128, 128)))
+        {
+            // (Can ignore GetFor's return value when only interested in generating a preview image)
+            FaceClassifier.FeatureExtractor.GetFor(
+                resizedImage,
+                blockSize: 8,
+                optionalHogPreviewImagePath: "HOG.png",
+                normaliser: GlobalNormaliser.Normalise
+            );
+        }
+    }
 
 .. which brings me neatly on to HOG normalisation (since there's a mysterious reference to a normaliser in the code above). When the gradient magnitudes are calculated, some images may have many pixels that vary wildly in intensity from their neighbours while other images may have smoother, gentler gradients. In both cases, it is the relative flow of intensity that is important, since that helps identify the shapes. If you took an image and produced HOG data for it and then increased the contrast of the image and re-processed it, you would get greater gradient magnitude values in the increased-constrast version of the image, even though they both - so far as we are interested (in the context of trying to detect faces) - contain exactly the same information.
 
 What we want to do is to align all of the magnitudes to a common base line. A simple (and fairly effective) way to do this is to find the largest value of any of the buckets across all of the histograms generated for an image and to then divide *every* magnitude by this value. In the example above, the 128x128 input image is transformed into 16x16 blocks, each of which is a histogram that contains 9 values. So we get the largest value from each of those 16x16x9 values and then divide all of them by it. This means that the largest value is now precisely 1.0 and every other value is somewhere between zero and one. This is what the "GlobalNormaliser.Normalise" delegate in the code above does. All it essentially has to do is this:
 
-	public static DataRectangle<HistogramOfGradient> Normalise(DataRectangle<HistogramOfGradient> hogs)
-	{
-		if (hogs == null)
-			throw new ArgumentNullException(nameof(hogs));
+    public static DataRectangle<HistogramOfGradient> Normalise(DataRectangle<HistogramOfGradient> hogs)
+    {
+        if (hogs == null)
+            throw new ArgumentNullException(nameof(hogs));
 
-		var maxMagnitude = hogs.Enumerate()
-			.Select(pointAndHistogram => pointAndHistogram.Item2)
-			.Max(histogram => histogram.GreatestMagnitude);
-		return hogs.Transform(hog => hog.Multiply(1 / maxMagnitude));
-	}
+        var maxMagnitude = hogs.Enumerate()
+            .Select(pointAndHistogram => pointAndHistogram.Item2)
+            .Max(histogram => histogram.GreatestMagnitude);
+        return hogs.Transform(hog => hog.Multiply(1 / maxMagnitude));
+    }
 
 However, there is a variation on this that has been found to produce more accurate results; "block normalisation". The original description of this process comes from (as I understand it) the original research into using HOGs for this form of detection ("[Histograms of Oriented Gradients for Human Detection [PDF]](http://lear.inrialpes.fr/people/triggs/pubs/Dalal-cvpr05.pdf)") -
 
@@ -342,26 +342,26 @@ This means that this "block normalisation" process will result in more data bein
 
 To extract those features, we would tweak the code from before -
 
-	const int inputWidth = 128;
-	const int inputHeight = 128;
-	const int blockSizeForHogGeneration = 8;
-	const int blockSizeForLocalNormalisation = 2;
-	
-	IEnumerable<double> features;
-	using (var image = new Bitmap(imagePath))
-	{
-		using (var resizedImage = new Bitmap(image, new Size(inputWidth, inputHeight)))
-		{
-			var blockNormaliser = new OverlappingBlockwiseNormaliser(blockSizeForLocalNormalisation);
-			features = FaceClassifier.FeatureExtractor.GetFor(
-				resizedImage,
-				blockSize: blockSizeForHogGeneration,
-				optionalHogPreviewImagePath: null,
-				normaliser: blockNormaliser.Normalise
-			);
-		}
-	}
-	
+    const int inputWidth = 128;
+    const int inputHeight = 128;
+    const int blockSizeForHogGeneration = 8;
+    const int blockSizeForLocalNormalisation = 2;
+
+    IEnumerable<double> features;
+    using (var image = new Bitmap(imagePath))
+    {
+        using (var resizedImage = new Bitmap(image, new Size(inputWidth, inputHeight)))
+        {
+            var blockNormaliser = new OverlappingBlockwiseNormaliser(blockSizeForLocalNormalisation);
+            features = FaceClassifier.FeatureExtractor.GetFor(
+                resizedImage,
+                blockSize: blockSizeForHogGeneration,
+                optionalHogPreviewImagePath: null,
+                normaliser: blockNormaliser.Normalise
+            );
+        }
+    }
+
 *(Note that I'm setting "optionalHogPreviewImagePath" to null so that "FeatureExtractor.GetFor" doesn't generate a "HOG preview" image - this is because it's much harder to recognise the shapes that the gradients were extracted from when this form of normalisation is use since most of the HOGs appear multiple times, so the preview images are of less interest)*
 
 When I tried comparing the results of global normalisation vs block normalisation, I found that I got better result (ie. better accuracy) when using block normalisation, just as the authors of  "Histograms of Oriented Gradients for Human Detection" did. The number of images that I've been testing with is, I'm sure, much smaller than the number used by Dalal and Triggs in their research but it was gratifying that I could see improvementswith my data set from using block normalisation - if only because it reassured me that I was moving in the right direction!
@@ -376,88 +376,88 @@ Accord.NET really does make it easy.. once you know where to get started. There 
 
 To demonstrate, let's revisit the "Manager Decision History" example from earlier. We'll formulate some example data where we pretend that the Manager is *super*-consistent and will always authorise work if the percentage that the customer will pay for immediately (as a value between 0 and 1) plus the strategic value (also somehow quantified as a value from 0 to 1) add up to more than 1. (So strategic value 0.9 plus customer-will-pay-immediately 0.2 will be authorised as 0.9 + 0.2 > 1 but strategic value 0.8 with customer-will-pay-immediately of 0.15 will *not* be authorised as 0.8 + 0.15 < 1). We can then use that data to train an SVM and then try other values against the model -
 
-	// Make up some data (in the real world we'd use some proper pre-classified training
-	// data but this is just an example to demonstate how to train an SVM using Accord.NET)
-	var decisionHistory = Enumerable.Range(0, 10).Select(x => x / 10d)
-		.SelectMany(x => Enumerable.Range(0, 10).Select(y => y / 10d).Select(y => new
-		{
-			StrategicValue = x,
-			ImmediateCustomerContribution = y,
-			Authorised = (x + y) > 1
-		}));
+    // Make up some data (in the real world we'd use some proper pre-classified training
+    // data but this is just an example to demonstate how to train an SVM using Accord.NET)
+    var decisionHistory = Enumerable.Range(0, 10).Select(x => x / 10d)
+        .SelectMany(x => Enumerable.Range(0, 10).Select(y => y / 10d).Select(y => new
+        {
+            StrategicValue = x,
+            ImmediateCustomerContribution = y,
+            Authorised = (x + y) > 1
+        }));
 
-	// From the data, extract the input features (strategic-value and amount-customer-will-
-	// pay-now)..
-	var inputs = decisionHistory
-		.Select(decision => new[]
-		{
-			decision.StrategicValue,
-			decision.ImmediateCustomerContribution
-		})
-		.ToArrary();
-		
-	// .. and the true/false outputs for each of those sets of features
-	var outputs = decisionHistory.Select(decision => decision.Authorised).ToArray();
+    // From the data, extract the input features (strategic-value and amount-customer-will-
+    // pay-now)..
+    var inputs = decisionHistory
+        .Select(decision => new[]
+        {
+            decision.StrategicValue,
+            decision.ImmediateCustomerContribution
+        })
+        .ToArrary();
 
-	// Then use the inputs and outputs to train an SVM
-	var smo = new SequentialMinimalOptimization<Linear>();
-	var svm = smo.Learn(inputs, outputs);
+    // .. and the true/false outputs for each of those sets of features
+    var outputs = decisionHistory.Select(decision => decision.Authorised).ToArray();
+
+    // Then use the inputs and outputs to train an SVM
+    var smo = new SequentialMinimalOptimization<Linear>();
+    var svm = smo.Learn(inputs, outputs);
 
 The **SequentialMinimalOptimization** defines the process by which it will be decided when the best match has been found for the data that it's been provided. We're specified that a linear kernel be used, which means that we're presuming that it will be possible to neatly classify our data with a straight line.
 
 Now that it's been trained, we can ask the SVM to predict an output by calling its "Decide" method and giving it a pair of values -
 
-	var easyWin = svm.Decide(new[] { 0.81, 0.79 });
-	
+    var easyWin = svm.Decide(new[] { 0.81, 0.79 });
+
 This returns true - which is what we would expect since the numbers indicate a feature that has high strategic value (0.81) *and* there are customers who want it so much *right now* that they are already getting their chequebooks out (the customer-will-immediately-pay value is 79%).
 
-	var lowPriority = svm.Decide(new[] { 0.26, 0.14 });
+    var lowPriority = svm.Decide(new[] { 0.26, 0.14 });
 
 This returns false - which we'd also expect, since the numbers indicate a feature of low strategic value and one that no customer is excited about contributing much towards the development cost of.
 
 Time for another gotcha. We saw earlier that a linear kernel is not always going to be capable of perfectly classifying the results in the training data. Sometimes you might need to use a non-linear kernel (or stick with a linear kernel but accept a lower accuracy). I didn't talk about what other kernel options there are (because it's not relevant to what I want to do here) but it was an important point that machine learning will sometimes need some external insight in order to be as effective as it can be. Another example of this is that sometimes you need to tweak the training parameters, depending upon the data that you're using. In the below example, I'm going to try to train an SVM in a very similar manner to what we just looked at, but with much less data -
 
-	var decisionHistory  = new[]
-	{
-		// Strategic wins
-		new { StrategicValue = 0.95, ImmediateCustomerContribution = 0.1, Authorised = true },
-		new { StrategicValue = 0.85, ImmediateCustomerContribution = 0.2, Authorised = true },
+    var decisionHistory  = new[]
+    {
+        // Strategic wins
+        new { StrategicValue = 0.95, ImmediateCustomerContribution = 0.1, Authorised = true },
+        new { StrategicValue = 0.85, ImmediateCustomerContribution = 0.2, Authorised = true },
 
-		// Customer wins
-		new { StrategicValue = 0.15, ImmediateCustomerContribution = 0.9, Authorised = true },
-		new { StrategicValue = 0.2, ImmediateCustomerContribution = 0.9, Authorised = true },
+        // Customer wins
+        new { StrategicValue = 0.15, ImmediateCustomerContribution = 0.9, Authorised = true },
+        new { StrategicValue = 0.2, ImmediateCustomerContribution = 0.9, Authorised = true },
 
-		// Everybody is happy
-		new { StrategicValue = 0.8, ImmediateCustomerContribution = 0.8, Authorised = true },
+        // Everybody is happy
+        new { StrategicValue = 0.8, ImmediateCustomerContribution = 0.8, Authorised = true },
 
-		// Low priority
-		new { StrategicValue = 0.2, ImmediateCustomerContribution = 0.1, Authorised = false },
-		new { StrategicValue = 0.4, ImmediateCustomerContribution = 0.2, Authorised = false }
-	};
+        // Low priority
+        new { StrategicValue = 0.2, ImmediateCustomerContribution = 0.1, Authorised = false },
+        new { StrategicValue = 0.4, ImmediateCustomerContribution = 0.2, Authorised = false }
+    };
 
-	var inputs = decisionHistory
-		.Select(decision => new[]
-		{
-			decision.StrategicValue,
-			decision.ImmediateCustomerContribution
-		})
-		.ToArrary();
-	
-	var outputs = decisionHistory.Select(decision => decision.Authorised).ToArray();
-	
-	var smo = new SequentialMinimalOptimization<Linear>();
-	var svm = smo.Learn(inputs, outputs);
+    var inputs = decisionHistory
+        .Select(decision => new[]
+        {
+            decision.StrategicValue,
+            decision.ImmediateCustomerContribution
+        })
+        .ToArrary();
+
+    var outputs = decisionHistory.Select(decision => decision.Authorised).ToArray();
+
+    var smo = new SequentialMinimalOptimization<Linear>();
+    var svm = smo.Learn(inputs, outputs);
 
 The training data is very similar to before in that all authorised decisions still have a feature sum of more than 1 and all rejected decisions have a sum of 1 or less. However, something seems to have gone wrong because when I ask the trained SVM what it thinks of the "lowPriority" example -
 
-	var lowPriority = svm.Decide(new[] { 0.26, 0.14 });
+    var lowPriority = svm.Decide(new[] { 0.26, 0.14 });
 
 .. it returns true! This is not what I want.
 
 The only way that this could happen is if the prediction model that has been generated is completely wonky somehow. To put this to the test, I'm going to use a mechanism that Accord has where you can double-check your trained SVM by running the training data back through it to see how well the prediction model managed to fit it. This can be useful in cases where you're not sure if the SVM kernel that you're using is appropriate, since it can highlight a badly-fitting model. To calculate the error rate when the training data is passed back through the SVM, do the following:
 
-	var predicted = svm.Decide(inputs);
-	var error = new ZeroOneLoss(outputs).Loss(predicted);
+    var predicted = svm.Decide(inputs);
+    var error = new ZeroOneLoss(outputs).Loss(predicted);
 
 This just uses the model to calculate a prediction for each of the inputs and then compares the results to the expected values (then it works out what proportion are incorrect). In this case, the error rate is 0.2857142857142857, which is 2/7. Looking at the predicted values (an array of bool), every value is true! This isn't right, the last two inputs (the "low priority" data points) should result in a false prediction. I guess that that explains why the "lowPriority" example returns true from this model - it seems to return for *everything*!
 
@@ -467,8 +467,8 @@ We know that a linear model *will* fit this data because we know that it's a str
 
 That description makes it sound like a bad thing to try increasing the complexity, I think I *want* a model that will generalise well. However, leaving the complexity at its default is clearly not working well for us in this case. So, I tried changing the **SequentialMinimalOptimization** initialisation to:
 
-	var smo = new SequentialMinimalOptimization<Linear> { Complexity = 10 };
-	
+    var smo = new SequentialMinimalOptimization<Linear> { Complexity = 10 };
+
 .. and re-running. This time, the predicted array precisely matched the output array, which means that the error rate is now zero. When I ask the new model to predict a value for the "lowPriority" features, it returns false - which is much better!
 
 I've only experienced this problem when working with small amounts of data. To train a face classification SVM, we're going to throw a lot of training data at it and so this shouldn't be a problem (there will be no need to fiddle with Complexity or any other settings). I only mention it now in case you decide to do a few experiments of your own and fall into the same trap that I did!
@@ -489,7 +489,7 @@ What I did in the end was download the "[Caltech 10,000 Web Faces](http://www.vi
 
 There's no exciting implementation details here. The "[CalTechWebFacesSvmTrainer](https://github.com/ProductiveRage/FacialRecognition/blob/master/FaceClassifier/CalTechWebFacesSvmTrainer.cs)" class is given a bunch of configuration options: path containing the CalTech web face images, path to the Ground Truth text file (which lists all of the face regions in the images), standard size of image to use to generate SVM inputs (128x128), block size for HOG generation (8), normaliser (the **OverlappingBlockwiseNormaliser** we saw earlier, with block size 2) and number of training images to process. These options will train an SVM on positive and negative images from the Caltech data set and the "TrainFromCaltechData" method will return an **IClassifyPotentialFaces** implementation, which wraps the SVM and exposes has a single method -
 
-	bool IsFace(Bitmap image);
+    bool IsFace(Bitmap image);
 
 Now, we can take the possible-face sub-images identified by the skin tone pass and pass them to "IsFace". This method will resize the specified Bitmap to the standard image size that the SVM requires, generate normalised HOG data from it and then query the SVM - which returns the final result; *is this or is this not a face?*
 
@@ -525,12 +525,12 @@ Once the SVM is trained, it is very quick at classifying. Which makes sense, sin
 
 Another reason that I haven't spent any time optimising the current code is that it might be wiser to spend time researching alternative algorithms. For example, Accord.NET has some support for face detection, such as the **FaceHaarCascade** class (which I believe is the same class of detector as the [Viola–Jones object detection framework](https://en.wikipedia.org/wiki/Viola%E2%80%93Jones_object_detection_framework)) -
 
-	Rectangle[] faceRegions;
-	using (var image = new Bitmap(path))
-	{
-		var detector = new HaarObjectDetector(new FaceHaarCascade());
-		faceRegions = detector.ProcessFrame(image);
-	}
+    Rectangle[] faceRegions;
+    using (var image = new Bitmap(path))
+    {
+        var detector = new HaarObjectDetector(new FaceHaarCascade());
+        faceRegions = detector.ProcessFrame(image);
+    }
 
 However, it gave poor results for my images. It seemed to do well with very small faces but struggled with  larger images (or the images where the faces took up a large proportion of the image). It's very possible that I could improve the accuracy by tweaking the parameters. If my images are too large, maybe they should just be shrunk down further before processing? That might help the false negative rate but I'm also concerned about the false positive rate and I'm not sure that shrinking the image first would help with that.
 

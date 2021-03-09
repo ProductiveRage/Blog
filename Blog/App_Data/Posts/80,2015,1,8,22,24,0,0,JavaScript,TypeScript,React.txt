@@ -172,7 +172,7 @@ So if there were classes for each action then the listening code would look more
     if (action instanceof DecreaseItemAction) {
       this._decreaseItem(action);
     }
-    
+
 I prefer to have the functions receive the actual action. The **AddItemAction** instance is passed to the "_addItem" function, for example, rather than just the "index" property value - eg.
 
     private _addItem(action: AddItemAction) {
@@ -263,7 +263,7 @@ and then an **AppDispatcher** of my own -
         }
       };
     } ());
-    
+
     // This is effectively a singleton reference, as seems to be the standard pattern for Flux
     export = appDispatcher;
 

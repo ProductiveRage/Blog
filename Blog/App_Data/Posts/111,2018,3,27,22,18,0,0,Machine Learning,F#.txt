@@ -69,7 +69,7 @@ The local error for a particular pattern is how far away the output of the netwo
 In order to adjust the weights after each pattern has been run through the network, a fairly simple equation is used - each new weight is calculated using:
 
     weight[i] = weight[i] + (learningRate * localError * patternInput[i])
-	
+
 For this network, there are only two inputs and so there will only be two values for "i".
 
 The "learning rate" is a value between 0 and 1 that determines how quickly the weights change as the network is trained. Clearly, a value of 0 would mean that the weights *don't* change each iteration, which would be useless. The larger the value of the learning rate, the more that the weights will be adjusted each iteration - however, larger is not always better because the adjustments may swing too far each time and, instead of slowing homing in on a well-trained network, the weights may alternate back and forth and never significantly improve. In the example code that I'm going to look at, I'm using a learning rate of 0.1\* but this is a value that you may wish to try playing with when experimenting with training - there seem to be many guidelines when it comes to machine learning and many sensible approaches to classes or problem but there aren't always hard and fast rules for all of the variables and there are often things to tweak here and there that may affect how quickly you get a result (or if you get one at all).
@@ -89,7 +89,7 @@ Using the training method described above, you will always get a line that cuts 
 A way to address this is to introduce an additional "bias" value. This is effectively like adding an additional neuron whose input value is always one and that has its own weight, just like every other input. Every time that a pattern is passed through the system while it is being trained, when the weights are adjusted, the bias should also be adjusted using the following formula:
 
     bias = bias + (learningRate * localError)
-	
+
 *(The formula is basically the same as the weight-adjusting formula except that the "patternInput[i]" value is removed because the bias neuron's input value is always 1)*
 
 This bias value means that the line that separates the yes/no values no longer has to go through (0, 0) but it has no other effect on training process, other than there being more slightly more work to do (although, without it, we wouldn't be able to get an answer for many sets of data - so it's not really *more* work at all!).
@@ -112,8 +112,8 @@ As an F# beginner, this is the approach that I've been using for trying to learn
 *(It's worth noting that, for me, getting my head around F# and functional programming is the priority. Much of the C# that we'll be looking will be doing in-place mutations - which, arguably, is a good model for doing the processing that we'll be looking at when it's done on a single thread - and since we'll be moving to using immutable structures then there is a good chance that the performance will be worse in the final F# code. If that turns out to be the case, though, then I'm not going to worry about it. I think that performance concerns are for when you have a better grasp of the technology that you're working with and I'm not there yet with F# - so I don't mind if I end up with worse-performing code in the context of this post so long as I've learned a lot from writing it!)*
 
     // Code slightly modified from that at
-	// http://www.robosoup.com/2008/09/the-single-layer-perceptron-c.html
-	public static class Perceptron
+    // http://www.robosoup.com/2008/09/the-single-layer-perceptron-c.html
+    public static class Perceptron
     {
       public static void Go(Random r)
       {
@@ -146,11 +146,11 @@ As an F# beginner, this is the approach that I've been using for trying to learn
           Pattern(0.52, 0.1, false), Pattern(0.65, 0.07, false), Pattern(0.71, 0.1, false),
           Pattern(0.74, 0.05, false)
         };
-      
+
         // Randomise weights
         var weights = new[] { r.NextDouble(), r.NextDouble() };
         var bias = 0d;
-      
+
         // Set learning rate
         var learningRate = 0.1;
         var iteration = 0;
@@ -186,12 +186,12 @@ As an F# beginner, this is the approach that I've been using for trying to learn
 
         Console.WriteLine();
         Console.WriteLine(
-		  $"Final weights: {weights[0]}, {weights[1]}, Bias: {bias} => Error: {globalError}"
-		);
+          $"Final weights: {weights[0]}, {weights[1]}, Bias: {bias} => Error: {globalError}"
+        );
 
         // Display network generalisation (note: the "Manager Decision" data has input values that
-		// are all in the range 0-1 in both dimensions and so we will only look at values in this
-		// range in this preview here)
+        // are all in the range 0-1 in both dimensions and so we will only look at values in this
+        // range in this preview here)
         Console.WriteLine();
         Console.WriteLine("X,\tY,\tOutput");
         for (double x = 0; x <= 1; x += .25)
@@ -217,7 +217,7 @@ As an F# beginner, this is the approach that I've been using for trying to learn
         return Tuple.Create(new[] { x, y }, output);
       }
     }
-	
+
 This code is fairly straightforward and it goes through the steps that I described before:
 
 1. Set weights to be random values and the bias to be zero
@@ -238,10 +238,10 @@ I suppose the question, then, is *how* can we possibly write code like this *wit
 
 The first thing to recognise is that LINQ made a more functional style of processing much more mainstream within C# and seem less alien. Before LINQ, if you had an array of values and you wanted an array containing the squares of these values (contrived example, I know, but bear with me) then you may well have achieved this in a fairly procedural manner - eg.
 
-	var values = new[] { 1, 2, 3 };
-	var squaredValues = new int[values.Length];
-	for (var i = 0; i < values.Length; i++)
-	  squaredValues[i] = values[i] * values[i];
+    var values = new[] { 1, 2, 3 };
+    var squaredValues = new int[values.Length];
+    for (var i = 0; i < values.Length; i++)
+      squaredValues[i] = values[i] * values[i];
 
 Each time the loop is executed, the value of "i" changes and the "squareValues" array is updated.
 
@@ -251,10 +251,10 @@ Within the loop, it's technically possible to change the value of "i" and move i
 
 Since all we want to do is transform every single value in one array and create a new array from the results, it would be nice if we could be more descriptive in what we are trying to do and to remove some "book keeping" (such as tracking the "i" value using the for loop). This is what would happen if LINQ was used to perform the same work -
 
-	var values = new[] { 1, 2, 3 };
-	var squaredValues = values
-	  .Select(value => value * value)
-	  .ToArray();
+    var values = new[] { 1, 2, 3 };
+    var squaredValues = values
+      .Select(value => value * value)
+      .ToArray();
 
 Note that there is no mutation occurring here. Each time that the lambda that is passed to the "Select" method is called, a new "value" reference is created (unlike "i", which was a single variable shared across each iteration of the loop).
 
@@ -301,8 +301,8 @@ At its core, this means that the scope of variables is reduced and when they don
 
 I'm finding that the F# version of Aggregate (called "fold") is a very powerful and useful technique and so having a good grasp on how it works is very useful. Just to make it *extra* clear (apologies if this is belabouring the point but Aggregate doesn't, in my experience, tend to be commonly used in C# and so it may not be familiar to some), here's another example:
 
-	var values = new[] { 1, 2, 3, 4, 5 };
-	var sumOfValues = words.Aggregate(
+    var values = new[] { 1, 2, 3, 4, 5 };
+    var sumOfValues = words.Aggregate(
       seed: 0,
       func: (valueSoFar, value) => valueSoFar + value
     );
@@ -311,8 +311,8 @@ This will return 15 because it will just add all of the values together. It begi
 
 Not a particularly useful piece of code - and one that could have been written more clearly as:
 
-	var values = new[] { 1, 2, 3, 4, 5 };
-	var sumOfValues = words.Sum();
+    var values = new[] { 1, 2, 3, 4, 5 };
+    var sumOfValues = words.Sum();
 
 .. but hopefully it reinforces how the Aggregate method operates on data. And hopefully it makes it clear how powerful Aggregate can be because so many other operations may be built on top of it, such as Min or Max -
 
@@ -321,8 +321,8 @@ Not a particularly useful piece of code - and one that could have been written m
       return values.Aggregate(
         seed: (int?)null,
         func: (valueSoFar, nextValue) => (valueSoFar.HasValue && valueSoFar < nextValue)
-		  ? valueSoFar
-		  : nextValue
+          ? valueSoFar
+          : nextValue
       );
     }
 
@@ -331,8 +331,8 @@ Not a particularly useful piece of code - and one that could have been written m
       return values.Aggregate(
         seed: (int?)null,
         func: (valueSoFar, nextValue) => (valueSoFar.HasValue && valueSoFar > nextValue)
-		  ? valueSoFar
-		  : nextValue
+          ? valueSoFar
+          : nextValue
       );
     }
 
@@ -378,7 +378,7 @@ The input list passed to Aggregate will be an incrementing list of integers repr
             if (localError != 0)
             {
               // Update weights (taking a copy of the weights array rather than altering its values)
-			  weights = weights.ToArray();
+              weights = weights.ToArray();
               for (var i = 0; i < 2; i++)
               {
                 weights[i] += learningRate * localError * inputs[i];
@@ -406,15 +406,15 @@ What would be really helpful would be if we could have a variation of Aggregate 
       .AggregateAndReturnIntermediateStates(
         seed: new
         {
-		  // Same as in earlier code sample..
+          // Same as in earlier code sample..
         },
         func: (previousState, iteration) =>
         {
-		  // Same as in earlier code sample but without the need to check GlobalError..
+          // Same as in earlier code sample but without the need to check GlobalError..
         }
       )
-	  .First(state => state.GlobalError == 0);
-	  
+      .First(state => state.GlobalError == 0);
+
 I searched through the LINQ and the F# library documentation and I couldn't find anything in LINQ that I could use to do this but I *did* find something in F# called "scan". To implement it as a LINQ-esque C# extension method, though, is simple. If we start by considering what an implementation of Aggregate would look like:
 
     public static TAccumulate Aggregate<TSource, TAccumulate>(
@@ -427,7 +427,7 @@ I searched through the LINQ and the F# library documentation and I couldn't find
         valueSoFar = func(valueSoFar, value);
       return valueSoFar;
     }
-	
+
 .. we need only to change the return type from **TAccumulate** to **IEnumerable&lt;TAccumulate&gt;** and to throw in some "yield return" magic to produce "Scan":
 
     public static IEnumerable<TAccumulate> Scan<TSource, TAccumulate>(
@@ -446,23 +446,23 @@ I searched through the LINQ and the F# library documentation and I couldn't find
     }
 
 This means that I can now write:
-	  
+
     const double learningRate = 0.1;
 
     var finalResult = Enumerable.Range(0, int.MaxValue)
       .Scan(
         seed: new
         {
-		  // Same as in earlier code sample..
+          // Same as in earlier code sample..
         },
         func: (previousState, iteration) =>
         {
-		  // Same as in earlier code sample (but still without the need to check GlobalError)..
+          // Same as in earlier code sample (but still without the need to check GlobalError)..
         }
       )
-	  .First(state => state.GlobalError == 0);	  
-	  
-Hurrah! That's a good step forward! 
+      .First(state => state.GlobalError == 0);
+
+Hurrah! That's a good step forward!
 
 Now I need to tackle the inner section:
 
@@ -471,28 +471,28 @@ Now I need to tackle the inner section:
     var globalError = 0d;
     for (var p = 0; p < trainingData.Length; p++)
     {
-	  // Calculate output
-	  var inputs = trainingData[p].Item1;
-	  var output = Output(weights, bias, inputs[0], inputs[1]) ? 1 : -1;
+      // Calculate output
+      var inputs = trainingData[p].Item1;
+      var output = Output(weights, bias, inputs[0], inputs[1]) ? 1 : -1;
 
-	  // Calculate error
-	  var expected = trainingData[p].Item2;
-	  var localError = (expected ? 1 : -1) - output;
-	  if (localError != 0)
-	  {
-	    // Update weights (taking a copy of the weights array rather than altering its values)
-	    weights = weights.ToArray();
-	    for (var i = 0; i < 2; i++)
-	    {
-		  weights[i] += learningRate * localError * inputs[i];
-	    }
-	    bias += learningRate * localError;
-	  }
+      // Calculate error
+      var expected = trainingData[p].Item2;
+      var localError = (expected ? 1 : -1) - output;
+      if (localError != 0)
+      {
+        // Update weights (taking a copy of the weights array rather than altering its values)
+        weights = weights.ToArray();
+        for (var i = 0; i < 2; i++)
+        {
+          weights[i] += learningRate * localError * inputs[i];
+        }
+        bias += learningRate * localError;
+      }
 
-	  // Convert error to absolute value
-	  globalError += Math.Abs(localError);
+      // Convert error to absolute value
+      globalError += Math.Abs(localError);
     }
-	
+
     Console.WriteLine("Iteration {0}\tError {1}", iteration, globalError);
     return new { Weights = weights, Bias = bias, GlobalError = globalError };
 
@@ -500,18 +500,18 @@ I'm going to start from the inside and work outward this time. The first thing t
 
 This is just what the "[Zip](https://msdn.microsoft.com/en-us/library/dd267698(v=vs.110).aspx)" LINQ function does and so we can use that here. We'll replace:
 
-	// Update weights (taking a copy of the weights array rather than altering its values)
-	weights = weights.ToArray();
-	for (var i = 0; i < 2; i++)
-	{
-	  weights[i] += learningRate * localError * inputs[i];
-	}
+    // Update weights (taking a copy of the weights array rather than altering its values)
+    weights = weights.ToArray();
+    for (var i = 0; i < 2; i++)
+    {
+      weights[i] += learningRate * localError * inputs[i];
+    }
 
 .. with this:
 
-	weights
-	  .Zip(inputs, (weight, input) => weight + (learningRate * localError * input))
-	  .ToArray();
+    weights
+      .Zip(inputs, (weight, input) => weight + (learningRate * localError * input))
+      .ToArray();
 
 To maker the "inner section" simpler, I'm going to hide that logic into a function:
 
@@ -534,8 +534,8 @@ The next thing to do is to get rid of the other for-loop and the values that it 
     var globalError = 0d;
     for (var p = 0; p < trainingData.Length; p++)
     {
-	  // Apply current pattern and alter weights, bias and globalError accordingly..
-	}
+      // Apply current pattern and alter weights, bias and globalError accordingly..
+    }
 
 If we group the "weights / bias / globalError" values into a single value then we can replace this with an Aggregate call, like we saw earlier:
 
@@ -543,28 +543,28 @@ If we group the "weights / bias / globalError" values into a single value then w
       seed: new { Weights = previousState.Weights, Bias = previousState.Bias, GlobalError = 0d },
       func: (stateSoFar, pattern) =>
       {
-	    // Apply current pattern and calculate new weights, bias and globalError values..
-		
-		// .. and return new object wrapping these values
-		return new { Weights = newWeights, Bias = newBias, GlobalError = newGlobalError },
+        // Apply current pattern and calculate new weights, bias and globalError values..
+
+        // .. and return new object wrapping these values
+        return new { Weights = newWeights, Bias = newBias, GlobalError = newGlobalError },
       }
     );
 
 Before I pull it all together, I want to make a small change to the "Output" function - the current version only works if there are precisely two inputs and two weights but the "UpdateWeights" function from a moment ago works with any number of inputs and so I think that "Output" should too. So we'll replace this:
 
-	private static bool Output(double[] weights, double bias, double x, double y)
-	{
-	  var sum = (x * weights[0]) + (y * weights[1]) + bias;
-	  return (sum >= 0);
-	}
+    private static bool Output(double[] weights, double bias, double x, double y)
+    {
+      var sum = (x * weights[0]) + (y * weights[1]) + bias;
+      return (sum >= 0);
+    }
 
 .. with this:
 
-	private static bool Output(double[] weights, double bias, double[] inputs)
-	{
-	  var sum = inputs.Zip(weights, (input, weight) => input * weight).Sum() + bias;
-	  return (sum >= 0);
-	}
+    private static bool Output(double[] weights, double bias, double[] inputs)
+    {
+      var sum = inputs.Zip(weights, (input, weight) => input * weight).Sum() + bias;
+      return (sum >= 0);
+    }
 
 *(Note that using "Zip" again means that we don't have to resort to any for loops)*
 
@@ -612,18 +612,18 @@ The final piece of the puzzle is to change the "Display network generalisation" 
         Console.WriteLine("{0},\t{1},\t{2}", x, y, output ? "Yes" : "No");
       }
     }
-	
+
 The natural thing would seem to be to replace those loops with Enumerable.Range calls.. however, "Range" only works **int** values and we need to use **double** in order to increment by 0.25 each time. We could write a new "Range" extension method that would take **double** values or we could just workaround the limitation. If we want the values 0, 0.25, 0.5, 0.75, 1 then that's five distinct values. The number of items may be calculated by taking the end value, subtracting the start value, dividing by the increment and then adding one (to ensure that we get the start value *and* the end value).
 
 In this case, that would be ((1 - 0) / 0.25) + 1 = 4 + 1 = 5.
 
 We can do that in code like this:
-	
-	const double startAt = 0;
-	const double endAt = 1;
-	const double increment = 0.25;
-	var range = Enumerable.Range(0, (int)((endAt - startAt) / increment) + 1)
-	  .Select(value => value * increment);
+
+    const double startAt = 0;
+    const double endAt = 1;
+    const double increment = 0.25;
+    var range = Enumerable.Range(0, (int)((endAt - startAt) / increment) + 1)
+      .Select(value => value * increment);
 
 We then want to "cross join" range with itself so that we loop through every (x, y) combination. We can do that with creative use of "SelectMany" -
 
@@ -631,11 +631,11 @@ We then want to "cross join" range with itself so that we loop through every (x,
 
 And now that nested for-loop may be replaced by this:
 
-	const double startAt = 0;
-	const double endAt = 1;
-	const double increment = 0.25;
-	var range = Enumerable.Range(0, (int)((endAt - startAt) / increment) + 1)
-	  .Select(value => value * increment);
+    const double startAt = 0;
+    const double endAt = 1;
+    const double increment = 0.25;
+    var range = Enumerable.Range(0, (int)((endAt - startAt) / increment) + 1)
+      .Select(value => value * increment);
     var xyPairs = range.SelectMany(value => range, (x, y) => new[] { x, y });
     Console.WriteLine(string.Join(
       Environment.NewLine,

@@ -1,8 +1,8 @@
-﻿## Caching Mechanisms
+## Caching Mechanisms
 
 I've been tinkering with some data caching recently and thinking about various method of cache invalidation, particularly since I've made some changes recently at work to more intelligently detect expired cached data rather than just waiting for it to fall out of a cache after a particular (and usually arbitrary) period of time.
 
-> There are two hard things in computer science: cache invalidation, naming things, and off-by-one errors 
+> There are two hard things in computer science: cache invalidation, naming things, and off-by-one errors
 
 (Quoted in various places, amongst which [http://martinfowler.com/bliki/TwoHardThings.html](http://martinfowler.com/bliki/TwoHardThings.html)).
 
@@ -256,7 +256,7 @@ This is where the difficulty with cache invalidation comes in, determining when 
 
 In this example (loading Config Details), the content is expected to come from a single source - if a single file then we can easily determine whether the cached data is current by recording alongside the cached data the date at which the source file was last modified; if the source file's last-modified date matches that stored with the cached data then the cached data is still current. If the source file's last-modified date has changed since the cached data was recorded then the source file has (probably) changed.
 
-A more complicated example is the caching available in my [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier) project. The code will load in stylesheets and flatten any @imports into a single file and minify the content (amongst many other things). The recommended configuration is to use the **SameFolderImportFlatteningCssLoader** which will flatten @imports but only if they references files in the same folder as the stylesheet that contains the @import. This limitation is a trade-off between the convenience of organising imported stylesheets across multiple folders and being able to easily determine whether content may have changed since the CSS processing occured; if all of the files must come from the same folder then the last-modified date for the cached entry can be taken as the most recent last-modified date from any file in that location. If any of those files is altered - and so gets assigned a later last-modified date - then the date stored with the cached data will no longer match it and the cached data can be considered out-of-date. It's possible that a file in that location could be changed that isn't one of the imported files for a given stylesheet request, meaning that cached data gets identified as expired when it hasn't been but the alternative would be following all of the import declarations and, again, a lot of the performance benefits of caching data 	are negated by having to do a lot of work to determine whether the cached data is still valid.
+A more complicated example is the caching available in my [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier) project. The code will load in stylesheets and flatten any @imports into a single file and minify the content (amongst many other things). The recommended configuration is to use the **SameFolderImportFlatteningCssLoader** which will flatten @imports but only if they references files in the same folder as the stylesheet that contains the @import. This limitation is a trade-off between the convenience of organising imported stylesheets across multiple folders and being able to easily determine whether content may have changed since the CSS processing occured; if all of the files must come from the same folder then the last-modified date for the cached entry can be taken as the most recent last-modified date from any file in that location. If any of those files is altered - and so gets assigned a later last-modified date - then the date stored with the cached data will no longer match it and the cached data can be considered out-of-date. It's possible that a file in that location could be changed that isn't one of the imported files for a given stylesheet request, meaning that cached data gets identified as expired when it hasn't been but the alternative would be following all of the import declarations and, again, a lot of the performance benefits of caching data     are negated by having to do a lot of work to determine whether the cached data is still valid.
 
 Returning to loading in these Config Details.. we can quite easily alter the caching mechanism to check the last-modified date of the source file before returning any cached data - and ejecting the entry from the cache if it's out of date. This means that each time that cached data is returned then there is overhead of a file IO call to check the source file's last-modified date, but this should be a reasonable trade-off when the alternative is reading the file fresh and processing its contents on each request.
 
@@ -471,7 +471,7 @@ Thusly..
 
         /// <summary>
         /// The default manner in which background work is performed is to queue up the work through
-        /// the Threadpool but this be can overridden by using the constructor that takes the 
+        /// the Threadpool but this be can overridden by using the constructor that takes the
         /// backgroundWorkExecuter argument
         /// </summary>
         public static Action<Action> ThreadPoolBackgroundWorkExecuter

@@ -1,4 +1,4 @@
-﻿## The Full Text Indexer
+## The Full Text Indexer
 
 I started out on a journey a few months ago being frustrated by the [Lucene.net](http://incubator.apache.org/lucene.net/) integration we had with one of our products at work (I'm not badmouthing the Lucene project, I'm wholeheartedly blaming the integration I inherited!) and wondering just how difficult it would be to write a Full Text Indexer which could analyse generic content and generate some form of structure which could look up strings and assign weights to the source material, offering the best matches.
 
@@ -8,10 +8,10 @@ Before I say any more, this was written to deal with the search tasks I needed a
 
 Here's a really basic example that would analyse data from:
 
-    public interface IArticle 
+    public interface IArticle
     {
         int Id { get; }
-        
+
         /// <summary>
         /// This will never be null or blank
         /// </summary>
@@ -81,7 +81,7 @@ by defining **"Content Retrievers"** (which extract sections of keyed content; m
                     new NullLogger()
                 );
             }
-        
+
             private class IntEqualityComparer : IEqualityComparer<int>
             {
                 public bool Equals(int x, int y) { return (x == y); }
@@ -138,11 +138,11 @@ With the above configuration, only single words would yield results when GetMatc
     /// caller - if the match combiner returns zero then the result will not be included in the
     /// final data. To require that all tokens in the source content be present for any returned
     /// results, the following matchCombiner could be specified:
-    /// 
+    ///
     ///  (tokenMatches, allTokens) =>
     ///    (tokenMatches.Count < allTokens.Count)
     ///      ? 0 : tokenMatches.SelectMany(m => m.Weights).Sum()
-    /// 
+    ///
     /// </summary>
     public static NonNullImmutableList<WeightedEntry<TKey>> GetPartialMatches<TKey>(
         this IIndexData<TKey> index,

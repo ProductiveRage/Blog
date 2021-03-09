@@ -1,4 +1,4 @@
-﻿## Persistent Immutable Lists
+## Persistent Immutable Lists
 
 I've written before about immutable data structures (I'm all for them; see [I love Immutable Data](Post1) and [Problems in Immutability-land](Post2)) but watching a talk recently by Clojure-creator Rich Hickey made me think about one particular area again recently. In that first post I put up some example cost for an Immutable List that wrapped the .Net List&lt;T&gt; class - this was very simple to implement and understand, and in many cases I was using the immutable class as a return type or a method argument which meant that the instance would be built once and futher manipulations would be limited. This meant that I wasn't too concerned with internally creating a new list instance each time a new immutable instance was required and copying the references over.
 
@@ -18,7 +18,7 @@ An int list with a single item would have a head node of the form
 
 where the value of the item is 1 and there is no next node.
 
-An int list with two items could be illustrated as 
+An int list with two items could be illustrated as
 
     { 1, { 2, null } }
 
@@ -145,7 +145,7 @@ This example *only* exposes an InsertAtStart method as a manner in which to alte
     {
         if (_head == null)
             throw new InvalidOperationException("The list is empty");
-            
+
         return new SimplePersistentImmutableList<T>(
             _head.Next
         );

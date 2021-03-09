@@ -36,7 +36,7 @@ and translate it into JavaScript (this deals with creating a class, derives it "
     HelloMessage.prototype = Object.create(____SuperProtoOf____Class1);
     HelloMessage.prototype.constructor = HelloMessage;
     HelloMessage.__superConstructor__ = ____Class1;
-    
+
     function HelloMessage() {
       "use strict";
       if (____Class1 !== null) {
@@ -156,7 +156,7 @@ So now we can write this:
     }
 
     export = Factory;
-    
+
 Note that we are able to specify a type param for "React.Component" and, when you edit this in TypeScript, "this.props" is correctly identified as being of that type.
 
 **Update (16th March 2015):** If you are using the DefinitelyTyped definitions then you need to specify both "Props" *and* "State" type params (I recommend that Component State never be used and that it always be specified as "{}", but that's out of the scope of this post) - ie.
@@ -204,8 +204,8 @@ I do love it when the compiler can pick up on your silly mistakes!
         container: Element,
         callback?: () => any
     ): Component<P, S>
-        
-but the meaning is much the same.        
+
+but the meaning is much the same.
 
 ### Migration plan
 

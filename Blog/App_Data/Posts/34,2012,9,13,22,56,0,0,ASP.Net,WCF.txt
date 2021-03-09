@@ -1,4 +1,4 @@
-﻿## Ramping up WCF Web Service Request Handling.. on IIS 6 with .Net 4.0
+## Ramping up WCF Web Service Request Handling.. on IIS 6 with .Net 4.0
 
 It's got to the point with a Web Service I'm developing at work to run it through some stress tests and try to work out what kind of load we can handle with the hardware we have in mind for its hosting environment. We also have an arbitrary concept of the load we'd *like* it to be able to handle, so we need to see if the hardware solution we have in mind is even in the right ballpark.
 
@@ -73,7 +73,7 @@ This blog post was a lifesaver: [IIS Compression in IIS6.0](http://weblogs.asp.n
 
 To summarise:
 
-1. In the IIS Admin tool you need to right-click on "Web Sites", click "Service" and click "Compress application files" (we don't care about static content for this particular change, and the temporary disk location is only required for static content - "application files" are always compressed on the fly). 
+1. In the IIS Admin tool you need to right-click on "Web Sites", click "Service" and click "Compress application files" (we don't care about static content for this particular change, and the temporary disk location is only required for static content - "application files" are always compressed on the fly).
 1. Open the IIS MetaBase file in notepad (C:\WINDOWS\system32\inetsrv\MetaBase.xml, take a backup first - getting this wrong is going to cause problems!) and search for the string "IIsCompressionScheme"; include the "svc" extension into the "HcScriptFileExtensions" section (being careful to maintain the same formatting when inserting the new extension) and then setting "HcDynamicCompressionLevel" to "9" (see that blog post for more information)
 1. Ensure that any software on the server that may try to process the requests is disabled for the "svc" extension (we have something call "IISXpress" on our Web Servers which is supposed to help with compression but which I couldn't get to work!)
 1. Restart IIS

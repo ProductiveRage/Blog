@@ -372,7 +372,7 @@ But these are issues to address another time :)
 
 ### Footnote: WSC properties and "dynamic"
 
-The code here doesn't use the .Net 4.0 "dynamic" keyword and so will compile under .Net 2.0. I had a bit of a poke around in the IL generated that makes use of dynamic since in some situations it should offer benefits - often performance is one such benefit! However, in the particularly niche scenario I'm working with it refuses to work :( Most of the components I'm wrapping are legacy VBScript WSCs and trying to set properties on these seems to fail when using dynamic. 
+The code here doesn't use the .Net 4.0 "dynamic" keyword and so will compile under .Net 2.0. I had a bit of a poke around in the IL generated that makes use of dynamic since in some situations it should offer benefits - often performance is one such benefit! However, in the particularly niche scenario I'm working with it refuses to work :( Most of the components I'm wrapping are legacy VBScript WSCs and trying to set properties on these seems to fail when using dynamic.
 
 I've pulled this example from a test (in xUnit) I wrote to illustrate that there were issues ..
 

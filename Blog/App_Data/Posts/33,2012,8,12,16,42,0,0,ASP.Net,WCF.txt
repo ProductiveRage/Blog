@@ -1,4 +1,4 @@
-﻿## Dependency Injection with a WCF Service
+## Dependency Injection with a WCF Service
 
 Following recently discovering how easy it is to implement Dependency Injection into ASP.Net MVC Controllers by rolling my own ControllerFactory I wanted to see if the same sort of thing could be done for some Web Services I'm working on - I've never seen any production code that does it but seemed like the sort of thing that should be possible!
 
@@ -118,7 +118,7 @@ Example code may make this clearer!
                     ContractDescription contractDescription,
                     ServiceEndpoint endpoint,
                     BindingParameterCollection bindingParameters) { }
-            
+
                 public void ApplyClientBehavior(
                     ContractDescription contractDescription,
                     ServiceEndpoint endpoint,

@@ -1,4 +1,4 @@
-﻿## WCF with JSON (and nullable types)
+## WCF with JSON (and nullable types)
 
 I wanted to try putting together a WCF Service that would return JSON. With its configurable nature, I've heard before that it's not that big of a deal to do this.. and truth be told, it's not *that* awkward to do but it took me a while to find all the right hoops to jump through! (Another time, I might consider trying to put together a RESTful API using MVC and the JsonResult type unless there was some need to support multiple response types, such as XML *and* JSON).
 

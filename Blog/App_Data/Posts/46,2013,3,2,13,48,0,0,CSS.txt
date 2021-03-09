@@ -1,4 +1,4 @@
-﻿## Non-cascading CSS: The follow-up
+## Non-cascading CSS: The follow-up
 
 This is related to the post [Non-cascading CSS: A revolution](Post42). In that I talked about 9 proposed rules to write genuinely reusable and maintainable CSS (inspired by [www.lispcast.com/cascading-separation-abstraction](http://www.lispcast.com/cascading-separation-abstraction)):
 

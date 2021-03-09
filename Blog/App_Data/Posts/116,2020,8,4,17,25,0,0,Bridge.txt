@@ -7,25 +7,25 @@ In my case it's because I have a [Shared Project](https://dev.to/rionmonster/sha
 Json.NET has support for customising how the type names are emitted and there is an answer in the Stack Overflow question that I linked just above that points to an [article](http://james.newtonking.com/archive/2011/11/19/json-net-4-0-release-4-bug-fixes) written by the Json.NET author illustrating how to do it. Essentially, you create a custom serialization binder that looks a bit like this:
 
     public sealed class TypeNameAssemblyExcludingSerializationBinder : ISerializationBinder
-	{
-		public static TypeNameAssemblyExcludingSerializationBinder Instance { get; }
-			= new TypeNameAssemblyExcludingSerializationBinder();
-        
-		private TypeNameAssemblyExcludingSerializationBinder() { }
+    {
+        public static TypeNameAssemblyExcludingSerializationBinder Instance { get; }
+            = new TypeNameAssemblyExcludingSerializationBinder();
 
-		public void BindToName(Type serializedType, out string assemblyName, out string typeName)
-		{
-			assemblyName = null;
-			typeName = serializedType.FullName;
-		}
+        private TypeNameAssemblyExcludingSerializationBinder() { }
 
-		public Type BindToType(string assemblyName, string typeName)
-		{
-			// Note: Some additional work may be required here if the assembly name has been removed
-			// and you are not loading a type from the current assembly or one of the core libraries
-			return Type.GetType(typeName);
-		}
-	}
+        public void BindToName(Type serializedType, out string assemblyName, out string typeName)
+        {
+            assemblyName = null;
+            typeName = serializedType.FullName;
+        }
+
+        public Type BindToType(string assemblyName, string typeName)
+        {
+            // Note: Some additional work may be required here if the assembly name has been removed
+            // and you are not loading a type from the current assembly or one of the core libraries
+            return Type.GetType(typeName);
+        }
+    }
 
 Then you serialise your content something like this:
 
@@ -33,7 +33,7 @@ Then you serialise your content something like this:
         new ExampleClass(123, "Test"),
         new JsonSerializerSettings
         {
-			Formatting = Formatting.Indented,
+            Formatting = Formatting.Indented,
             TypeNameHandling = TypeNameHandling.All,
             SerializationBinder = TypeNameAssemblyExcludingSerializationBinder.Instance
         }
@@ -51,23 +51,23 @@ If the **ExampleClass** looked like this:
         public int Key { get; }
         public string Name { get; }
     }
-	
+
 .. and was in a namespace called "Tester" then the resulting JSON would look like this:
 
-	{
-	  "$type": "Tester.ExampleClass",
-	  "Key": 123,
-	  "Name": "Test"
-	}
-	
+    {
+      "$type": "Tester.ExampleClass",
+      "Key": 123,
+      "Name": "Test"
+    }
+
 To make the difference clear, if the custom serialisation binder had not been used (and if the containing assembly was also called "Tester") then the JSON would have looked like this:
 
-	{
-	  "$type": "Tester.ExampleClass, Tester",
-	  "Key": 123,
-	  "Name": "Test"
-	}
-	
+    {
+      "$type": "Tester.ExampleClass, Tester",
+      "Key": 123,
+      "Name": "Test"
+    }
+
 So.. problem solved!
 
 Yes?
@@ -82,7 +82,7 @@ While everything was hunkydory in the example above, there are cases where it is
         new List<ExampleClass> { new ExampleClass(123, "Test") },
         new JsonSerializerSettings
         {
-			Formatting = Formatting.Indented,
+            Formatting = Formatting.Indented,
             TypeNameHandling = TypeNameHandling.All,
             SerializationBinder = TypeNameAssemblyExcludingSerializationBinder.Instance
         }
@@ -90,29 +90,29 @@ While everything was hunkydory in the example above, there are cases where it is
 
 .. and the resulting JSON would look like this:
 
-	{
-	  "$type": "System.Collections.Generic.List`1[[Tester.ExampleClass, Tester]]",
-	  "$values": [
-		{
-		  "$type": "Tester.ExampleClass",
-		  "Key": 123,
-		  "Name": "Test"
-		}
-	  ]
-	}
+    {
+      "$type": "System.Collections.Generic.List`1[[Tester.ExampleClass, Tester]]",
+      "$values": [
+        {
+          "$type": "Tester.ExampleClass",
+          "Key": 123,
+          "Name": "Test"
+        }
+      ]
+    }
 
 Without the custom serialisation binder, it would have looked like this:
 
-	{
-	  "$type": "System.Collections.Generic.List`1[[Tester.ExampleClass, Tester]], System.Private.CoreLib",
-	  "$values": [
-		{
-		  "$type": "Tester.ExampleClass, Tester",
-		  "Key": 123,
-		  "Name": "Test"
-		}
-	  ]
-	}
+    {
+      "$type": "System.Collections.Generic.List`1[[Tester.ExampleClass, Tester]], System.Private.CoreLib",
+      "$values": [
+        {
+          "$type": "Tester.ExampleClass, Tester",
+          "Key": 123,
+          "Name": "Test"
+        }
+      ]
+    }
 
 .. and so we've successfully removed *some* of the assembly names as there is no mention of "System.Private.CoreLib" in the List's type and the $type string for the **ExampleClass** instance no longer mentions the "Tester" assembly name but the generic type of the List *does* mention the "Tester" assembly name and we were trying to prevent assembly names from appearing in the type data!
 
@@ -127,8 +127,8 @@ I've had a good Google around this and there doesn't seem to be a definitive ans
         public void BindToName(Type serializedType, out string assemblyName, out string typeName)
         {
             // Note: Setting the assemblyName to null here will only remove it from the main type itself -
-			// it won't remove it from any types specified as generic type parameters (that's what the
-			// RemoveAssemblyNames method is needed for)
+            // it won't remove it from any types specified as generic type parameters (that's what the
+            // RemoveAssemblyNames method is needed for)
             assemblyName = null;
             typeName = RemoveAssemblyNames(serializedType.FullName);
         }
@@ -136,7 +136,7 @@ I've had a good Google around this and there doesn't seem to be a definitive ans
         public Type BindToType(string assemblyName, string typeName)
         {
             // Note: Some additional work may be required here if the assembly name has been removed
-        	// and you are not loading a type from the current assembly or one of the core libraries
+            // and you are not loading a type from the current assembly or one of the core libraries
             return Type.GetType(typeName);
         }
 
@@ -154,13 +154,13 @@ I've had a good Google around this and there doesn't seem to be a definitive ans
                 //   "System.Int32, System.Private.CoreLib"
                 //
                 // .. then we want to look for the comma that separates the type name from the assembly
-				// information and ignore that content. If we started inside nested generic type content
-				// - eg.
+                // information and ignore that content. If we started inside nested generic type content
+                // - eg.
                 //
                 //  "[System.Int32, System.Private.CoreLib], [System.String, System.Private.CoreLib]"
                 //
                 // .. then we do NOT want to start ignoring content after any commas encountered. So
-				// it's important to know here which case we're in.
+                // it's important to know here which case we're in.
                 var insideTypeName = typeName[index] != '[';
 
                 var ignoreContent = false;
@@ -185,9 +185,9 @@ I've had a good Google around this and there doesn't seem to be a definitive ans
                         if (ignoreContent)
                         {
                             // If we encountered a comma that indicated that we were about to start
-							// an assembly name then we'll have stopped adding content to the string
-							// builder but we don't want to lose this closing brace, so explicitly
-							// add it in if that's the case
+                            // an assembly name then we'll have stopped adding content to the string
+                            // builder but we don't want to lose this closing brace, so explicitly
+                            // add it in if that's the case
                             content.Append(c);
                         }
                         break;

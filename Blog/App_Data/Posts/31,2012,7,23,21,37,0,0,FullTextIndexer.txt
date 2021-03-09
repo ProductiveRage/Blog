@@ -1,4 +1,4 @@
-﻿## The Full Text Indexer - Adding and Subtracting
+## The Full Text Indexer - Adding and Subtracting
 
 The [Full Text Indexer](Post30) that I talked about last time took a definition for an Index Generator for a specific TSource type and produced an IndexData instance, using that generator, for a TSource set.
 
@@ -141,7 +141,7 @@ Instead of instantiating an IndexGenerator directly we're going to use the Index
     };
     var index = indexBuilder.UpdateIndex(new NonNullImmutableList<IArticle>(articles));
 
-The source data types are not very interesting and are here only for completeness of the example, to be honest! 
+The source data types are not very interesting and are here only for completeness of the example, to be honest!
 
     public class Article : IArticle
     {
@@ -161,7 +161,7 @@ The source data types are not very interesting and are here only for completenes
         public int Id { get; private set; }
 
         public DateTime LastModified { get; private set; }
-            
+
         /// <summary>
         /// This will never be null or blank
         /// </summary>
@@ -322,7 +322,7 @@ And finally (_finally!_) the IndexBuilder itself. The constructor takes up a chu
                         group => group.Max(summary => summary.LastModified),
                         _keyComparer
                     );
-            
+
                 lock (_writeLock)
                 {
                     // No source data, so just generate an empty index
@@ -367,7 +367,7 @@ And finally (_finally!_) the IndexBuilder itself. The constructor takes up a chu
                         // If there are no actions to take then don't do any work!
                         return _index;
                     }
-                
+
                     // Prepare the new data to insert
                     var indexDataToUpdate = _indexGenerator.Generate(
                         values
@@ -378,7 +378,7 @@ And finally (_finally!_) the IndexBuilder itself. The constructor takes up a chu
                             })
                             .ToNonNullImmutableList()
                     );
-                
+
                     // Update the index content by removing keys and combining in the newly
                     // generated content
                     _index = _index
@@ -387,7 +387,7 @@ And finally (_finally!_) the IndexBuilder itself. The constructor takes up a chu
                             new[] { indexDataToUpdate }.ToNonNullImmutableList(),
                             _weightedEntryCombiner
                         );
-                
+
                     // All that's left is to update the source data summary and return the
                     // new data!
                     _sourceDataSummary = newIndexSummary;

@@ -22,7 +22,7 @@ This is a very simple component in React -
         return <button onClick={this._clickHandler}>{this.props.message}</button>;
       }
     });
-    
+
 It's pretty boring but it illustrates a few principles. Firstly, it's written in "jsx" - a format like JavaScript but that needs some processing to actually become JavaScript. The &lt;button&gt; declaration looks like html, for example, and needs altering to become real JavaScript. If we're going to write components in TypeScript then we can't use this format since Visual Studio doesn't understand it (granted I'm making a bit of a leap assuming that you're using Visual Studio for this - it's not necessary, but I suspect most people writing TypeScript *will* use it since the TypeScript support is so good).
 
 The good news is that the translation from "jsx" to JavaScript is not a complex one*. It results in slightly longer code but it's still easily readable (and writable). So the above would be, written in native JavaScript -
@@ -35,9 +35,9 @@ The good news is that the translation from "jsx" to JavaScript is not a complex 
         return React.DOM.button({ onClick: this._clickHandler }, this.props.message);
       }
     });
-    
+
 \* *(It* can *do other clever stuff like translate "fat arrow" functions into JavaScript that is compatible with older browsers, but let's not get bogged down with that here - since I want to use TypeScript rather than jsx, it's not that relevant right now).*
-    
+
 This simple example is illustrating something useful that can be taken for granted since React 0.4; *autobinding*. When "_clickHandler" is called, the "this" reference is bound to the component instance, so "this.props.message" is accessible. Before 0.4, you had to use the "React.autoBind" method - eg.
 
     var MyButton = React.createClass({
@@ -72,7 +72,7 @@ The obvious thing to try was to have a TypeScript class along the lines of
     }
 
     var MyButtonReactComponent = React.createClass(new MyButton());
-    
+
 This would solve the internal type specification issue (where "this" is "any"). However, when the "React.createClass" function is called at runtime, an error is thrown..
 
 > Error: Invariant Violation: createClass(...): Class specification must implement a `render` method.
@@ -130,7 +130,7 @@ This refers to what I talked about earlier; the "auto-binding" convenience to ma
     // If this isn't called then "this.props.message" will error in clickHandler as "this" is not
     // bound to the instance of the class
     ReactTypeScript.autoBindMethods(MyButton);
-    
+
 or you can use the TypeScript "fat arrow" to bind the function to the "this" reference that you would expect:
 
     class MyButton extends  ReactTypeScript.ReactComponentBase<{ message: string}, any> {
@@ -143,7 +143,7 @@ or you can use the TypeScript "fat arrow" to bind the function to the "this" ref
         return React.DOM.button({ onClick: this.clickHandler }, 'Click Me');
       }
     }
-    
+
 The first approach feels a bit clumsy, that you must always remember to call this method for all component classes. The second approach doesn't feel too bad, it's just a case of being vigilant and always using fat arrows - but if you forget, you won't find out until runtime. Considering that I want to use to TypeScript to catch more errors at compile time, this still doesn't feel ideal.
 
 The final concern I have is that the library includes a large-ish [react-internal.js](https://github.com/fdecampredon/react-typescript/blob/master/third_party/react-internal.js) file. What I'm going to suggest further down does unfortunately dip its toe into React's (undocumented) internals but I've tried to keep it to the bare minimum. This "react-internal.js" worries me as it might be relying on a range of implementation details, any of which (as far as I know) could potentially change and break my code.
@@ -249,14 +249,14 @@ This allows the following component to be written:
         return React.DOM.button({ onClick: this.myButtonClickHandler }, 'Click Me');
       }
     }
-    
+
     export = MyButton;
-    
+
 which may be rendered with:
 
     import ReactComponentBridge = require('components/ReactComponentBridge');
     import MyButton = require('components/MyButton');
-    
+
     ReactComponentBridge.renderComponent(
       new MyButton({ message: 'Click Me' }),
       document.getElementById('container')

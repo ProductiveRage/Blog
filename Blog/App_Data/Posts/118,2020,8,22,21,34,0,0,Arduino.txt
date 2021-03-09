@@ -34,34 +34,34 @@ After reading around, I settled on a library called [SdFat](https://github.com/g
 
 This allowed me to stack the data logging shield on top of the UNO, put an SD card into the shield, connect the UNO to my PC via a USB lead and upload the following code -
 
-	#include <SdFat.h> // https://github.com/greiman/SdFat
+    #include <SdFat.h> // https://github.com/greiman/SdFat
 
-	// chipSelect = 10 according to "Item description" section of
-	// https://www.play-zone.ch/de/dk-data-logging-shield-v1-0.html
-	#define SD_CHIP_SELECT 10
+    // chipSelect = 10 according to "Item description" section of
+    // https://www.play-zone.ch/de/dk-data-logging-shield-v1-0.html
+    #define SD_CHIP_SELECT 10
 
-	void setup() {
-	  Serial.begin(9600);
+    void setup() {
+      Serial.begin(9600);
 
-	  // See "Note 1" further down about SPI_HALF_SPEED
-	  SdFat sd;
-	  if (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {
-		Serial.println("ERROR: sd.begin() failed");
-	  }
-	  else {
-		SdFile file;
-		if (!file.open("TestData.txt", O_WRITE | O_APPEND | O_CREAT)) {
-		  Serial.println("ERROR: file.open() failed - unable to write");
-		}
-		else {
-		  file.println("Hi!");
-		  file.close();
-		  Serial.println("Successfully wrote to file!");
-		}
-	  }
-	}
+      // See "Note 1" further down about SPI_HALF_SPEED
+      SdFat sd;
+      if (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {
+        Serial.println("ERROR: sd.begin() failed");
+      }
+      else {
+        SdFile file;
+        if (!file.open("TestData.txt", O_WRITE | O_APPEND | O_CREAT)) {
+          Serial.println("ERROR: file.open() failed - unable to write");
+        }
+        else {
+          file.println("Hi!");
+          file.close();
+          Serial.println("Successfully wrote to file!");
+        }
+      }
+    }
 
-	void loop() { }
+    void loop() { }
 
 The Arduino IDE has an option to view the serial output (the messages written to "Serial.println") by going to Tools / Serial Monitor. Ensure that the baud rate shown near the bottom right of the window is set to 9600 to match the setting in the code above.
 
@@ -75,10 +75,10 @@ in the Serial Monitor's output and when I yanked the card out and put it into my
 
 *Note 2: In a lot of code samples, in the "setup" method you will see code after the "Serial.begin(..)" call that looks like this:*
 
-	while (!Serial) {
-	  // wait for serial port to connect - needed for native USB
-	}
-	
+    while (!Serial) {
+      // wait for serial port to connect - needed for native USB
+    }
+
 *^ This is only needed for particular variants of the Arduino - the "Leonardo", I believe - and is not required for the UNO and so I haven't included it in my code.*
 
 **Gotcha One:** Initially, I had formatted my SD card (branded as "Elgetec", who I can't remember ever hearing of other than on this card) on my Windows laptop - doing a full format, to make absolutely sure that it was as ready for action as possible. However, not only did that full format take a long time, I found that when I left my Arduino shield writing files over a period of a few hours then it would often get reported as being corrupted when I tried to read it. I've found that if the [SdFormatter.ino](https://github.com/greiman/SdFat/blob/master/examples/SdFormatter/SdFormatter.ino) (from the examples folder of the SdFat GitHub repo) is used then these corruption problems have stopped occurring (and the formatting is much faster!).
@@ -95,52 +95,52 @@ The UNO board itself can do some basic form of time keeping, such as telling you
 
 So the next step was using the clock on the shield that I had bought, instead of relying on the clock on the Arduino board itself. To do this, I'd inserted a CR1220 battery and then tested with the following code:
 
-	#include <Wire.h>
-	#include <RTClib.h> // https://github.com/adafruit/RTClib
+    #include <Wire.h>
+    #include <RTClib.h> // https://github.com/adafruit/RTClib
 
-	RTC_DS1307 rtc;
+    RTC_DS1307 rtc;
 
-	void setup() {
-	  // The clock won't work with this (thanks https://arduino.stackexchange.com/a/44305!)
-	  Wire.begin();
+    void setup() {
+      // The clock won't work with this (thanks https://arduino.stackexchange.com/a/44305!)
+      Wire.begin();
 
-	  bool rtcWasAlreadyConfigured;
-	  if (rtc.isrunning()) {
-		rtcWasAlreadyConfigured = true;
-	  }
-	  else {
-		rtc.adjust(DateTime(__DATE__, __TIME__));
-		rtcWasAlreadyConfigured = false;
-	  }
+      bool rtcWasAlreadyConfigured;
+      if (rtc.isrunning()) {
+        rtcWasAlreadyConfigured = true;
+      }
+      else {
+        rtc.adjust(DateTime(__DATE__, __TIME__));
+        rtcWasAlreadyConfigured = false;
+      }
 
-	  Serial.begin(9600);
+      Serial.begin(9600);
 
-	  if (rtcWasAlreadyConfigured) {
-		Serial.println("setup: RTC is already running");
-	  }
-	  else {
-		Serial.println("setup: RTC was not running, so it was set to the time of compilation");
-	  }
-	}
+      if (rtcWasAlreadyConfigured) {
+        Serial.println("setup: RTC is already running");
+      }
+      else {
+        Serial.println("setup: RTC was not running, so it was set to the time of compilation");
+      }
+    }
 
-	void loop() {
-	  DateTime now = rtc.now();
-	  Serial.print("Year: ");
-	  Serial.print(now.year());
-	  Serial.print(" Month: ");
-	  Serial.print(now.month());
-	  Serial.print(" Day: ");
-	  Serial.print(now.day());
-	  Serial.print(" Hour: ");
-	  Serial.print(now.hour());
-	  Serial.print(" Minutes: ");
-	  Serial.print(now.minute());
-	  Serial.print(" Seconds: ");
-	  Serial.print(now.second());
-	  Serial.println();
+    void loop() {
+      DateTime now = rtc.now();
+      Serial.print("Year: ");
+      Serial.print(now.year());
+      Serial.print(" Month: ");
+      Serial.print(now.month());
+      Serial.print(" Day: ");
+      Serial.print(now.day());
+      Serial.print(" Hour: ");
+      Serial.print(now.hour());
+      Serial.print(" Minutes: ");
+      Serial.print(now.minute());
+      Serial.print(" Seconds: ");
+      Serial.print(now.second());
+      Serial.println();
 
-	  delay(1000);
-	}
+      delay(1000);
+    }
 
 The first time you run this, you'll see the first line say:
 
@@ -183,7 +183,7 @@ The analog pin will read a voltage value from between 0 and 5V and allow this to
 The way to do this is with a "voltage divider", which is essentially a circuit that looks a bit like this:
 
     gnd <--> resistor <--> connection-to-analog-input <--> LDR <--> 5V
-	
+
 If the resistance of the LDR happens to precisely match that resistance of the fixed resistor then precisely 2.5V will be delivered to the analog input. But if the LDR resistance is higher or lower than the fixed resistor's value then a higher or lower voltage will be delivered to analog pin.
 
 There is a [tutorial on learn.adafruit.com](https://learn.adafruit.com/photocells/using-a-photocell) that does a much better job of explaining it! It also suggests what fixed resistor values that you might use for different environments (eg. are you more interested in granular light level readings at low light levels but don't mind saturation at high levels or are you more interested in more granular readings at high levels and less granular at lower?) - at the moment, I'm still experimenting with a few different fixed resistor values to see which ones work for my particular climate.
@@ -196,17 +196,17 @@ When it's not connected to a power supply, it looks a bit like this:
 
 The code to read the light level value looks like this (while running this code, try slowly moving your hand closer and further from covering the sensor to see the value change when it's read each second) -
 
-	void setup() {
-	  Serial.begin(9600);
-	}
+    void setup() {
+      Serial.begin(9600);
+    }
 
-	void loop() {
-	  Serial.print("Light level reading: ");
-	  Serial.print(analogRead(0));
-	  Serial.println();
+    void loop() {
+      Serial.print("Light level reading: ");
+      Serial.print(analogRead(0));
+      Serial.println();
 
-	  delay(1000);
-	}
+      delay(1000);
+    }
 
 In an effort to start putting all of this together into a more robust package, I picked up a pack of self-adhesive felt pads from the supermarket and stuck them to appropriate points under the breadboard -
 
@@ -230,8 +230,8 @@ I read *a lot* of posts and tutorials on this and I really struggled to get it t
 
 Whereas other tutorials talked about calling "sleep\_enable()" and "set\_sleep\_mode(..)" functions and then using "attachInterrupt(..)" and adding some magic method to then undo all of those things, this library allows you to write a one-liner as follows:
 
-	LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-	
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+
 This willl cause the board to go into its most power-saving mode for eight seconds (which is the longest that's possible when relying upon its internal Watchdog Timer to wake it up).
 
 No muss, no fuss.
@@ -262,82 +262,82 @@ In trying to write the following code, I was reminded how much I've taken for gr
 
 The following sketch will record the light level about twice a minute to a file on the SD card where the filename is based upon the current date (as maintained by the RTC module and its CR1220 battery) -
 
-	#include <Wire.h>
-	#include <SdFat.h>    // https://github.com/greiman/SdFat
-	#include <RTClib.h>   // https://github.com/adafruit/RTClib
-	#include <LowPower.h> // https://github.com/rocketscream/Low-Power
+    #include <Wire.h>
+    #include <SdFat.h>    // https://github.com/greiman/SdFat
+    #include <RTClib.h>   // https://github.com/adafruit/RTClib
+    #include <LowPower.h> // https://github.com/rocketscream/Low-Power
 
-	// chipSelect = 10 according to "Item description" section of
-	// https://www.play-zone.ch/de/dk-data-logging-shield-v1-0.html
-	#define SD_CHIP_SELECT 10
+    // chipSelect = 10 according to "Item description" section of
+    // https://www.play-zone.ch/de/dk-data-logging-shield-v1-0.html
+    #define SD_CHIP_SELECT 10
 
-	RTC_DS1307 rtc;
+    RTC_DS1307 rtc;
 
-	void setup() {
-	  // The clock won't work with this (thanks https://arduino.stackexchange.com/a/44305!)
-	  Wire.begin();
+    void setup() {
+      // The clock won't work with this (thanks https://arduino.stackexchange.com/a/44305!)
+      Wire.begin();
 
-	  bool rtcWasAlreadyConfigured;
-	  if (rtc.isrunning()) {
-		rtcWasAlreadyConfigured = true;
-	  }
-	  else {
-		rtc.adjust(DateTime(__DATE__, __TIME__));
-		rtcWasAlreadyConfigured = false;
-	  }
+      bool rtcWasAlreadyConfigured;
+      if (rtc.isrunning()) {
+        rtcWasAlreadyConfigured = true;
+      }
+      else {
+        rtc.adjust(DateTime(__DATE__, __TIME__));
+        rtcWasAlreadyConfigured = false;
+      }
 
-	  Serial.begin(9600);
-	  
-	  if (rtcWasAlreadyConfigured) {
-		Serial.println("setup: RTC is already running");
-	  }
-	  else {
-		Serial.println("setup: RTC was not running, so it was set to the time of compilation");
-	  }
-	}
+      Serial.begin(9600);
 
-	void loop() {
-	  // Character arrays need to be long enough to store the number of "real" characters plus the
-	  // null terminator
-	  char filename[13]; // yyyyMMdd.txt = 12 chars + 1 null
-	  char timestamp[9]; // 00:00:00     =  8 chars + 1 null
-	  DateTime now = rtc.now();
-	  snprintf(filename, sizeof(filename), "%04u%02u%02u.txt", now.year(), now.month(), now.day());
-	  snprintf(timestamp, sizeof(timestamp), "%02u:%02u:%02u", now.hour(), now.minute(), now.second());
+      if (rtcWasAlreadyConfigured) {
+        Serial.println("setup: RTC is already running");
+      }
+      else {
+        Serial.println("setup: RTC was not running, so it was set to the time of compilation");
+      }
+    }
 
-	  int sensorValue = analogRead(0);
+    void loop() {
+      // Character arrays need to be long enough to store the number of "real" characters plus the
+      // null terminator
+      char filename[13]; // yyyyMMdd.txt = 12 chars + 1 null
+      char timestamp[9]; // 00:00:00     =  8 chars + 1 null
+      DateTime now = rtc.now();
+      snprintf(filename, sizeof(filename), "%04u%02u%02u.txt", now.year(), now.month(), now.day());
+      snprintf(timestamp, sizeof(timestamp), "%02u:%02u:%02u", now.hour(), now.minute(), now.second());
 
-	  Serial.print(filename);
-	  Serial.print(" ");
-	  Serial.print(timestamp);
-	  Serial.print(" ");
-	  Serial.println(sensorValue);
+      int sensorValue = analogRead(0);
 
-	  SdFat sd;
-	  if (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {
-		Serial.println("ERROR: sd.begin() failed");
-	  }
-	  else {
-		SdFile file;
-		if (!file.open(filename, O_WRITE | O_APPEND | O_CREAT)) {
-		  Serial.println("ERROR: file.open() failed - unable to write");
-		}
-		else {
-		  file.print(timestamp);
-		  file.print(" Sensor value: ");
-		  file.println(sensorValue);
-		  file.close();
-		}
-	  }
+      Serial.print(filename);
+      Serial.print(" ");
+      Serial.print(timestamp);
+      Serial.print(" ");
+      Serial.println(sensorValue);
 
-	  Serial.flush(); // Ensure we finish sending serial messages before going to sleep
+      SdFat sd;
+      if (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {
+        Serial.println("ERROR: sd.begin() failed");
+      }
+      else {
+        SdFile file;
+        if (!file.open(filename, O_WRITE | O_APPEND | O_CREAT)) {
+          Serial.println("ERROR: file.open() failed - unable to write");
+        }
+        else {
+          file.print(timestamp);
+          file.print(" Sensor value: ");
+          file.println(sensorValue);
+          file.close();
+        }
+      }
 
-	  // 4x 8s is close enough to a reading every 30s, which gives me plenty of data
-	  // - Using this instead of "delay" should mean that the battery will power the device for longer
-	  for (int i = 0; i < 3; i++) {
-		LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-	  }
-	}
+      Serial.flush(); // Ensure we finish sending serial messages before going to sleep
+
+      // 4x 8s is close enough to a reading every 30s, which gives me plenty of data
+      // - Using this instead of "delay" should mean that the battery will power the device for longer
+      for (int i = 0; i < 3; i++) {
+        LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+      }
+    }
 
 At the moment, I'm bringing the box inside each night and then disconnecting the battery, pulling out the card and looking at the values recorded in the file to see if it's clear when the sun was fully hitting the table that I had placed the box on.
 

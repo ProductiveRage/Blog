@@ -18,235 +18,235 @@ The test app is fairly simple (and will contain no surprises if you've read my [
 
 One of the types that will be available in ProductiveRage.Immutable.Extensions is **CommonProps&lt;T&gt;**. It's extremely common for component classes to require the same sort of information - what the initial state is, how to record requests to change that state, what class name to apply to the component, whether it should be in a disabled state or not and what key the component has (for cases where it appears as part of a set of dynamic child components).
 
-	public sealed class CommonProps<T> : IAmImmutable
-	{
-		public CommonProps(
-			T state,
-			Action<T> onChange,
-			Optional<ClassName> className,
-			bool disabled,
-			Optional<Any<string, int>> key)
-		{
-			this.CtorSet(_ => _.State, state);
-			this.CtorSet(_ => _.OnChange, onChange);
-			this.CtorSet(_ => _.ClassName, className);
-			this.CtorSet(_ => _.Disabled, disabled);
-			this.CtorSet(_ => _.Key, key);
-		}
+    public sealed class CommonProps<T> : IAmImmutable
+    {
+        public CommonProps(
+            T state,
+            Action<T> onChange,
+            Optional<ClassName> className,
+            bool disabled,
+            Optional<Any<string, int>> key)
+        {
+            this.CtorSet(_ => _.State, state);
+            this.CtorSet(_ => _.OnChange, onChange);
+            this.CtorSet(_ => _.ClassName, className);
+            this.CtorSet(_ => _.Disabled, disabled);
+            this.CtorSet(_ => _.Key, key);
+        }
 
-		public T State { get; private set; }
-		public Action<T> OnChange { get; private set; }
-		public Optional<ClassName> ClassName { get; private set; }
-		public bool Disabled { get; private set; }
-		public Optional<Any<string, int>> Key { get; private set; }
-	}
-	
+        public T State { get; private set; }
+        public Action<T> OnChange { get; private set; }
+        public Optional<ClassName> ClassName { get; private set; }
+        public bool Disabled { get; private set; }
+        public Optional<Any<string, int>> Key { get; private set; }
+    }
+
 If you have a custom text box component then you want to be able to set the initial text value and to be informed when the user is performing an action that changes the text value. If you have a row in a table that shows a message (such as in the application built up in the three part series) then each row needs to have state describing what to show in the "Content" text box and what to show in the "Author" text box. When the user tries to change of those values, the row needs to have a way to say that the current message state is changing. As a final example, if there is a Message table component then the initial state will be a set of messages to render and the "OnChange" delegate will be used whenever a user wants to change a value in an existing row or when they want to remove a row or when they want to add a row. So it's a very common pattern and having a generic class to describe it means that there's less code to write for each component, since they can use this common class rather than each component having their *own* props class.
 
 There are some static factory methods to make initialising **CommonProps&lt;T&gt;** instances easier:
 
-	public static class CommonProps
-	{
-		public static CommonProps<T> For<T>(
-			T state,
-			Action<T> onChange,
-			Optional<ClassName> className,
-			bool disabled)
-		{
-			return new CommonProps<T>(
-				state,
-				onChange,
-				className,
-				disabled,
-				Optional<Any<string, int>>.Missing
-			);
-		}
+    public static class CommonProps
+    {
+        public static CommonProps<T> For<T>(
+            T state,
+            Action<T> onChange,
+            Optional<ClassName> className,
+            bool disabled)
+        {
+            return new CommonProps<T>(
+                state,
+                onChange,
+                className,
+                disabled,
+                Optional<Any<string, int>>.Missing
+            );
+        }
 
-		public static CommonProps<T> For<T>(
-			T state,
-			Action<T> onChange,
-			Optional<ClassName> className,
-			bool disabled)
-			Any<string, int> key)
-		{
-			return new CommonProps<T>(state, onChange, className, disabled, key);
-		}
-	}
+        public static CommonProps<T> For<T>(
+            T state,
+            Action<T> onChange,
+            Optional<ClassName> className,
+            bool disabled)
+            Any<string, int> key)
+        {
+            return new CommonProps<T>(state, onChange, className, disabled, key);
+        }
+    }
 
 With that in mind, the code below should be easy to understand. For simplicity, state changes are handled directly by the container component (there is no Dispatcher) and all that the app does is render 5,000 rows and allow the user to change either text box in each row or the checkbox that each row has. It might seem like a lot of code but that's partly due to the way that the lines are wrapped to fit in the blog post and it's partly because I've included *all* of the non-shared-library code from the app, which is important so that we can talk about what is and isn't worth altering.
 
-	public static class App
-	{
-		[Ready]
-		public static void Main()
-		{
-			React.Render(
-				new AppContainer(),
-				Document.GetElementById("main")
-			);
-		}
-	}
+    public static class App
+    {
+        [Ready]
+        public static void Main()
+        {
+            React.Render(
+                new AppContainer(),
+                Document.GetElementById("main")
+            );
+        }
+    }
 
-	public sealed class AppContainer : Component<object, AppContainer.State>
-	{
-		public AppContainer() : base(null) { }
+    public sealed class AppContainer : Component<object, AppContainer.State>
+    {
+        public AppContainer() : base(null) { }
 
-		protected override State GetInitialState()
-		{
-			return new State(
-				Enumerable.Range(1, 5000)
-					.Select(i => Saved.For(
-						i.ToString(),
-						new MessageEditState("Title" + i, "Content" + i, isAwesome: false)))
-					.ToSet()
-			);
-		}
+        protected override State GetInitialState()
+        {
+            return new State(
+                Enumerable.Range(1, 5000)
+                    .Select(i => Saved.For(
+                        i.ToString(),
+                        new MessageEditState("Title" + i, "Content" + i, isAwesome: false)))
+                    .ToSet()
+            );
+        }
 
-		public override ReactElement Render()
-		{
-			return DOM.Div(
-				new Attributes { ClassName = "wrapper" },
-				new MessageTable(
-					state.Messages,
-					updatedMessages => SetState(new State(updatedMessages)),
-					className: new ClassName("messages"),
-					disabled: false
-				)
-			);
-		}
+        public override ReactElement Render()
+        {
+            return DOM.Div(
+                new Attributes { ClassName = "wrapper" },
+                new MessageTable(
+                    state.Messages,
+                    updatedMessages => SetState(new State(updatedMessages)),
+                    className: new ClassName("messages"),
+                    disabled: false
+                )
+            );
+        }
 
-		public sealed class State : IAmImmutable
-		{
-			public State(NonNullList<Saved<MessageEditState>> messages)
-			{
-				this.CtorSet(_ => _.Messages, messages);
-			}
+        public sealed class State : IAmImmutable
+        {
+            public State(NonNullList<Saved<MessageEditState>> messages)
+            {
+                this.CtorSet(_ => _.Messages, messages);
+            }
 
-			public NonNullList<Saved<MessageEditState>> Messages { get; private set; }
-		}
-	}
+            public NonNullList<Saved<MessageEditState>> Messages { get; private set; }
+        }
+    }
 
-	public sealed class Saved<T> : IAmImmutable
-	{
-		public Saved(string id, T value)
-		{
-			this.CtorSet(_ => _.Id, id);
-			this.CtorSet(_ => _.Value, value);
-		}
+    public sealed class Saved<T> : IAmImmutable
+    {
+        public Saved(string id, T value)
+        {
+            this.CtorSet(_ => _.Id, id);
+            this.CtorSet(_ => _.Value, value);
+        }
 
-		public string Id { get; private set; }
-		public T Value { get; private set; }
-	}
+        public string Id { get; private set; }
+        public T Value { get; private set; }
+    }
 
-	public static class Saved
-	{
-		public static Saved<T> For<T>(string id, T value)
-		{
-			return new Saved<T>(id, value);
-		}
-	}
+    public static class Saved
+    {
+        public static Saved<T> For<T>(string id, T value)
+        {
+            return new Saved<T>(id, value);
+        }
+    }
 
-	public sealed class MessageEditState : IAmImmutable
-	{
-		public MessageEditState(string title, string content, bool isAwesome)
-		{
-			this.CtorSet(_ => _.Title, title);
-			this.CtorSet(_ => _.Content, content);
-			this.CtorSet(_ => _.IsAwesome, isAwesome);
-		}
+    public sealed class MessageEditState : IAmImmutable
+    {
+        public MessageEditState(string title, string content, bool isAwesome)
+        {
+            this.CtorSet(_ => _.Title, title);
+            this.CtorSet(_ => _.Content, content);
+            this.CtorSet(_ => _.IsAwesome, isAwesome);
+        }
 
-		public string Title { get; private set; }
-		public string Content { get; private set; }
-		public bool IsAwesome { get; private set; }
-	}
+        public string Title { get; private set; }
+        public string Content { get; private set; }
+        public bool IsAwesome { get; private set; }
+    }
 
-	public sealed class MessageTable : PureComponent<CommonProps<NonNullList<Saved<MessageEditState>>>>
-	{
-		public MessageTable(
-			NonNullList<Saved<MessageEditState>> state,
-			Action<NonNullList<Saved<MessageEditState>>> onChange,
-			Optional<ClassName> className,
-			bool disabled)
-				: base(CommonProps.For(state, onChange, className, disabled)) { }
+    public sealed class MessageTable : PureComponent<CommonProps<NonNullList<Saved<MessageEditState>>>>
+    {
+        public MessageTable(
+            NonNullList<Saved<MessageEditState>> state,
+            Action<NonNullList<Saved<MessageEditState>>> onChange,
+            Optional<ClassName> className,
+            bool disabled)
+                : base(CommonProps.For(state, onChange, className, disabled)) { }
 
-		public override ReactElement Render()
-		{
-			return DOM.Div(
-				new Attributes { ClassName = props.ClassName.ToNullableString() },
-				props.State.Select((savedMessage, index) => new MessageRow(
-					savedMessage.Value,
-					updatedMessage => props.OnChange(
-						props.State.SetValue(index, props.State[index].With(_ => _.Value, updatedMessage))
-					),
-					className: null,
-					disabled: false,
-					key: savedMessage.Id
-				))
-			);
-		}
-	}
+        public override ReactElement Render()
+        {
+            return DOM.Div(
+                new Attributes { ClassName = props.ClassName.ToNullableString() },
+                props.State.Select((savedMessage, index) => new MessageRow(
+                    savedMessage.Value,
+                    updatedMessage => props.OnChange(
+                        props.State.SetValue(index, props.State[index].With(_ => _.Value, updatedMessage))
+                    ),
+                    className: null,
+                    disabled: false,
+                    key: savedMessage.Id
+                ))
+            );
+        }
+    }
 
-	public sealed class MessageRow : PureComponent<CommonProps<MessageEditState>>
-	{
-		public MessageRow(
-			MessageEditState state,
-			Action<MessageEditState> onChange,
-			Optional<ClassName> className,
-			bool disabled,
-			Any<string, int> key)
-				: base(CommonProps.For(state, onChange, className, disabled, key)) { }
+    public sealed class MessageRow : PureComponent<CommonProps<MessageEditState>>
+    {
+        public MessageRow(
+            MessageEditState state,
+            Action<MessageEditState> onChange,
+            Optional<ClassName> className,
+            bool disabled,
+            Any<string, int> key)
+                : base(CommonProps.For(state, onChange, className, disabled, key)) { }
 
-		public override ReactElement Render()
-		{
-			return DOM.Div(new Attributes { ClassName = props.ClassName.ToNullableString() },
-				props.TextBoxFor(_ => _.Title, "title"),
-				props.TextBoxFor(_ => _.Content, "content"),
-				props.CheckboxFor(_ => _.IsAwesome, "is-awesome")
-			);
-		}
-	}
+        public override ReactElement Render()
+        {
+            return DOM.Div(new Attributes { ClassName = props.ClassName.ToNullableString() },
+                props.TextBoxFor(_ => _.Title, "title"),
+                props.TextBoxFor(_ => _.Content, "content"),
+                props.CheckboxFor(_ => _.IsAwesome, "is-awesome")
+            );
+        }
+    }
 
-	public static class CommonPropsRenderer
-	{
-		public static ReactElement TextBoxFor<T>(
-			this CommonProps<T> props,
-			[PropertyIdentifier]Func<T, string> propertyIdentifier,
-			string className)
-				where T : IAmImmutable
-		{
-			if (props == null)
-				throw new ArgumentNullException("props");
-			if (propertyIdentifier == null)
-				throw new ArgumentNullException("propertyIdentifier");
+    public static class CommonPropsRenderer
+    {
+        public static ReactElement TextBoxFor<T>(
+            this CommonProps<T> props,
+            [PropertyIdentifier]Func<T, string> propertyIdentifier,
+            string className)
+                where T : IAmImmutable
+        {
+            if (props == null)
+                throw new ArgumentNullException("props");
+            if (propertyIdentifier == null)
+                throw new ArgumentNullException("propertyIdentifier");
 
-			return DOM.Input(new InputAttributes
-			{
-				ClassName = className,
-				Value = propertyIdentifier(props.State),
-				OnChange = e => props.OnChange(props.State.With(propertyIdentifier, e.CurrentTarget.Value))
-			});
-		}
+            return DOM.Input(new InputAttributes
+            {
+                ClassName = className,
+                Value = propertyIdentifier(props.State),
+                OnChange = e => props.OnChange(props.State.With(propertyIdentifier, e.CurrentTarget.Value))
+            });
+        }
 
-		public static ReactElement CheckboxFor<T>(
-			this CommonProps<T> props,
-			[PropertyIdentifier]Func<T, bool> propertyIdentifier,
-			string className)
-				where T : IAmImmutable
-		{
-			if (props == null)
-				throw new ArgumentNullException("props");
-			if (propertyIdentifier == null)
-				throw new ArgumentNullException("propertyIdentifier");
+        public static ReactElement CheckboxFor<T>(
+            this CommonProps<T> props,
+            [PropertyIdentifier]Func<T, bool> propertyIdentifier,
+            string className)
+                where T : IAmImmutable
+        {
+            if (props == null)
+                throw new ArgumentNullException("props");
+            if (propertyIdentifier == null)
+                throw new ArgumentNullException("propertyIdentifier");
 
-			return DOM.Input(new InputAttributes
-			{
-				Type = InputType.Checkbox,
-				ClassName = className,
-				Checked = propertyIdentifier(props.State),
-				OnChange = e => props.OnChange(props.State.With(propertyIdentifier, e.CurrentTarget.Checked))
-			});
-		}
-	}
+            return DOM.Input(new InputAttributes
+            {
+                Type = InputType.Checkbox,
+                ClassName = className,
+                Checked = propertyIdentifier(props.State),
+                OnChange = e => props.OnChange(props.State.With(propertyIdentifier, e.CurrentTarget.Checked))
+            });
+        }
+    }
 
 Except for the top-level **AppContainer**, every component is derived from **PureComponent&lt;T&gt;** which means that they automatically get implementations for React's "[shouldComponentUpdate](https://facebook.github.io/react/docs/component-specs.html#updating-shouldcomponentupdate)" component life cycle method. This means that if a component needs to be re-rendered by the virtual DOM and if the new props settings are the same as its current props settings then the component will tell React "I'm not going to change, you do not need to re-render me (nor any of my child components)". I had originally hoped that this would mean that everything would be blazing fast without any additional work. However, as I've already said, this was not to be the case.
 
@@ -264,49 +264,49 @@ Just one thing to check first, though - I'm using the development build of the R
 
 The Chrome dev tools allow you to zoom in on sections of the profiler results, so I tried to make sense of what I could see under the "Render" side. The problem was that it seemed like there were lots of nested calls where none were individually very expensive, it seemed like a cumulative problem with just how many components there were. There were a lot of calls to "constructor", which suggested to me that there may be some overhead in creating Bridge classes. To try to test this theory, I added a new option to the React bindings to enable components to be created by providing a static function rather than creating a component class that is derived from **Component&lt;TProps, TState&gt;** or **PureComponent&lt;TProps&gt;**. This allows **MessageRow** to be rewritten as:
 
-	public static class MessageRow
-	{
-		[Name("MessageRow")]
-		public static ReactElement Render(CommonProps<MessageEditState> props)
-		{
-			return DOM.Div(new Attributes { ClassName = props.ClassName.ToNullableString() },
-				props.TextBoxFor(_ => _.Title, "title"),
-				props.TextBoxFor(_ => _.Content, "content"),
-				props.CheckboxFor(_ => _.IsAwesome, "is-awesome")
-			);
-		}
-	}
+    public static class MessageRow
+    {
+        [Name("MessageRow")]
+        public static ReactElement Render(CommonProps<MessageEditState> props)
+        {
+            return DOM.Div(new Attributes { ClassName = props.ClassName.ToNullableString() },
+                props.TextBoxFor(_ => _.Title, "title"),
+                props.TextBoxFor(_ => _.Content, "content"),
+                props.CheckboxFor(_ => _.IsAwesome, "is-awesome")
+            );
+        }
+    }
 
 which requires **MessageTable** to be changed to:
 
-	public sealed class MessageTable : PureComponent<CommonProps<NonNullList<Saved<MessageEditState>>>>
-	{
-		public MessageTable(
-			NonNullList<Saved<MessageEditState>> state,
-			Action<NonNullList<Saved<MessageEditState>>> onChange,
-			Optional<ClassName> className,
-			bool disabled)
-				: base(CommonProps.For(state, onChange, className, disabled)) { }
+    public sealed class MessageTable : PureComponent<CommonProps<NonNullList<Saved<MessageEditState>>>>
+    {
+        public MessageTable(
+            NonNullList<Saved<MessageEditState>> state,
+            Action<NonNullList<Saved<MessageEditState>>> onChange,
+            Optional<ClassName> className,
+            bool disabled)
+                : base(CommonProps.For(state, onChange, className, disabled)) { }
 
-		public override ReactElement Render()
-		{
-			return DOM.Div(
-				new Attributes { ClassName = props.ClassName.ToNullableString() },
-				props.State.Select((savedMessage, index) => StaticComponent.Pure(
-					MessageRow.Render,
-					CommonProps.For(
-						savedMessage.Value,
-						updatedMessage => props.OnChange(
-							props.State.SetValue(index, props.State[index].With(_ => _.Value, updatedMessage))
-						),
-						className: null,
-						disabled: false,
-						key: savedMessage.Id
-					)
-				))
-			);
-		}
-	}
+        public override ReactElement Render()
+        {
+            return DOM.Div(
+                new Attributes { ClassName = props.ClassName.ToNullableString() },
+                props.State.Select((savedMessage, index) => StaticComponent.Pure(
+                    MessageRow.Render,
+                    CommonProps.For(
+                        savedMessage.Value,
+                        updatedMessage => props.OnChange(
+                            props.State.SetValue(index, props.State[index].With(_ => _.Value, updatedMessage))
+                        ),
+                        className: null,
+                        disabled: false,
+                        key: savedMessage.Id
+                    )
+                ))
+            );
+        }
+    }
 
 This way, there are 5,000 **MessageRow** constructor calls saved each time that the **MessageTable** needs to re-render. (Under the hood, there is still an object created for each row but it's a very lightweight JavaScript object).
 
@@ -316,55 +316,55 @@ This reduced the "Render" time to 496ms (it didn't affect "receiveComponent", bu
 
 I whipped up a quick test to try creating lots of instances of a class, like this:
 
-	public static class App
-	{
-		[Ready]
-		public static void Main()
-		{
-			var x = new MyClass[10000];
-			var timer = Stopwatch.StartNew();
-			for (var i = 0; i < x.Length; i++)
-				x[i] = new MyClass("test");
-			timer.Stop();
-			Console.WriteLine(timer.ElapsedMilliseconds + "ms");
-		}
-	}
+    public static class App
+    {
+        [Ready]
+        public static void Main()
+        {
+            var x = new MyClass[10000];
+            var timer = Stopwatch.StartNew();
+            for (var i = 0; i < x.Length; i++)
+                x[i] = new MyClass("test");
+            timer.Stop();
+            Console.WriteLine(timer.ElapsedMilliseconds + "ms");
+        }
+    }
 
-	public class MyClass
-	{
-		public MyClass(string value)
-		{
-			Value = value;
-		}
-		public string Value { get; private set; }
-	}
+    public class MyClass
+    {
+        public MyClass(string value)
+        {
+            Value = value;
+        }
+        public string Value { get; private set; }
+    }
 
 That only reported 3ms, which didn't seem like it could be the source of the problem.
 
 Next I tried going one step more complicated. The **MessageRow** class that I've replaced with a static function was derived from **PureComponent&lt;T&gt;**, which means that each **MessageRow** instantiation also involved an instantiation of a generic base class. Clearly *something* is still taking up a lot time.. since the **CommonProps&lt;T&gt;** class used for **MessageRow** props was a generic type, maybe it's something specifically to  do with generic types.
 
-	public static class App
-	{
-		[Ready]
-		public static void Main()
-		{
-			var x = new MyClass<string>[10000];
-			var timer = Stopwatch.StartNew();
-			for (var i = 0; i < x.Length; i++)
-				x[i] = new MyClass<string>("test");
-			timer.Stop();
-			Console.WriteLine(timer.ElapsedMilliseconds + "ms");
-		}
-	}
+    public static class App
+    {
+        [Ready]
+        public static void Main()
+        {
+            var x = new MyClass<string>[10000];
+            var timer = Stopwatch.StartNew();
+            for (var i = 0; i < x.Length; i++)
+                x[i] = new MyClass<string>("test");
+            timer.Stop();
+            Console.WriteLine(timer.ElapsedMilliseconds + "ms");
+        }
+    }
 
-	public class MyClass<T>
-	{
-		public MyClass(T value)
-		{
-			Value = value;
-		}
-		public T Value { get; private set; }
-	}
+    public class MyClass<T>
+    {
+        public MyClass(T value)
+        {
+            Value = value;
+        }
+        public T Value { get; private set; }
+    }
 
 This time it reported 35ms. Still not an earth-shattering duration in isolation but a big step up from the non-generic class' 3ms.
 
@@ -400,15 +400,15 @@ One of the options that Bridge has to affect what JavaScript is emitted is the [
 
 There is one problem with this, though. The C# code:
 
-	[IgnoreGeneric]
-	public class MyClass<T>
-	{
-		public MyClass(T value)
-		{
-			Value = value;
-		}
-		public T Value { get; private set; }
-	}
+    [IgnoreGeneric]
+    public class MyClass<T>
+    {
+        public MyClass(T value)
+        {
+            Value = value;
+        }
+        public T Value { get; private set; }
+    }
 
 will result in the following JavaScript:
 
@@ -431,15 +431,15 @@ Thankfully, Bridge has *another* way to control the JavaScript that will be help
 
 To apply this to the **MyClass&lt;T&gt;** class, the following C#:
 
-	[IgnoreGeneric]
-	public class MyClass<T>
-	{
-		public MyClass(T value)
-		{
-			Value = value;
-		}
-		public T Value { [Template("value")]get; [Template("this.value")]private set; }
-	}
+    [IgnoreGeneric]
+    public class MyClass<T>
+    {
+        public MyClass(T value)
+        {
+            Value = value;
+        }
+        public T Value { [Template("value")]get; [Template("this.value")]private set; }
+    }
 
 would result in the following JavaScript:
 
@@ -448,71 +448,71 @@ would result in the following JavaScript:
             this.value = value;
         }
     });
-	
+
 Note that the set-properties-to-default-values code is no longer present in the JavaScript class definition.
 
 Also, it's worth noting that this will affect anywhere that the property is accessed by code outside of the class. For example, if there is C# like this:
 
-	var x = new MyClass<string>("test");
-	Console.WriteLine(x.Value);
+    var x = new MyClass<string>("test");
+    Console.WriteLine(x.Value);
 
 .. then, instead of the property being accessed through a getter method -
 
-	var x = new Demo.MyClass$1("test");
-	Bridge.Console.log(x.getValue());
+    var x = new Demo.MyClass$1("test");
+    Bridge.Console.log(x.getValue());
 
 .. it will be accessed directly -
 
-	var x = new Demo.MyClass$1("test");
+    var x = new Demo.MyClass$1("test");
     Bridge.Console.log(x.value);
 
 This means that the JavaScript is a slightly less faithful representation of the C# code. However, the C# compiler is complete unaware of these changes and it will continue to enforce the type system in the same way that it always does. So (presuming you are writing all of your front end code in C#, using Bridge) you are not losing anything. In fact, there will be some more performance gains to be had by accessing properties directly like this - there is a small overhead to calling functions to return values (small, but not zero) as opposed to retrieving them directly.
 
 If this is applied to **CommonProps&lt;T&gt;** then we get the following:
 
-	[IgnoreGeneric]
-	public sealed class CommonProps<T>
-	{
-		public CommonProps(
-			T state,
-			Action<T> onChange,
-			Optional<ClassName> className,
-			bool disabled,
-			Optional<Any<string, int>> key)
-		{
-			if (state == null)
-				throw new ArgumentNullException("state");
-			if (onChange == null)
-				throw new ArgumentNullException("onChange");
+    [IgnoreGeneric]
+    public sealed class CommonProps<T>
+    {
+        public CommonProps(
+            T state,
+            Action<T> onChange,
+            Optional<ClassName> className,
+            bool disabled,
+            Optional<Any<string, int>> key)
+        {
+            if (state == null)
+                throw new ArgumentNullException("state");
+            if (onChange == null)
+                throw new ArgumentNullException("onChange");
 
-			State = state;
-			OnChange = onChange;
-			ClassName = className;
-			Disabled = disabled;
-			Key = key;
-		}
+            State = state;
+            OnChange = onChange;
+            ClassName = className;
+            Disabled = disabled;
+            Key = key;
+        }
 
-		public T State
-		{
-			[Template("state")]get; [Template("this.state")]private set;
-		}
-		public Action<T> OnChange
-		{
-			[Template("onChange")]get; [Template("this.onChange")]private set;
-		}
-		public Optional<ClassName> ClassName
-		{
-			[Template("className")]get; [Template("this.className")]private set;
-		}
-		public bool Disabled
-		{
-			[Template("disabled")]get; [Template("this.disabled")]private set;
-		}
-		public Optional<Any<string, int>> Key
-		{
-			[Template("key")]get; [Template("this.key")]private set; 
-		}
-	}
+        public T State
+        {
+            [Template("state")]get; [Template("this.state")]private set;
+        }
+        public Action<T> OnChange
+        {
+            [Template("onChange")]get; [Template("this.onChange")]private set;
+        }
+        public Optional<ClassName> ClassName
+        {
+            [Template("className")]get; [Template("this.className")]private set;
+        }
+        public bool Disabled
+        {
+            [Template("disabled")]get; [Template("this.disabled")]private set;
+        }
+        public Optional<Any<string, int>> Key
+        {
+            [Template("key")]get; [Template("this.key")]private set;
+        }
+    }
 
 In order to do this, **CommonProps&lt;T&gt;** could no longer be an **IAmImmutable** type since the "CtorSet" and "With" methods won't work with properties that rely upon any fancy shenanigans like [Template]. This isn't a huge deal with the props on components since they are always created fresh for every render, unlike the other data types that represent state. For example, when the title value of a single row is edited, a new **MessageEditState** instance is created using something like the following:
 
@@ -534,57 +534,57 @@ Taking another snapshot with the profiler, I'm still going to concentrate on the
 
 The "op_Implicit" methods are the JavaScript representations of implicit operator methods in C#. So, where the **Optional&lt;T&gt;** struct has an implicit operator from "T" -
 
-	public static implicit operator Optional<T>(T value)
-	{
-		return new Optional<T>(value);
-	}
-	
+    public static implicit operator Optional<T>(T value)
+    {
+        return new Optional<T>(value);
+    }
+
 the following JavaScript is generated:
 
-	op_Implicit: function (value) {
-    	return new (ProductiveRage.Immutable.Optional$1(T)).$constructor1(value);
-	}
-	
+    op_Implicit: function (value) {
+        return new (ProductiveRage.Immutable.Optional$1(T)).$constructor1(value);
+    }
+
 When a **CommonProps** instance is created with a null "className" argument (which is the case for every **MessageRow** in the sample app), each call to the **CommonProps** "For" method requires the null reference to be implicitly cast to an **Optional&lt;ClassName&gt;**.
 
-	public static CommonProps<T> For<T>(
-		T state,
-		Action<T> onChange,
-		Optional<ClassName> className,
-		bool disabled,
-		Any<string, int> key)
+    public static CommonProps<T> For<T>(
+        T state,
+        Action<T> onChange,
+        Optional<ClassName> className,
+        bool disabled,
+        Any<string, int> key)
 
 Each implicit cast requires a call to the implicit operator, which creates a new **Optional&lt;ClassName&gt;** instance. This feels like unnecessary work.
 
 The **Optional&lt;T&gt;** has a public static "Missing" property, so one way to avoid the creation of unnecessary instances would be to use
 
-	className: Optional<ClassName>.Missing
-	
+    className: Optional<ClassName>.Missing
+
 instead of
 
-	className: null
-	
+    className: null
+
 But there were a few problems with this. Firstly, **Optional&lt;T&gt;** is part of the ProductiveRage.Immutable library and I would like it to be as easy to use as possible. I think that it would be quite difficult to justify a significant performance cost in passing null as an Optional rather than "Missing" when there is an implicit cast to perform the translation. Secondly, the "Missing" property was implemented as
 
-		public static Optional<T> Missing { get { new Optional<T>(default(T), false); } }
-		
+        public static Optional<T> Missing { get { new Optional<T>(default(T), false); } }
+
 .. which means that a new instance is created each time it's called anyway, so actually the "Missing" property wouldn't magically solve anything.
 
 It would make more sense for the "Missing" property to be set only once, something like:
 
-	public static Optional<T> Missing { get { return _missing; } }
-	private static Optional<T> _missing = new Optional<T>(default(T), false);
+    public static Optional<T> Missing { get { return _missing; } }
+    private static Optional<T> _missing = new Optional<T>(default(T), false);
 
 When I first wrote the **Optional&lt;T&gt;** struct, that is how I did it. Unfortunately, there was a problem with Bridge 1.10 and I removed the private "_missing" field as a workaround. The Bridge Team have long since resolved that issue and so I can put the code back how I want it.
 
 This also allows for a tweak to the implicit operator method -
 
-	public static implicit operator Optional<T>(T value)
-	{
-		if (value == null)
-			return _missing;
-		return new Optional<T>(value);
-	}
+    public static implicit operator Optional<T>(T value)
+    {
+        if (value == null)
+            return _missing;
+        return new Optional<T>(value);
+    }
 
 Now, one might presume, there would now be no unnecessary instantiations whether "className: Optional&lt;ClassName&gt;.Missing" *or* "className: null" was specified. Unfortunately, we're not quite there yet..
 
@@ -598,42 +598,42 @@ To confirm this, I added [IgnoreGeneric] to **Optional&lt;T&gt;**. This was not 
 
 When I added [IgnoreGeneric] to the **CommonProps&lt;T&gt;** class, I had to apply some workarounds to deal with the type "T" not being available at runtime. I had to do similar with **Optional&lt;T&gt;**. The first change was that the following line clearly wouldn't work:
 
-	private static Optional<T> _missing = new Optional<T>(default(T), false);
-	
+    private static Optional<T> _missing = new Optional<T>(default(T), false);
+
 so it was replaced with this:
 
-	private static Optional<T> _missing = new Optional<T>(Script.Write<T>("null"), false);
-	
+    private static Optional<T> _missing = new Optional<T>(Script.Write<T>("null"), false);
+
 The "Script.Write&lt;T&gt;" method in Bridge is a way to directly emit JavaScript (simply "null" in this case) and to tell the C# type system that a value of type "T" is being returned. So, here, the "T" is only used by the C# compiler and does not have any impact on runtime. The compromise is that "null" is being used for the Value property of the "Missing" instance regardless of the type of "T". So Value will be null even if "T" is an int or a bool in cases where IsDefined is false.
 
 The other change required completely removing the C# backing field for the Value property -
 
-	private readonly T value;
-	
+    private readonly T value;
+
 The problem was that Bridge would generate a struct definition that would try to set "value" to default(T), which it would not be able to do since "T" would not be available at runtime.
 
 Instead, the value would be written directly by more raw JavaScript. The constructor changed from:
 
-	public Optional(T value) : this(value, value != null) { }
-		this.isDefined = isDefined && (value != null);
-		this.value = value;
-	}
+    public Optional(T value) : this(value, value != null) { }
+        this.isDefined = isDefined && (value != null);
+        this.value = value;
+    }
 
 to:
 
-	public Optional(T value) : this(value, value != null) { }
-		this.isDefined = isDefined && (value != null);
-		Script.Write("this.value = {0}", value);
-	}
+    public Optional(T value) : this(value, value != null) { }
+        this.isDefined = isDefined && (value != null);
+        Script.Write("this.value = {0}", value);
+    }
 
 and the property getter changed from:
 
-	public T Value { get { return this.value; } }
-	
+    public T Value { get { return this.value; } }
+
 to:
 
-	public T Value { get { return Script.Write<T>("this.value"); } }
-	
+    public T Value { get { return Script.Write<T>("this.value"); } }
+
 Finally, anywhere in the struct that the backing field was accessed was changed so that it went via the public "Value" property getter.
 
 This meant that there were no potential runtime errors waiting to occur within the struct (none of the code relied on access to the type "T"), that there was type safety for any code instantiating or accessing the struct in C# *and* it meant that the struct could have [IgnoreGeneric] applied and hence (theoretically) allow the application to work more efficiently.

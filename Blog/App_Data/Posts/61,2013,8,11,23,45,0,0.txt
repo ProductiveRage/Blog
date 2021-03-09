@@ -1,4 +1,4 @@
-﻿## C# State Machines
+## C# State Machines
 
 Not too long ago, I published [Parsing CSS](Post57) which talked about how I'd used a form of state machine to traverse the content and how doing so made changing the logic for "changing requirements" much easier -
 
@@ -11,7 +11,7 @@ I didn't start out by deciding to use a state machine, I hadn't written one befo
 To be honest, although there is a lot of information available about this pattern, it didn't entirely click with me until I read this: [Game Programming Patterns: State](http://gameprogrammingpatterns.com/state.html). It wasn't that I didn't see the point of them or that I could see much problem in implementing them, it was just.. they just didn't seem to slot very well into how I thought of things. In fact, I was having difficulty just trying to decide if my CSS Parser code could really be considered a state machine at all! But after reading that article, it all fell into place nicely. It's really well-written and the examples manage to demonstrate how quickly complexity escalates (and how this may be handled) while keeping things nice and concise.
 
 Having linked to that article, hopefully what I'm going to write here won't seem redundant :)
-		
+
 Someone who I used to work with (hiya, Pricey!) got in touch with me about my parsing post and said that he'd also been getting to grips with the state machine pattern and we'd talked about using it to describe how a traffic light works. I presume that this is one of those examples that's been around *forever*. I have a *very* vague recollection of some interface between a BBC Micro and some sort of Lego-brick-mounted motors and lights and sensors when I was in my last year at primary school - one of the teaching projects was to try to model how a traffic light works. This was a loooooooong time before all those fancy Mindstorms Lego packages became available! And while researching this post, I've found numerous mention of traffic lights in relation to state machine tutorials or exercises.
 
 Anyway... I thought this was a cool idea since a single traffic light is quite a simple prospect, but it could quickly be made increasingly complex by considering multiple sets of traffic lights controlling traffic at a crossroads, for example.
@@ -31,13 +31,13 @@ The change from the first state occurs only if car(s) arrive at the light. The o
 (If there were two sets of traffic lights at a crossroads - with two roads running perpendicular and controlling traffic in both directions on both roads - then the state of the traffic flow on the other road must be considered as well; just because both sets of lights have cars waiting to go doesn't mean they should both transition to green at the same time! But we'll talk about that later on..)
 
 ### Modelling
-		
+
 Let's get straight in with some code. I'm going to declare an interface for a single traffic light state, the implementations of which will be immutable. Then I'll have a **TrafficLight** class which has a mutable state reference and that passes through possible transition triggers for car-has-arrived-at-lights and time-has-passed events. This class will also be used to log when the state visibly changes - eg. "red light to red-and-yellow light". So first the interface..
 
     public interface IAmATrafficLightState
     {
       ColourOptions Colour { get; }
-    
+
       IAmATrafficLightState RegisterCarQueueing();
 
       /// <summary>
@@ -181,7 +181,7 @@ The other states will share a base class that deals with the boring work of wait
     public class GreenLight : TimeBasedTransitiveState
     {
       public const int TIME_TO_STAY_ON_GREEN = 100;
-    
+
       public GreenLight() : base(
         TIME_TO_STAY_ON_GREEN,
         new YellowLight()) { }
@@ -528,7 +528,7 @@ The other states require only minor changes to implement the new interface (note
         StateTransition.Replace(new RedAndYellowLight())) { }
 
       public override ColourOptions Colour { get { return ColourOptions.RedOnly; } }
-    
+
       /// <summary>
       /// We're committed to letting traffic pass at this point so declare HandlingTraffic
       /// </summary>

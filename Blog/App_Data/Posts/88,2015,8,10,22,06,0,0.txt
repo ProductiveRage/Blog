@@ -25,7 +25,7 @@ So I figured this seemed like a resonable place to start. But I also wanted to t
       /// This will be null if all of the content has been consumed
       /// </summary>
       char? Current { get; }
-      
+
       /// <summary>
       /// This will be an index within the string or the position immediately
       /// after it (if all content has been read)
@@ -110,7 +110,7 @@ By applying these principles, I've found that the style of code that I wrote cha
 Imagine that, during parsing a TypeScript definition, we find ourselves within an interface and need to parse a property that it has -
 
     name: string;
-    
+
 *(I've picked this as a simple starting point - I realise that it seems an arbitrary place to begin at, but I had to start somewhere!)*
 
 I want to pick out the property name ("name") and its type ("string"). I could go through each character in a loop and keep track of when I hit token delimiters (such as the ":" between the name and the type), but it seems like this is going to be code that will need writing over and over again for different structures. As such, it seems like somewhere that a helper function would be very useful in cutting down on code duplication and "noise" in the code - eg.
@@ -159,9 +159,9 @@ This relies upon the **Optional** type that I mentioned before, but also a **Mat
       public static MatchResult<T> New<T>(T value, IReadStringContent reader)
         => return new MatchResult<T>(value, reader);
     }
-    
-This result type is just used to say "here is the value that you asked for and here is a reader that picks up after that content". Neither the "Result" nor "Reader" properties have comments saying "This will never be null" because their properties are not wrapped in **Optional** types and so it is assumed that they never will be null. 
-    
+
+This result type is just used to say "here is the value that you asked for and here is a reader that picks up after that content". Neither the "Result" nor "Reader" properties have comments saying "This will never be null" because their properties are not wrapped in **Optional** types and so it is assumed that they never will be null.
+
 The "MatchAnythingUntil" function returns a value of type **Optional&lt;MatchResult&lt;string&gt;&gt;**. This means that it is expected that this function *may* return a null value. Previously, I might have named this function "TryToMatchAnythingUntil" - to try to suggest through a naming convention that it may return null if it is unable to perform a match. I think that having this expressed through the type system is a big improvement.
 
 Right.. now, let's try and make some more direct steps towards actually parsing something! I want to read that "name" value into a class called **IdentifierDetails**:
@@ -200,10 +200,10 @@ Right.. now, let's try and make some more direct steps towards actually parsing 
 
       public string Value { get; }
       public SourceRangeDetails SourceRange { get; }
-      
+
       public override string ToString() => $"{Value}";
     }
-    
+
     public sealed class SourceRangeDetails
     {
       public SourceRangeDetails(uint startIndex, uint length)
@@ -221,7 +221,7 @@ Right.. now, let's try and make some more direct steps towards actually parsing 
       public uint Length { get; }
 
       public override string ToString() => $"{StartIndex}, {Length}";
-    }    
+    }
 
 *These classes illustrates more of the new C# 6 features - property initialisers, expression-bodied members and string interpolation. I think these are all fairly small tweaks that add up to large improvements overall. If you're not already familiar with these and want to know more then I highly recommend this Visual Studio extension: [C# Essentials](https://visualstudiogallery.msdn.microsoft.com/a4445ad0-f97c-41f9-a148-eae225dcc8a5). It makes nice suggestions about how you could use the new features and has the facility to automatically apply the changes to your code; awesome! :)*
 
@@ -238,7 +238,7 @@ Ok.. so now we can start tying this all together. Say we have an **IReadStringCo
         identifierMatch.Value.Result,
         new SourceRangeDetails(reader.Index, readerAfterIdentifier.Index - reader.Index)
       );
-      
+
       // .. more code (to check for the ":" separator and to get the type of the property)..
 
 This function will either return the details of the property or it will return null, meaning that it failed to do so (it is immediately obvious from the method signature that a null return value is possible since its return type is an **Optional**).
@@ -264,7 +264,7 @@ Before I go into details on the ".. more code.." section above, we could do with
       }
       return (content.Length > 0) ? MatchResult.New(content.ToString(), reader) : null;
     }
- 
+
 While we're doing this, let's put the try-to-match-Identifier logic into its own function. It's going to be used in other places (the **IdentifierDetails** will be used for type names, variable names, interface names, class names, property names, etc..) so having it in a reusable method makes sense:
 
     public static Optional<MatchResult<IdentifierDetails>> GetIdentifier(
@@ -283,7 +283,7 @@ While we're doing this, let's put the try-to-match-Identifier logic into its own
         readerAfterIdentifier
       );
     }
-    
+
 Now, the work-in-progress GetProperty function looks like this:
 
     public static Optional<MatchResult<PropertyDetails>> GetProperty(IReadStringContent reader)
@@ -309,7 +309,7 @@ Now, the work-in-progress GetProperty function looks like this:
         reader = whitespaceMatch.Value.Reader;
 
       // .. more code..
-    
+
 Hmm.. that's actually quite a lot of code. And there are already three patterns emerging which are only apparent if you look closely and pay attention to what's going on -
 
 1. The "identifier" reference is required and the retrieved value is stored (then the "reader" reference is updated to point at the content immediately after the identifier)
@@ -321,7 +321,7 @@ This feels like it's going to get repetitive very quickly and that silly mistake
 On top of this, the code above misses a valid case - where there is whitespace *before* the colon as well as after it (eg. "name : string;").
 
 We can do better.
-    
+
 ### Let's get functional
 
 What I'd like to do is chain the content-matching methods together. My first thought was how jQuery chains functions one after another, but LINQ might have been just as appropriate an inspiration.
@@ -427,7 +427,7 @@ This becomes less abstract if we refactor the "GetProperty" function to take adv
         .Then(GetTypeScriptType, value => type = value)
         .ThenOptionally(MatchWhitespace)
         .Then(MatchCharacter(';'));
-        
+
       if (!readerAfterProperty.IsDefined)
         return null;
 
@@ -436,7 +436,7 @@ This becomes less abstract if we refactor the "GetProperty" function to take adv
         readerAfterProperty.Value
       );
     }
-    
+
 Well, isn't that much nicer!
 
 Before, it looked like this method was going to run away with itself. And I said that I didn't like the fact that there seemed be a lot of "noise" required to describe the patterns "if this is matched then record the value and move on" / "if this is matched, I don't care about its value, just move the reader on" / "I don't care if this is matched or not, but if it *is* then move the reader past it".
@@ -469,7 +469,7 @@ Now "GetPropertyDetails" looks like this:
         .Then(TypeScriptType, value => type = value)
         .ThenOptionally(Whitespace)
         .Then(Match(';'));
-        
+
       if (!readerAfterProperty.IsDefined)
         return null;
 
@@ -530,7 +530,7 @@ And I introduced an "If" function, which basically says "if this Parser is found
 
     // This interface has no generic type parameters..
     interface ISomething {
-    
+
     // .. but this one does
     interface ISomethingElse<TKey, TValue> {
 
@@ -551,9 +551,9 @@ The "If" function allows us to say "if this interface has a pointy bracket that 
 
       return Then(Optional.For(readerAfterCondition.Value.Reader), parser, report);
     }
-    
+
 However, that function takes three arguments in one continous list: 1. the condition, 2. the parser-if-condition-is-met, 3. callback-if-condition-is-met-and-then-subsequent-parser-matches-content. So it would be called like:
-    
+
     .If(Match('<'), GenericTypeParameters, value => genericTypeParameters = value)
 
 which isn't terrible.. but I think it's even better to have "If" return an interim type (a "**ConditionalParser&lt;T&gt;**") that has its own "Then" function that is only called if the condition parser matches content - ie.
@@ -581,7 +581,7 @@ which isn't terrible.. but I think it's even better to have "If" return an inter
           return _reader;
 
         return _reader.Then(parser, report);
-      } 
+      }
     }
 
 That way, the resulting code is just a little closer to the original intent. Instead of
@@ -598,7 +598,7 @@ And because the **ConditionalParser**'s "Then" function returns an **Optional&lt
 
 I really like how the techniques I've talked about work together and how combining these small functions enables complex forms to be described while still keeping things manageable. Having the complexity grow at a nice linear rate, rather than multiplying out every time something new needs to be considered, is very gratifying. Not to mention that having these small and simple functions also makes automated testing a lot easier.
 
-All of the functions shown are pure (although some technically have side effects, these effects are only 
+All of the functions shown are pure (although some technically have side effects, these effects are only
 actioned through lambdas that are passed to the functions as arguments) and nothing shares state, which makes the code very easy to reason about.
 
 And it's nice to be able to see my own coding style evolving over time. It's an often-heard cliché that you'll hate your own code from six months ago, but lately I feel like I'm looking back to code from a couple of years ago and being largely content with it.. there's always things I find that I'd do slightly differently now, but rarely anything too egregious (I had to fix up some code I wrote more than five years ago recently, now *that* was an unpleasant surprise!) so it's gratifying to observe myself changing (in positive ways, I hope!).

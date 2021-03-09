@@ -22,13 +22,13 @@ Here's the setup, which corresponds roughly to what I was trying to do last mont
         StartDate = startDate;
         EndDateIfAny = endDateIfAny;
       }
-    
+
       public string Title { get; private set; }
       public DateTime StartDate { get; private set; }
       public DateTime? EndDateIfAny { get; private set; }
     }
-    
-I wanted to generate a method at runtime which I could pass the arguments "title", "startDate" and "endDateIfAny" to and have it return a new instance of the class, using those values to define the new instance. The equivalent of 
+
+I wanted to generate a method at runtime which I could pass the arguments "title", "startDate" and "endDateIfAny" to and have it return a new instance of the class, using those values to define the new instance. The equivalent of
 
     public static RoleDetails UpdateWith(
       RoleDetails source,
@@ -38,44 +38,44 @@ I wanted to generate a method at runtime which I could pass the arguments "title
     {
       if (source == null)
         return new ArgumentNullException("source");
-        
+
       if (!title.IndicatesChangeFromValue(source.Title)
       && !startDate.IndicatesChangeFromValue(source.StartDate)
       && !endDateIfAny.IndicatesChangeFromValue(source.EndDateIfAny))
         return this;
-      
+
       return new RoleDetails(
         title.GetValue(source.Title),
         startDate.GetValue(source.StartDate),
         endDateIfAny.GetValue(source.EndDateIfAny)
       );
     }
-    
+
 where the **Optional** type is a struct
-    
+
     public struct Optional<T>
     {
       private T _valueIfSet;
       private bool _valueHasBeenSet;
-    
+
       public T GetValue(T valueIfNoneSet)
       {
         return _valueHasBeenSet ? _valueIfSet : valueIfNoneSet;
       }
-    
+
       public bool IndicatesChangeFromValue(T value)
       {
         if (!_valueHasBeenSet)
           return false;
-    
+
         if ((value == null) && (_valueIfSet == null))
           return false;
         else if ((value == null) || (_valueIfSet == null))
           return true;
-    
+
         return !value.Equals(_valueIfSet);
       }
-    
+
       public static implicit operator Optional<T>(T value)
       {
         return new Optional<T>
@@ -84,7 +84,7 @@ where the **Optional** type is a struct
           _valueHasBeenSet = true
         };
       }
-      
+
 The structure we need to form is a "body expression" that performs the method's internals, and for this to be packaged up with method arguments into a compiled lambda expression.
 
 Before going too wild, a simple example to illustrate this is a good start:
@@ -111,7 +111,7 @@ This code could be used thusly -
 
     var role1 = new RoleDetails("Head Honcho", DateTime.Now, null);
     var role2 = new RoleDetails("Dogsbody", DateTime.Now, null);
-    
+
     var titleRetriever = GetRoleTitleRetriever();
     var title1 = titleRetriever(role1); // This equals "Head Honcho"
     var title2 = titleRetriever(role2); // This equals "Dogsbody"
@@ -201,7 +201,7 @@ Let's address two issue now. Firstly, there should be three arguments passed in 
       Optional<DateTime> startDate,
       Optional<DateTime?> endDateIfAny
     );
-    
+
     private RoleDetailsUpdater GetSimpleUpdater()
     {
       var sourceParameter = Expression.Parameter(typeof(RoleDetails), "source");
@@ -262,7 +262,7 @@ The source-argument-null-check is easier; we'll combine "Expression.IfThen" (rat
         typeof(Optional<DateTime?>),
         "endDateIfAny"
       );
-      
+
       // When evaluated, these expressions will extract the property values from the "source" reference
       var sourceTitleRetriever = Expression.Property(
         sourceParameter,
@@ -276,7 +276,7 @@ The source-argument-null-check is easier; we'll combine "Expression.IfThen" (rat
         sourceParameter,
         typeof(RoleDetails).GetProperty("EndDateIfAny")
       );
-      
+
       // When evaluated, these will determine whether any of the argument values differ from the
       // property values on the "source" reference
       var isTitleValueNew = Expression.Call(
@@ -298,7 +298,7 @@ The source-argument-null-check is easier; we'll combine "Expression.IfThen" (rat
         isTitleValueNew,
         Expression.OrElse(isStartDateValueNew, isEndDateIfAnyValueNew)
       );
-      
+
       // This is the where the real work takes place: If "source" is null then throw an exception.
       // If any of the arguments require that a new instance being created, then construct that
       // instance with the new data and return it. Otherwise just return the source reference.
@@ -350,7 +350,7 @@ The source-argument-null-check is easier; we'll combine "Expression.IfThen" (rat
           endDateIfAnyParameter
         ).Compile();
     }
-    
+
 Note the use of "Expression.OrElse" above. We use this since we're dealing with boolean logic (eg. is the start-date-value new *or* is the end-date-value new). There is an "Expression.Or" method, but that is for numeric operations (eg. 1 & 4).
 
 ### Winning!
@@ -370,11 +370,11 @@ The safest approach, I've found, is to construct the code in the smallest functi
 To illustrate, if you were adding the code that will "exit early" if no new instance is required, and you forgot to specify a type for the null constant - ie. instead of
 
     Expression.Label(returnTarget, Expression.Constant(null, typeof(RoleDetails)))
-    
+
 you wrote
 
     Expression.Label(returnTarget, Expression.Constant(null))
-    
+
 then you would get an error (if you called the code with arguments that executed the no-new-instance-required code path):
 
 > Expression of type 'System.Object' cannot be used for label of type 'Tester.RoleDetails'
@@ -477,12 +477,12 @@ So.. if this was to be written using just reflection, it could be something like
         return hashCode;
       };
     }
-    
+
 This is called (using our faithful **RoleDetails** example class) in the manner:
 
     // Retrieve a delegate that takes a RoleDetails instance and returns a hash code
     var roleDetailsHashCodeGenerator = GetHashCodeGenerator<RoleDetails>();
-    
+
     // Use this delegate to generate some hash codes
     var role1HashCode = roleDetailsHashCodeGenerator(role1);
     var role2HashCode = roleDetailsHashCodeGenerator(role2);
@@ -587,11 +587,11 @@ Here, though, I don't need any loops within the expressions. Since I know what p
       // The last expression in the block indicates the return value, so make it the
       // "accumulatorVariable" reference
       blockExpressions.Add(accumulatorVariable);
-      
+
       // This Expression.Block method signature takes a set of local variable expressions (in this
       // case there's only one; the accumulatorVariable) followed by the expressions that form the
       // body of the block
-      return 
+      return
         Expression.Lambda<Func<T, int>>(
           Expression.Block(
             new[] { accumulatorVariable },

@@ -1,4 +1,4 @@
-﻿## JavaScript Compression (Putting my JSON Search Indexes on a diet)
+## JavaScript Compression (Putting my JSON Search Indexes on a diet)
 
 When I wrote a couple of weeks ago about writing a way to consume [Full Text Indexer](Post40) data entirely on the client (so that I could recreate my blog's search functionality at [productiverage.neocities.org](http://productiverage.neocities.org) - see [The Full Text Indexer goes client-side!](Post58)), I said that
 
@@ -53,13 +53,13 @@ From that page -
 > What about other libraries?
 >
 > All I could find was:
-> 
+>
 > \- some LZW implementations which gives you back arrays of numbers (terribly inefficient to store as tokens take 64bits) and don't support any character above 255.
-> 
+>
 > \- some other LZW implementations which gives you back a string (less terribly inefficient to store but still, all tokens take 16 bits) and don't support any character above 255.
 >
 > \- an LZMA implementation that is asynchronous and very slow - but hey, it's LZMA, not the implementation that is slow.
-> 
+>
 > \- a GZip implementation not really meant for browsers but meant for node.js, which weighted 70kb (with deflate.js and crc32.js on which it depends).
 
 This is sounding really good (and his view of the state of the other libraries available reflects my own experiences when Googling around). And he goes on to say

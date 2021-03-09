@@ -170,7 +170,7 @@ This has been a particularly dry and largely self-involved post but if the Compi
 To demonstrate the generation of a converter from a generic SourceType class to one that is based upon verbose constructors:
 
     // Prepare a converter factory using the base types (AssignableType and
-	// EnumConversion property getter factories)
+    // EnumConversion property getter factories)
     var nameMatcher = new CaseInsensitiveSkipUnderscoreNameMatcher();
     var converterFactory = ExtendableCompilableTypeConverterFactoryHelpers.GenerateConstructorBasedFactory(
         nameMatcher,
@@ -183,7 +183,7 @@ To demonstrate the generation of a converter from a generic SourceType class to 
     );
 
     // Extend the converter to handle SourceType.Sub1 to ConstructorDestType.Sub1 and
-	// IEnumerable<SourceType.Sub1> to IEnumerable<ConstructorDestType.Sub1>
+    // IEnumerable<SourceType.Sub1> to IEnumerable<ConstructorDestType.Sub1>
     // - This will raise an exception if unable to create the mapping
     converterFactory = converterFactory.CreateMap<SourceType.Sub1, ConstructorDestType.Sub1>();
 
@@ -270,7 +270,7 @@ To demonstrate the generation of a converter from a generic SourceType class to 
 .. and the equivalent where the destination types are based upon property-setting:
 
     // Prepare a converter factory using the base types (AssignableType and EnumConversion property
-	// getter factories)
+    // getter factories)
     var nameMatcher = new CaseInsensitiveSkipUnderscoreNameMatcher();
     var converterFactory = ExtendableCompilableTypeConverterFactoryHelpers.GeneratePropertySetterBasedFactory(
         nameMatcher,
@@ -283,7 +283,7 @@ To demonstrate the generation of a converter from a generic SourceType class to 
     );
 
     // Extend the converter to handle SourceType.Sub1 to ConstructorDestType.Sub1 and
-	// IEnumerable<SourceType.Sub1> to IEnumerable<ConstructorDestType.Sub1>
+    // IEnumerable<SourceType.Sub1> to IEnumerable<ConstructorDestType.Sub1>
     // - This will raise an exception if unable to create the mapping
     converterFactory = converterFactory.CreateMap<SourceType.Sub1, PropertySettingDestType.Sub1>();
 

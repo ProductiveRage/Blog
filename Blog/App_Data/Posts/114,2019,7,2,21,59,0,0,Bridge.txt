@@ -35,7 +35,7 @@ Strings, however, have *another* "no value" state - when they are blank. If I wa
 This would allow me to have a method that clearly indicates that it needs a string *with a real value* - eg.
 
     void DoSomething(NonBlankTrimmedString value);
-    
+
 .. and it could be combined with **Optional&lt;T&gt;** to define a method whose type signature indicates that it will take a string with a real value OR it will accept a "no value" - eg.
 
     void DoSomething(Optional<NonBlankTrimmedString> value);
@@ -53,9 +53,9 @@ As another example, I might want to write a [Bridge.React](https://github.com/Pr
             // .. other properties set here
             ClassName = className;
         }
-        
+
         // .. other public properties exposed here
-        
+
         public Optional<NonBlankTrimmedString> ClassName { get; }
     }
 
@@ -102,7 +102,7 @@ In order to allow C# code to be written that interacts with JavaScript libraries
 This changes things up a bit. Now there is no public constructor and the only way to get a **NonBlankTrimmedString** instance from a plain string is to explicitly cast to it - eg.
 
     var x = (NonBlankTrimmedString)"hi!";
-    
+
 If the source string is blank or whitespace-only then attempting to cast it to a **NonBlankTrimmedString** will result in an exception being thrown.
 
 What's interesting about this class is that it exists only to provide type information to the C# compiler - there will never be an instance of **NonBlankTrimmedString** alive runtime in JavaScript. The reason for this is that the explicit cast performs some validation but then, at runtime, returns the string instance directly back; it *doesn't* wrap it in an instance of a **NonBlankTrimmedString** class. Similarly, when the "Value" property is requested in C# code, this is translated into JS as a direct reference to "this" (which we know is a plain string). This is sounding complicated as I write this, so let me try to make it clear with an example!
@@ -114,10 +114,10 @@ The following C# code:
 
     // Create a NonBlankTrimmed by explicitly casting the string
     var x = (NonBlankTrimmedString)source;
-    
+
     // Write the value of the NonBlankTrimmedString to the console
     Console.WriteLine(x.Value);
-    
+
 .. is translated into this JS:
 
     // Start with a plain string
@@ -136,31 +136,31 @@ This has a couple of benefits - now, plain string values that appear in JSON can
 This is an interesting concept that I'm referring to as a "type alias" - a type that exists only for the compiler and that doesn't affect the runtime. The phrase "type alias" exists in TypeScript and in F# (and in other languages, I'm sure) but I think that it means something slightly different there.. which may mean that I've chosen a confusing name for this C# / Bridge.NET concept! In TypeScript and F#, I don't believe that they allow the level of compiler validation that I'm talking about - certainly in TypeScript, type aliases are more of a convenience that allow you say something like:
 
     type Vector = number[];
-	type Vectors = Vector[];
-	
+    type Vectors = Vector[];
+
 .. so that you can then write a method signature that looks like this:
 
     function process(data: Vectors) {
-		// ..
-	}
-	
+        // ..
+    }
+
 .. instead of:
 
     function process(data: number[][]) {
-		// ..
-	}
+        // ..
+    }
 
 .. but the two are identical. TypeScript "type aliases" make things more flexible, *not* more constrained. To make that clearer, if you wrote:
 
     type CustomerID = number;
-	
-	function process(id: CustomerID) {
-	    // ..
-	}
-	
+
+    function process(id: CustomerID) {
+        // ..
+    }
+
 .. then you could still call:
 
-	process(1); // Passing a plain number into a method whose signature specifies type CustomerID
+    process(1); // Passing a plain number into a method whose signature specifies type CustomerID
 
 In other words, the TypeScript alias means "anywhere that you see CustomerID, you can pass in a 'number'". This is the opposite of what I want, I want to be able to have methods that specify that they want a **NonBlankTrimmedString** and *not* just any old string.
 
@@ -253,7 +253,7 @@ What I really wanted was for those methods to have type signatures that would ei
             halfwayPointCallback: () => items.RemoveAt(0)
         );
     }
-    
+
     static void DoSomething(ReadOnlyCollection<int> readOnlyItems, Action halfwayPointCallback)
     {
         Console.WriteLine("Number of readonlyItems: " + readOnlyItems.Count);
@@ -295,7 +295,7 @@ I went with the last one because I was all excited about experimenting with "Bri
         [Template("{value}")]
         public extern static implicit operator ReadOnlyArray<T>(T[] value);
     }
-    
+
 The structure of this class is similar in some ways to that of the **NonBlankTrimmedString**. Unlike that class, there is no validation that is required - I *only* want to provide access to an array in a limited manner and so it's fine to expose a public constructor (as opposed to the **NonBlankTrimmedString**, where it's important to check that the value is neither null nor blank nor whitespace-only and the [Template] attribute on the constructor doesn't easily allow for any validation).
 
 Even though the constructor may be used on this class, there is still an operator to change an array into a **ReadOnlyArray** so that the deserialisation process is able to read an array of items into a **ReadOnlyArray** instance. I've chosen to use an implicit operator (rather than en explicit operator) here because there is no validation to perform - the **NonBlankTrimmedString** has an explicit operator because that*does* perform some validation and so it's a casting action that could fail and so I want it to be explicit in code.
@@ -310,7 +310,7 @@ As with the **NonBlankTrimmedString**, this type will exist only at compile time
 
     ReadOnlyArray<int> readOnlyValuesCast = values;
     Console.WriteLine(readOnlyValuesCast.Length);
-    
+
 .. is translated into this JS:
 
     var values = System.Array.init([1, 2, 3], System.Int32);
@@ -344,7 +344,7 @@ The "GetEnumerator" methods require a tiny bit more explanation. In order for th
             $t.System$IDisposable$Dispose();
         }
     }
-    
+
 Because Bridge needs to support enumerating over arrays, the function "Bridge.getEnumerator" knows what to do if it is given an array reference. And since a **ReadOnlyArray** *is* an array reference at runtime, we don't have to do anything special - we don't have to provide a GetEnumerator implementation.
 
 And there we go! As I explained above, I originally encountered this problem when passing an array into a complicated calculation process but this type could *also* be used for deserialising JSON into a richer type model, just like the **NonBlankTrimmedString** earlier - again, without any overhead in doing so (no instances of wrapper types will be present runtime and there will be no additional references for the garbage collector to track).
@@ -362,7 +362,7 @@ I've linked above to an article [Using strongly-typed entity IDs to avoid primit
 I'll start with an anecdote to set the scene. In a company that I used to work at, we had systems that would retrieve and render different data for different language options. Sometimes data would vary only by language ("English", "French", etc..) but sometimes it would be more specific and vary by language *culture* (eg. "English - United Kingdom", "English - United States", etc..). An older version of the system would pass around int values for the language or language culture keys. So there might be a method such as:
 
     private string GetTranslatedName(int languageKey)
-    
+
 A problem that occurred over and over again is that language keys and language culture keys would get mixed up in the code base - in other words, it was quite common for someone to accidentally pass a language key into a method where a language *culture* key was expected (this situation was not helped by the fact that much of the developer testing was done in English and the language key and language culture key values in many of the databases were both 1 for English / English UK). Something that I was very keen to get into a new version of the system was to introduce "strongly typed keys" so that this sort of accident could no longer occur. The method's signature would be changed to something like this:
 
     private string GetTranslatedName(LanguageKey languageKey)
@@ -374,7 +374,7 @@ The downside is that each key type had to be defined as its own struct, with the
     public struct LanguageKey : IEquatable<LanguageKey>
     {
         public LanguageKey(int value) => Value = value;
-        
+
         public int Value { get; }
 
         public bool Equals(LanguageKey other) => Value.Equals(other.Value);
@@ -383,14 +383,14 @@ The downside is that each key type had to be defined as its own struct, with the
 
         public static bool operator ==(LanguageKey x, LanguageKey y) => x.Value == y.Value;
         public static bool operator !=(LanguageKey x, LanguageKey y) => !(x == y);
-        
+
         public static explicit operator LanguageKey(int value) => new LanguageKey(value);
     }
 
 Really, though, that is the *only* downside. As the strongly typed keys are structs without any reference properties or fields, there is no additional work for the garbage collector and there is no memory overhead vs tracking a simple int. But it *does* still feel a little arduous to have to have these definitions in the code base, particularly when the equivalent F# code looks like this:
 
     [<Struct>] type LanguageKey = LanguageKey of int
-    
+
 It's worth noting that this is not actually referred to as a "type alias" in F#; this is a "single case union type". There *is* a concept called a "type alias" in F# that looks like this:
 
     type LanguageKey = int
@@ -401,7 +401,7 @@ It's worth noting that this is not actually referred to as a "type alias" in F#;
         // (Real work to retrieve translated name would go here but we'll
         //  just return the string "Whatever" for the sake of this example)
         "Whatever"
-        
+
 .. then the compiler would allow me to pass an int into that method -
 
     // A LanguageKey type alias lets me pass any old int into the method - rubbish!
@@ -413,7 +413,7 @@ On the other hand, if the type **LanguageKey** was a "single case union type" th
 
     // error FS0001: This expression was expected to have type 'LanguageKey' but here has type 'int'
     let name = getTranslatedName 123
-    
+
     // This DOES compile because the types match
     let key = LanguageKey 123
     let name = getTranslatedName 123

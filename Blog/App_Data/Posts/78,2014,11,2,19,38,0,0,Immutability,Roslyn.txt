@@ -79,7 +79,7 @@ So, within a "VisitTrivia" method, we can identify trivia we're interested in (c
     {
       private readonly Action<ToDoComment> _commentLocated;
       public CommentLocatingVisitor(Action<ToDoComment> commentLocated)
-	    : base(SyntaxWalkerDepth.StructuredTrivia)
+        : base(SyntaxWalkerDepth.StructuredTrivia)
       {
         if (commentLocated == null)
           throw new ArgumentNullException("commentLocated");
@@ -185,7 +185,7 @@ To keep things organised, this callback passes a **Comment** instance, as follow
       /// This will always be a positive integer
       /// </summary>
       public int LineNumber { get; private set; }
-    
+
       /// <summary>
       /// This may be null since the comment may not exist within a method or property
       /// </summary>
@@ -245,11 +245,11 @@ At this point, I got bored with it and fell back to parsing the solution field w
         @"Project\(""\{\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\}""\) = ""(.*?)"", ""(?<projectFile>(.*?\.csproj))"", ""\{\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\}"""
       );
       foreach (Match match in projectFileMatcher.Matches(solutionFile.OpenText().ReadToEnd()))
-	  {
+      {
         yield return new FileInfo(
-		  Path.Combine(solutionFile.Directory.FullName, match.Groups["projectFile"].Value)
-		);
-	  }
+          Path.Combine(solutionFile.Directory.FullName, match.Groups["projectFile"].Value)
+        );
+      }
     }
 
 It feels a bit dirty but it seems to do the job! And this is hardly production code so I can live with it.

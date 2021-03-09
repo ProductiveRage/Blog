@@ -57,7 +57,7 @@ The first part is fairly straight-forward so I'll jump straight in -
                 throw new ArgumentException("Null or empty assemblyName specified");
             if (!Enum.IsDefined(typeof(ComVisibility), comVisibilityOfClasses))
                 throw new ArgumentOutOfRangeException("comVisibilityOfClasses");
-            
+
             _assemblyName = assemblyName;
             _createComVisibleClasses = (comVisibilityOfClasses == ComVisibility.Visible);
             _moduleBuilder = new Lazy<ModuleBuilder>(
@@ -358,7 +358,7 @@ And that we'll change the calling of methods:
 
     if (method.ReturnType.Equals(typeof(void)))
         ilFunc.Emit(OpCodes.Pop);
-    else 
+    else
     {
         ilFunc.Emit(
             OpCodes.Callvirt,
@@ -367,7 +367,7 @@ And that we'll change the calling of methods:
                 new[] { typeof(MethodInfo), typeof(object) }
             )
         );
-        if (method.ReturnType.IsValueType) 
+        if (method.ReturnType.IsValueType)
             ilFunc.Emit(OpCodes.Unbox_Any, method.ReturnType);
     }
 
@@ -459,7 +459,7 @@ This will do the job but it jumps out at me that if the same interface needs to 
         {
             if (targetType == null)
                 throw new ArgumentNullException("targetType");
-            
+
             // If no conversion is required, no work to do
             // - Note: We can only deal with applying interfaces to objects so if a conversion
             //   is required where the target is not an interface then there's nothing we can
@@ -476,7 +476,7 @@ This will do the job but it jumps out at me that if the same interface needs to 
             );
             if (interfaceApplierExisting != null)
                 return interfaceApplierExisting.Apply(value);
-                
+
             // Try to generate new interface applier
             var interfaceApplierNew = _interfaceApplierFactory.GenerateInterfaceApplier(
                 targetType,

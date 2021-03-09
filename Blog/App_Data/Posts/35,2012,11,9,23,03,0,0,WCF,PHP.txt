@@ -1,4 +1,4 @@
-﻿## Consuming a WCF Web Service from PHP
+## Consuming a WCF Web Service from PHP
 
 For the Web Service that I've been developing at work, I was asked to support a Developer who was trying to consume it for a project. The problem being that he was developing in PHP and had never connected to a .Net Web Service before - at least not knowingly; the APIs he'd integrated with before would all communicate in JSON. The other half of the problem is that I've never developed anything in PHP! In fact I'd not written a line in my life before last week.
 
@@ -58,7 +58,7 @@ Getting things working in PHP is another matter, however. For someone who doesn'
     );
     $data = $client->GetHotels(
         array(
-            "request" => array(    
+            "request" => array(
                 "ApiKey" => "{KeyGoesHere}",
                 "Filters" => array(
                     // TODO: What to write here?!
@@ -79,13 +79,13 @@ More googling brings me to discover the SoapVar class for use with the SoapClien
     );
     $data = $client->GetHotels(
         array(
-            "request" => array(    
+            "request" => array(
                 "ApiKey" => "{KeyGoesHere}",
                 "Filters" => array(
                     new SoapVar(
                         array(
                             "CategoryKeys" => array(1, 2, 3)
-                        ), 
+                        ),
                         SOAP_ENC_OBJECT,
                         "CategoryFilter",
                         "http://schemas.datacontract.org/2004/07/DemoService.Messages.Requests"

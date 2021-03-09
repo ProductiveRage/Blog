@@ -1,4 +1,4 @@
-﻿## The Full Text Indexer - Going International!
+## The Full Text Indexer - Going International!
 
 Pushing on with the Full Text Indexer series I'm been posting about (see [Full Text Indexer](Post30) and [Full Text Indexer - Adding and Subtracting](Post31)) I want to demonstrate how it can work with multi-lingual content (or other content variations - for example, with the data at my day job Products have different delivery "channels" for which different descriptions may be recorded, _as well_ as being in multiple languages).
 
@@ -25,14 +25,14 @@ Where two simple implementations might be:
         }
 
         public int Id { get; private set; }
-            
+
         public int Language { get; private set; }
-            
+
         public bool IsApplicableForLanguage(int language)
         {
             return (language == Language);
         }
-            
+
         public bool Equals(ILanguageScopedId obj)
         {
             var objLanguageScopedId = obj as LanguageScopedId;
@@ -41,7 +41,7 @@ Where two simple implementations might be:
 
             return ((objLanguageScopedId.Id == Id) && (objLanguageScopedId.Language == Language));
         }
-            
+
         public override bool Equals(object obj)
         {
             return Equals(obj as ILanguageScopedId);
@@ -69,12 +69,12 @@ Where two simple implementations might be:
         }
 
         public int Id { get; private set; }
-            
+
         public bool IsApplicableForLanguage(int language)
         {
             return true;
         }
-            
+
         public bool Equals(ILanguageScopedId obj)
         {
             var objLanguageScopedId = obj as NonLanguageScopedId;
@@ -83,12 +83,12 @@ Where two simple implementations might be:
 
             return (objLanguageScopedId.Id == Id);
         }
-            
+
         public override bool Equals(object obj)
         {
             return Equals(obj as ILanguageScopedId);
         }
-            
+
         public override int GetHashCode()
         {
             // Since the overridden ToString method will consistently encapsulate all of the
@@ -96,7 +96,7 @@ Where two simple implementations might be:
             // consistent with the overridden Equals implementation
             return ToString().GetHashCode();
         }
-            
+
         public override string ToString()
         {
             return String.Format("{0}:{1}", base.ToString(), Id);
@@ -219,7 +219,7 @@ As we've seen before, we need to prepare an IndexGenerator (this time IndexGener
 
     var languages = new[] { 1, 2, 3 };
 
-    var contentRetrievers = 
+    var contentRetrievers =
         new[]
         {
             new ContentRetriever<Article, ILanguageScopedId>(
@@ -288,7 +288,7 @@ Finally, there's a slight change to the querying mechanism. We have to perform a
         ));
 
 The earlier code uses a "ContentBuilder" to prepare the MultiLingualContent instances, just because it removes some of the clutter from the code. For the sake of completeness, that can be seen below:
-            
+
     private class ContentBuilder
     {
         private string _defaultContent;

@@ -4,9 +4,9 @@ I've got something coming up at work soon where we're hoping to migrate some int
 
 The problem comes with the use of the Request object. I want to be able to swap it out for a .Net COM component since access to the ASP Request object won't be available when the Engine is running in .Net. But the Request collections (Form, QueryString and ServerVariables) have a variety of access methods that are not particular easy to replicate -
 
-    ' Returns the full QueryString content (url-encoded), 
+    ' Returns the full QueryString content (url-encoded),
     Request.QueryString
-     
+
     Request.QueryString.Count
     Request.QueryString.Keys.Count
 
@@ -15,8 +15,8 @@ The problem comes with the use of the Request object. I want to be able to swap 
     For .. in Request.QueryString.Keys
 
     ' Returns a string containing values for the specified key (comma-separated)
-    Request.QueryString(key) 
-    Request.QueryString.Item(key) 
+    Request.QueryString(key)
+    Request.QueryString.Item(key)
 
     ' Loops over the values for the specified key
     For Each .. In Request.QueryString(key)
@@ -116,7 +116,7 @@ A cut down version of the code I've ended up with will demonstate:
         {
           return _target.GetType().GetMethod(name, bindingAttr, binder, types, modifiers);
         }
-        
+
         public MethodInfo[] GetMethods(BindingFlags bindingAttr)
         {
           return _target.GetType().GetMethods();

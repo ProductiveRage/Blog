@@ -62,7 +62,7 @@ The problem I have is that if we write code such as
       value: "hi"
       onChange: e => { alert(e.target.value); }
     })
-      
+
 Then we'll get a TypeScript compile error because "e.target" is only known to be of type **EventTarget**, it is *not* known to be an input element and so it is *not* known to have a "value" property. But we're specifying this "onChange" property *while declaring an input element*.. the type system *should* know that the "e.target" reference will be an input!
 
 In fact, in TypeScript, we actually have to skirt around the type system to make it work:
@@ -208,7 +208,7 @@ There was an issue on React's GitHub repo: "[Improve handling of download attrib
 >
 > a({href: 'thing', download: 'File.pdf'}, 'clickme'); // =&gt; &lt;a href="thing" download="File.pdf"&gt;
 
-This indicates that 
+This indicates that
 
     [Ignore]
     [ObjectLiteral]
@@ -218,19 +218,19 @@ This indicates that
       public string download;
       // .. and other attributes specified to anchor tags
     }
-    
+
 is not good enough and that "download" needs to be allowed to be a string *or* a boolean.
 
 This can be worked around by introducing a new class
-    
+
     [Ignore]
     public sealed class StringOrBoolean
     {
       private StringOrBoolean() { }
-      
+
       public static implicit operator StringOrBoolean(bool value)
         => new StringOrBoolean();
-      
+
       public static implicit operator StringOrBoolean(string value)
         => new StringOrBoolean();
     }
@@ -247,7 +247,7 @@ This explains why the "value" argument used in either of the implicit operators 
       public StringOrBoolean download;
       // .. and other attributes specified to anchor tags
     }
-    
+
 And this allows to then write code like
 
     DOM.a(new AnchorAttributes
@@ -255,7 +255,7 @@ And this allows to then write code like
       href: "/instructions.pdf",
       download: "My Site's Instructions.pdf"
     })
-    
+
 *or*
 
     DOM.a(new AnchorAttributes
@@ -263,7 +263,7 @@ And this allows to then write code like
       href: "/instructions.pdf",
       download: true
     })
-    
+
 We *only* require this class to exist so that we can tell the type system that React is cool with us giving a string value for "download" or a boolean value.
 
 The "ObjectLiteral" attribute on these classes means that the code
@@ -283,12 +283,12 @@ is not even translated into an instantiation of a class called "**AnchorAttribut
         { name: "/instructions.pdf", download: true }
       )
     )
-    
+
     // It IS just translated into this
     React.DOM.a({ name: "/instructions.pdf", download: true })
-    
+
 Again, this illustrates why the "value" argument was thrown away in the **StringOrBoolean** implicit operator calls - because those calls do not exist in the translated JavaScript.
-    
+
 ### A nice bonus
 
 Another thing that I like about the "ObjectLiteral" attribute that I've used on these **{Whatever}Attributes** classes is that the translated code only includes the properties that have been explicitly set.
@@ -306,7 +306,7 @@ This means that, unlike in the TypeScript definitions, we don't have to declare 
 and we have C# code like this:
 
     DOM.td(new TableCellAttributes { colSpan = 2 }, "Hello!")
-    
+
 Then the resulting JavaScript is simply:
 
     React.DOM.td({ colSpan = 2 }, "Hello!")
@@ -320,11 +320,11 @@ If we *want* it to appear, then we can specify a value in the C# code -
 That will be translated as you would expect:
 
     React.DOM.td({ colSpan = 2, rowSpan = 1 }, "Hello!")
-    
+
 This has *two* benefits, actually, because not only do we not have to mark all of the properties as nullable (while that wouldn't be the end of the world, it's nicer - I think - to have the attribute classes have properties that match the html values as closely as possible and using simple value types does so) but it also keeps the generated JavaScript succint. Imagine the alternative, where *every* property was included in the JavaScript.. every time a div element was declared it would have 150 properties listed along with it. The JavaScript code would get huge, very quickly!*
 
 \* *(Ok, ok, it shouldn't be 150 properties for every div since half the point of this post is that it will be much better to create attribute classes that are as specific as possible - but there would still be a lot of properties that appear in element initialisations in the JavaScript which were not present in the C# code, it's much better only having the explicitly-specified values wind up in the translated output).*
-    
+
 #### A change in Bridge 1.8
 
 I was part way through writing about how pleased I was that unspecified properties in an [ObjectLiteral]-decorated class do not appear in the generated JavaScript when I decided to upgrade to Bridge 1.8 (which was just released two days ago).. and things stopped doing what I wanted.
@@ -373,7 +373,7 @@ And then find details of every attribute that it has, along with compatibility i
 
 I'm strongly considering scraping these MDN pages and trying to parse out the attribute names and compatibility information (probably only supporting html5, since what's the point in supporting anything older when Bridge and React are new and and so I will be using them for writing new code and taking advantage of current standards). It doesn't provide type information (like "colSpan" is numeric or "download" may be a string or a boolean), but the [DefinitelyTyped](https://github.com/borisyankov/DefinitelyTyped/blob/master/react/react.d.ts) definitions will go some way in helping out with that. And MDN says that its [wiki documents are available under the creative commons license](https://developer.mozilla.org/en-US/docs/MDN/About#Copyrights_and_licenses), so I believe that this would acceptable use of the data, so long as they are given the appropriate credit in the bindings code that I will eventually generate (which only seems fair!).
 
-So I think that that is what will come next - trying to glean all of the information I need about the attributes specific to particular tags and then using this to produce bindings that take as much advantage of the C# type system as possible! 
+So I think that that is what will come next - trying to glean all of the information I need about the attributes specific to particular tags and then using this to produce bindings that take as much advantage of the C# type system as possible!
 
 Unless I'm missing something and someone else can think of a better way? Anyone??
 

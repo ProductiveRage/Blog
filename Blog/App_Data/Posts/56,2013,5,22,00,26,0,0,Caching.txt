@@ -1,4 +1,4 @@
-﻿## More Caching Mechanisms
+## More Caching Mechanisms
 
 This is something I'd meant to cover in the last post ([Caching Mechanisms](Post55)) before I realised how long the last one was getting! And it's a bite-sized post before I segue into more about alternate approches to expiring cache entries.
 
@@ -103,7 +103,7 @@ This lock-unrolling information is taken from Eric Lippert's [Locks and exceptio
 
         /// <summary>
         /// The default manner in which background work is performed is to queue up the work through
-        /// the Threadpool but this be can overridden by using the constructor that takes the 
+        /// the Threadpool but this be can overridden by using the constructor that takes the
         /// backgroundWorkExecuter argument
         /// </summary>
         public static Action<Action> ThreadPoolBackgroundWorkExecuter
@@ -125,7 +125,7 @@ This lock-unrolling information is taken from Eric Lippert's [Locks and exceptio
           // Try to retrieve data from cache
           var lastModified = _lastModifiedDateRetriever();
           var cachedData = _cache.GetIfAvailable() as ConfigDetailsWithModifiedDate;
-          
+
           // If unavailable in cache then the cache needs populating, only one request should be
           // allowed to perform this work, any others should wait until the work has completed
           // and the data been made available in the cache

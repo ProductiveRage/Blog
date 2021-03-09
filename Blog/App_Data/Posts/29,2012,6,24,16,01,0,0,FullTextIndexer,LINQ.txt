@@ -1,4 +1,4 @@
-﻿## Compiled LINQ Expressions don't serialise :(
+## Compiled LINQ Expressions don't serialise :(
 
 In the last post ([Optimising the Plurality-Handling Normaliser](Post27)) I got all excited about improving the performance of what is essentially a string comparer for use in a Full Text Indexer I'm playing around with (which is now handling the search facilities on this blog so it must be half way to working at least! :) but the use of compiled LINQ expressions brought about their own problems when I tried to write away a fully-generated index to a disk cache. The generated lambda expression is not serialisable!
 

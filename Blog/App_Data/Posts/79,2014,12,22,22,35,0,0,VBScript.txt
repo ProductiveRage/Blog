@@ -135,7 +135,7 @@ The C# that I had imagined to be equivalent would be something like
         }
     }
     catch { }
-    
+
 .. but that's just not the case. VBScript's idea of "proceed to the next statement" does not follow the same logic as C#.
 
 I said that it's only "if a condition is considered and causes an error" that this occurs, so in the following example the first condition is met (as you would expect) and so the second condition is not even considered, and so its error-raising behaviour will not result in its content block being executed.

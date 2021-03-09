@@ -152,8 +152,8 @@ Open up Visual Studio (the version isn't too important, but if you're using 2015
 The Bridge package also adds some README files and a bridge.json file (under the Bridge folder in the project), which instructs Bridge how to compile your C# code into JavaScript. Change bridge.json's content to:
 
     {
-	  "output": "Bridge/output",
-	  "combineScripts":  true
+      "output": "Bridge/output",
+      "combineScripts":  true
     }
 
 This will tell it create a single JavaScript file when translating, including the Bridge library content and the React bindings and JavaScript generated from code that you write. The name of the file that it generates is based upon the name of your project. I named mine "BridgeReactTutorial" and so the Bridge compiler will generate "BridgeReactTutorial.js" and "BridgeReactTutorial.min.js" files in the "Bridge/output" folder on each build of the project.
@@ -195,9 +195,9 @@ When you created the class library project, a Class1.cs file will have been adde
         {
           var container = Document.GetElementById("main");
           container.ClassName = string.Join(
-		    " ",
-			container.ClassName.Split().Where(c => c != "loading")
-		  );
+            " ",
+            container.ClassName.Split().Where(c => c != "loading")
+          );
           React.Render(
             DOM.Div(new Attributes { ClassName = "welcome" }, "Hi!"),
             container
@@ -212,35 +212,35 @@ There are some subtle touches here, such as the "JavaScript is required" message
 
 To take advantage of the "loading" class' presence / absence, it would be a nice touch to have the "loading" text quite pale initially (it's reassuring to know that the app is, in fact, loading, but it doesn't need to be right in your face). To do so, add a file "styles.css" alongside the "demo.html" file. It's already referenced by the markup we've pasted into "demo.html", so it will be picked up when you refresh the page. Since we're creating a stylesheet, it makes sense to include some style resets (my go-to for this is by Eric Meyer) -
 
-	/* http://meyerweb.com/eric/tools/css/reset/ v2.0b1 | 201101 NOTE: WORK IN PROGRESS
-	 USE WITH CAUTION AND TEST WITH ABANDON */
-	html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote,
-	pre,a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s,
-	samp, small, strike, strong, sub, sup, tt, var,b, u, i, center, dl, dt, dd, ol, ul,
-	li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td,
-	article, aside, canvas, details, figcaption, figure, footer, header, hgroup, menu,
-	nav, section, summary, time, mark, audio, video
-	{
-	  margin: 0;
-	  padding: 0;
-	  border: 0;
-	  outline: 0;
-	  font-size: 100%;
-	  font: inherit;
-	  vertical-align: baseline;
-	}
-	/* HTML5 display-role reset for older browsers */
-	article, aside, details, figcaption, figure, footer, header, hgroup, menu, nav,
-	section { display: block; }
-	body { line-height: 1; }
-	ol, ul { list-style: none; }
-	blockquote, q { quotes: none; }
-	blockquote:before, blockquote:after, q:before, q:after { content: ''; content: none; }
-	/* remember to highlight inserts somehow! */ ins { text-decoration: none; }
-	del { text-decoration: line-through; }
-	table { border-collapse: collapse; border-spacing: 0; }
+    /* http://meyerweb.com/eric/tools/css/reset/ v2.0b1 | 201101 NOTE: WORK IN PROGRESS
+     USE WITH CAUTION AND TEST WITH ABANDON */
+    html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote,
+    pre,a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s,
+    samp, small, strike, strong, sub, sup, tt, var,b, u, i, center, dl, dt, dd, ol, ul,
+    li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td,
+    article, aside, canvas, details, figcaption, figure, footer, header, hgroup, menu,
+    nav, section, summary, time, mark, audio, video
+    {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      font-size: 100%;
+      font: inherit;
+      vertical-align: baseline;
+    }
+    /* HTML5 display-role reset for older browsers */
+    article, aside, details, figcaption, figure, footer, header, hgroup, menu, nav,
+    section { display: block; }
+    body { line-height: 1; }
+    ol, ul { list-style: none; }
+    blockquote, q { quotes: none; }
+    blockquote:before, blockquote:after, q:before, q:after { content: ''; content: none; }
+    /* remember to highlight inserts somehow! */ ins { text-decoration: none; }
+    del { text-decoration: line-through; }
+    table { border-collapse: collapse; border-spacing: 0; }
 
-	div#main.loading { color: #f1f1f1; }
+    div#main.loading { color: #f1f1f1; }
 
 At this point, I also tend to remove the "App_Readme" folder that the Bridge package adds to my project - if I'm going to write some code and check it into source control somewhere then I don't think there's a lot of point in storing a copy of the Bridge README and LICENSE each time.
 
@@ -250,99 +250,99 @@ That's the theory and the project scaffolding out of the way. Now to create a fo
 
 We've already seen how a **TextInput** component is helpful for wrapping a text input and simplifying the "OnChange" callback. So create a "Components" folder with a "TextInput.cs" file and paste in the following content -
 
-	using System;
-	using Bridge.Html5;
-	using Bridge.React;
+    using System;
+    using Bridge.Html5;
+    using Bridge.React;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class TextInput : StatelessComponent<TextInput.Props>
-	  {
-		public TextInput(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class TextInput : StatelessComponent<TextInput.Props>
+      {
+        public TextInput(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  return DOM.Input(new InputAttributes
-		  {
-			Type = InputType.Text,
-			ClassName = props.ClassName,
-			Value = props.Content,
-			OnChange = e => props.OnChange(e.CurrentTarget.Value)
-		  });
-		}
+        public override ReactElement Render()
+        {
+          return DOM.Input(new InputAttributes
+          {
+            Type = InputType.Text,
+            ClassName = props.ClassName,
+            Value = props.Content,
+            OnChange = e => props.OnChange(e.CurrentTarget.Value)
+          });
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public string Content;
-		  public Action<string> OnChange;
-		}
-	  }
-	}
+        public class Props
+        {
+          public string ClassName;
+          public string Content;
+          public Action<string> OnChange;
+        }
+      }
+    }
 
 *(Note: When adding a new ".cs" file to a project, sometimes "System" will sneak back into the list of references in the project - this can confuse Bridge, so ensure that you remove the reference again if it gets added).*
 
 Now create another folder in the root of the project called "ViewModels". Add a new file to it; "MessageDetails.cs" and paste in the following content -
 
-	namespace BridgeReactTutorial.ViewModels
-	{
-	  public class MessageDetails
-	  {
+    namespace BridgeReactTutorial.ViewModels
+    {
+      public class MessageDetails
+      {
         public string Title;
         public string Content;
-	  }
+      }
     }
 
 Now add another file to the "Components" folder; "MessageEditor.cs" and paste in this:
 
-	using System;
-	using Bridge.React;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using Bridge.React;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
-	  {
-		public MessageEditor(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageEditor : StatelessComponent<MessageEditor.Props>
+      {
+        public MessageEditor(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
-			DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
-			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
-			new TextInput(new TextInput.Props
-			{
-			  ClassName = "title",
-			  Content = props.Title,
-			  OnChange = newTitle => props.OnChange(new MessageDetails
-			  {
-				Title = newTitle,
-				Content = props.Content
-			  })
-			}),
-			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
-			new TextInput(new TextInput.Props
-			{
-			  ClassName = "content",
-			  Content = props.Content,
-			  OnChange = newContent => props.OnChange(new MessageDetails
-			  {
-				Title = props.Title,
-				Content = newContent
-			  })
-			})
-		  );
-		}
+        public override ReactElement Render()
+        {
+          return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
+            DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
+            DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+            new TextInput(new TextInput.Props
+            {
+              ClassName = "title",
+              Content = props.Title,
+              OnChange = newTitle => props.OnChange(new MessageDetails
+              {
+                Title = newTitle,
+                Content = props.Content
+              })
+            }),
+            DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+            new TextInput(new TextInput.Props
+            {
+              ClassName = "content",
+              Content = props.Content,
+              OnChange = newContent => props.OnChange(new MessageDetails
+              {
+                Title = props.Title,
+                Content = newContent
+              })
+            })
+          );
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public string Title;
-		  public string Content;
-		  public Action<MessageDetails> OnChange;
-		}
-	  }
-	}
+        public class Props
+        {
+          public string ClassName;
+          public string Title;
+          public string Content;
+          public Action<MessageDetails> OnChange;
+        }
+      }
+    }
 
 Now things are getting interesting!
 
@@ -352,41 +352,41 @@ Note that there's no validation yet. We'll get this rough version working first 
 
 There are still a few more steps until we have an application, though. We need a container component to render the form in the first place and to deal with on-change events that bubble up. Create another class file within the "Components" folder named "AppContainer.cs" -
 
-	using Bridge.Html5;
-	using Bridge.React;
-	using BridgeReactTutorial.ViewModels;
+    using Bridge.Html5;
+    using Bridge.React;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class AppContainer : Component<object, AppContainer.State>
-	  {
-		public AppContainer() : base(null) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class AppContainer : Component<object, AppContainer.State>
+      {
+        public AppContainer() : base(null) { }
 
-		protected override State GetInitialState()
-		{
-		  return new State
-		  {
-			Message = new MessageDetails { Title = "", Content = "" }
-		  };
-		}
+        protected override State GetInitialState()
+        {
+          return new State
+          {
+            Message = new MessageDetails { Title = "", Content = "" }
+          };
+        }
 
-		public override ReactElement Render()
-		{
-		  return new MessageEditor(new MessageEditor.Props
-		  {
-			ClassName = "message",
-			Title = state.Message.Title,
-			Content = state.Message.Content,
-			OnChange = newMessage => SetState(new State { Message = newMessage })
-		  });
-		}
+        public override ReactElement Render()
+        {
+          return new MessageEditor(new MessageEditor.Props
+          {
+            ClassName = "message",
+            Title = state.Message.Title,
+            Content = state.Message.Content,
+            OnChange = newMessage => SetState(new State { Message = newMessage })
+          });
+        }
 
-		public class State
-		{
-		  public MessageDetails Message;
-		}
-	  }
-	}
+        public class State
+        {
+          public MessageDetails Message;
+        }
+      }
+    }
 
 This is the *stateful* component that will trigger re-renders when required. It doesn't actually require any props data at this time, so the "TProps" type parameter specified on the **Component&lt;TProps, TState&gt;** base class is just "object".
 
@@ -396,48 +396,48 @@ When the **MessageEditor** raises an on-change event, the **AppContainer** will 
 
 The penultimate step is to change "Class1.cs" to render the **AppContainer** instead of just rendering a "Hi!" div. While we're editing it, let's give it a more official-sounding name. I like the starting point of my application to be called "App" -
 
-	using System.Linq;
-	using Bridge.Html5;
-	using Bridge.React;
-	using BridgeReactTutorial.Components;
+    using System.Linq;
+    using Bridge.Html5;
+    using Bridge.React;
+    using BridgeReactTutorial.Components;
 
-	namespace BridgeReactTutorial
-	{
-	  public class App
-	  {
-		[Ready]
-		public static void Go()
-		{
-		  var container = Document.GetElementById("main");
+    namespace BridgeReactTutorial
+    {
+      public class App
+      {
+        [Ready]
+        public static void Go()
+        {
+          var container = Document.GetElementById("main");
           container.ClassName = string.Join(
-		    " ",
-			container.ClassName.Split().Where(c => c != "loading")
-		  );
-		  React.Render(new AppContainer(), container);
-		}
-	  }
-	}
-	
+            " ",
+            container.ClassName.Split().Where(c => c != "loading")
+          );
+          React.Render(new AppContainer(), container);
+        }
+      }
+    }
+
 All that's required now is to make it look a little nicer when you view "demo.html", so add the following to "styles.css" -
 
-	body
-	{
-	  font-family: 'Segoe UI';
-	  padding: 8px;
-	}
+    body
+    {
+      font-family: 'Segoe UI';
+      padding: 8px;
+    }
 
-	fieldset
-	{
-	  padding: 8px;
-	  border: 1px solid #f1f1f1;
-	  border-radius: 4px;
-	}
-	fieldset legend
-	{
-	  color: blue;
-	  padding: 0 8px;
-	}
-	fieldset.message span.label { padding: 0 8px; }
+    fieldset
+    {
+      padding: 8px;
+      border: 1px solid #f1f1f1;
+      border-radius: 4px;
+    }
+    fieldset legend
+    {
+      color: blue;
+      padding: 0 8px;
+    }
+    fieldset.message span.label { padding: 0 8px; }
 
 That's the first major milestone reached! A very basic framework for constructing component hierarchies has been demonstrated, along with a way to handle events and re-render as required. There's nothing very radical, it's just what was described earlier; but it's good to see the theory executed in practice.
 
@@ -449,48 +449,48 @@ While I want to simulate a server-based API, where read / write requests aren't 
 
 Create a new folder in the project root called "API" and add a new .cs file "IReadAndWriteMessages.cs", the contents of which should be:
 
-	using System.Threading.Tasks;
-	using BridgeReactTutorial.ViewModels;
+    using System.Threading.Tasks;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public interface IReadAndWriteMessages
-	  {
-		Task SaveMessage(MessageDetails message);
-	  }
-	}
+    namespace BridgeReactTutorial.API
+    {
+      public interface IReadAndWriteMessages
+      {
+        Task SaveMessage(MessageDetails message);
+      }
+    }
 
 We'll be using dependency injection to provide the **AppContainer** with an API implementation. In order to enable unit testing (which will come later) we need to be able to work against an interface. For now, the interface only has a "SaveMessage" method, we'll work on reading message history data later.
 
 Add another file into the "API" folder, "MessageApi.cs" -
 
-	using System;
-	using System.Threading.Tasks;
-	using Bridge.Html5;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using System.Threading.Tasks;
+    using Bridge.Html5;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public class MessageApi : IReadAndWriteMessages
-	  {
-		public Task SaveMessage(MessageDetails message)
-		{
-		  if (message == null)
-			throw new ArgumentNullException("message");
-		  if (string.IsNullOrWhiteSpace(message.Title))
-			throw new ArgumentException("A title value must be provided");
-		  if (string.IsNullOrWhiteSpace(message.Content))
-			throw new ArgumentException("A content value must be provided");
+    namespace BridgeReactTutorial.API
+    {
+      public class MessageApi : IReadAndWriteMessages
+      {
+        public Task SaveMessage(MessageDetails message)
+        {
+          if (message == null)
+            throw new ArgumentNullException("message");
+          if (string.IsNullOrWhiteSpace(message.Title))
+            throw new ArgumentException("A title value must be provided");
+          if (string.IsNullOrWhiteSpace(message.Content))
+            throw new ArgumentException("A content value must be provided");
 
-		  var task = new Task<object>(null);
-		  Window.SetTimeout(
-			() => task.Complete(),
-			1000 // Simulate a roundtrip to the server
-		  );
-		  return task;
-		}
-	  }
-	}
+          var task = new Task<object>(null);
+          Window.SetTimeout(
+            () => task.Complete(),
+            1000 // Simulate a roundtrip to the server
+          );
+          return task;
+        }
+      }
+    }
 
 Bridge supports the C# "async" keyword and provides its own implementation of Tasks, which are used above to pretend that this class is communicating with a server when a save is requested.
 
@@ -500,96 +500,96 @@ In order to enable saving, the **MessageEditor** needs a "Save" button and it ne
 
 The **MessageEditor** should now looks like this:
 
-	using System;
-	using Bridge.React;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using Bridge.React;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
-	  {
-		public MessageEditor(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageEditor : StatelessComponent<MessageEditor.Props>
+      {
+        public MessageEditor(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
-			DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
-			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
-			new TextInput(new TextInput.Props
-			{
-			  ClassName = "title",
-			  Disabled = props.Disabled,
-			  Content = props.Title,
-			  OnChange = newTitle => props.OnChange(new MessageDetails
-			  {
-				Title = newTitle,
-				Content = props.Content
-			  })
-			}),
-			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
-			new TextInput(new TextInput.Props
-			{
-			  ClassName = "content",
-			  Disabled = props.Disabled,
-			  Content = props.Content,
-			  OnChange = newContent => props.OnChange(new MessageDetails
-			  {
-				Title = props.Title,
-				Content = newContent
-			  })
-			}),
-			DOM.Button(
-			  new ButtonAttributes { Disabled = props.Disabled, OnClick = e => props.OnSave() },
-			  "Save"
-			)
-		  );
-		}
+        public override ReactElement Render()
+        {
+          return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
+            DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
+            DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+            new TextInput(new TextInput.Props
+            {
+              ClassName = "title",
+              Disabled = props.Disabled,
+              Content = props.Title,
+              OnChange = newTitle => props.OnChange(new MessageDetails
+              {
+                Title = newTitle,
+                Content = props.Content
+              })
+            }),
+            DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+            new TextInput(new TextInput.Props
+            {
+              ClassName = "content",
+              Disabled = props.Disabled,
+              Content = props.Content,
+              OnChange = newContent => props.OnChange(new MessageDetails
+              {
+                Title = props.Title,
+                Content = newContent
+              })
+            }),
+            DOM.Button(
+              new ButtonAttributes { Disabled = props.Disabled, OnClick = e => props.OnSave() },
+              "Save"
+            )
+          );
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public string Title;
-		  public string Content;
-		  public Action<MessageDetails> OnChange;
-		  public Action OnSave;
-		  public bool Disabled;
-		}
-	  }
-	}
+        public class Props
+        {
+          public string ClassName;
+          public string Title;
+          public string Content;
+          public Action<MessageDetails> OnChange;
+          public Action OnSave;
+          public bool Disabled;
+        }
+      }
+    }
 
 The "Disabled" flag needs to be able to be applied to the **TextInput** components, so **TextInput** needs to look like this:
 
-	using System;
-	using Bridge.Html5;
-	using Bridge.React;
+    using System;
+    using Bridge.Html5;
+    using Bridge.React;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class TextInput : StatelessComponent<TextInput.Props>
-	  {
-		public TextInput(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class TextInput : StatelessComponent<TextInput.Props>
+      {
+        public TextInput(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  return DOM.Input(new InputAttributes
-		  {
-			Type = InputType.Text,
-			ClassName = props.ClassName,
-			Disabled = props.Disabled,
-			Value = props.Content,
-			OnChange = e => props.OnChange(e.CurrentTarget.Value)
-		  });
-		}
+        public override ReactElement Render()
+        {
+          return DOM.Input(new InputAttributes
+          {
+            Type = InputType.Text,
+            ClassName = props.ClassName,
+            Disabled = props.Disabled,
+            Value = props.Content,
+            OnChange = e => props.OnChange(e.CurrentTarget.Value)
+          });
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public bool Disabled;
-		  public string Content;
-		  public Action<string> OnChange;
-		}
-	  }
-	}
+        public class Props
+        {
+          public string ClassName;
+          public bool Disabled;
+          public string Content;
+          public Action<string> OnChange;
+        }
+      }
+    }
 
 This enables the **MessageEditor** to initiate a save request and for a "Message API" to process the request. Now the **AppContainer** needs to tie these two aspects together.
 
@@ -604,91 +604,91 @@ At this point, these rules are going to seem very straight-forward. Later, howev
 
 The **AppContainer** will now become the following -
 
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class AppContainer : Component<AppContainer.Props, AppContainer.State>
-	  {
-		public AppContainer(AppContainer.Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class AppContainer : Component<AppContainer.Props, AppContainer.State>
+      {
+        public AppContainer(AppContainer.Props props) : base(props) { }
 
-		protected override State GetInitialState()
-		{
-		  return new State
-		  {
-		    Message = new MessageDetails { Title = "", Content = "" },
-		    IsSaveInProgress = false
-		  };
-		}
+        protected override State GetInitialState()
+        {
+          return new State
+          {
+            Message = new MessageDetails { Title = "", Content = "" },
+            IsSaveInProgress = false
+          };
+        }
 
-		public override ReactElement Render()
-		{
-		  return new MessageEditor(new MessageEditor.Props
-		  {
-			ClassName = "message",
-			Title = state.Message.Title,
-			Content = state.Message.Content,
-			OnChange = newMessage => SetState(new State
-			{
-			  Message = newMessage,
-			  IsSaveInProgress = state.IsSaveInProgress
-			}),
-			OnSave = async () =>
-			{
-			  SetState(new State { Message = state.Message, IsSaveInProgress = true });
-			  await props.MessageApi.SaveMessage(state.Message);
-			  SetState(new State
-			  {
-				Message = new MessageDetails { Title = "", Content = "" },
-				IsSaveInProgress = false
-			  });
-			},			
-			Disabled = state.IsSaveInProgress
-		  });
-		}
+        public override ReactElement Render()
+        {
+          return new MessageEditor(new MessageEditor.Props
+          {
+            ClassName = "message",
+            Title = state.Message.Title,
+            Content = state.Message.Content,
+            OnChange = newMessage => SetState(new State
+            {
+              Message = newMessage,
+              IsSaveInProgress = state.IsSaveInProgress
+            }),
+            OnSave = async () =>
+            {
+              SetState(new State { Message = state.Message, IsSaveInProgress = true });
+              await props.MessageApi.SaveMessage(state.Message);
+              SetState(new State
+              {
+                Message = new MessageDetails { Title = "", Content = "" },
+                IsSaveInProgress = false
+              });
+            },
+            Disabled = state.IsSaveInProgress
+          });
+        }
 
-		public class Props
-		{
-		  public IReadAndWriteMessages MessageApi;
-		}
+        public class Props
+        {
+          public IReadAndWriteMessages MessageApi;
+        }
 
-		public class State
-		{
-		  public MessageDetails Message;
-		  public bool IsSaveInProgress;
-		}
-	  }
-	}
-	
+        public class State
+        {
+          public MessageDetails Message;
+          public bool IsSaveInProgress;
+        }
+      }
+    }
+
 You will need to update App.cs to pass a props reference with a **MessageApi** instance to the **AppContainer** constructor -
 
-	using System.Linq;
-	using Bridge.Html5;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.Components;
+    using System.Linq;
+    using Bridge.Html5;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.Components;
 
-	namespace BridgeReactTutorial
-	{
-	  public class App
-	  {
-		[Ready]
-		public static void Go()
-		{
-		  var container = Document.GetElementById("main");
-		  container.ClassName = string.Join(
-			" ",
-			container.ClassName.Split().Where(c => c != "loading")
-		  );
-		  React.Render(
-			new AppContainer(new AppContainer.Props { MessageApi = new MessageApi() }),
-			container
-		  );
-		}
-	  }
-	}
+    namespace BridgeReactTutorial
+    {
+      public class App
+      {
+        [Ready]
+        public static void Go()
+        {
+          var container = Document.GetElementById("main");
+          container.ClassName = string.Join(
+            " ",
+            container.ClassName.Split().Where(c => c != "loading")
+          );
+          React.Render(
+            new AppContainer(new AppContainer.Props { MessageApi = new MessageApi() }),
+            container
+          );
+        }
+      }
+    }
 
 With this final piece, we have the outline of a fully functioning application! Granted, its functionality is not particular magnificent, but it *has* illustrated some important principles. We've seen how a component hierarchy should have a top-level *stateful* component, with a component tree beneath it of state*less* components (note that there are no guidelines required regarding what to put into props and what to put into state when writing a stateless component because props is your only option - another reason why stateless components are so much simpler!). We've also seen how we can deal with dependency injection for these top level components, which are the only point at which more complicated logic appears such as "a save request involves disabling the form, calling a method on the API, waiting for the result and then re-enabling the form". It's worth noting that in the next post, this logic will be moved out of the top-level component in a quest to make components as dumb as possible - but that's jumping ahead, and I want the format of these posts to be that we start simple and then get more complicated only as the benefits of doing so can be made clear.
 
@@ -698,121 +698,121 @@ At this point, however, we have something of a problem. If the "Title" and "Cont
 
 I mentioned in the "React components" section that there would be a **ValidatedTextInput**, but no code had been presented yet. So here we go, nothing in it should be particularly surprising -
 
-	using System;
-	using Bridge.React;
+    using System;
+    using Bridge.React;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class ValidatedTextInput : StatelessComponent<ValidatedTextInput.Props>
-	  {
-		public ValidatedTextInput(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class ValidatedTextInput : StatelessComponent<ValidatedTextInput.Props>
+      {
+        public ValidatedTextInput(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  var className = props.ClassName;
-		  if (!string.IsNullOrWhiteSpace(props.ValidationMessage))
-			className = (className + " invalid").Trim();
+        public override ReactElement Render()
+        {
+          var className = props.ClassName;
+          if (!string.IsNullOrWhiteSpace(props.ValidationMessage))
+            className = (className + " invalid").Trim();
 
-		  return DOM.Span(new Attributes { ClassName = className },
-			new TextInput(new TextInput.Props
-			{
-			  ClassName = props.ClassName,
-			  Disabled = props.Disabled,
-			  Content = props.Content,
-			  OnChange = props.OnChange
-			}),
-			string.IsNullOrWhiteSpace(props.ValidationMessage)
-			  ? null
-			  : DOM.Span(
-			    new Attributes { ClassName = "validation-message" },
-			    props.ValidationMessage
-			  )
-		  );
-		}
+          return DOM.Span(new Attributes { ClassName = className },
+            new TextInput(new TextInput.Props
+            {
+              ClassName = props.ClassName,
+              Disabled = props.Disabled,
+              Content = props.Content,
+              OnChange = props.OnChange
+            }),
+            string.IsNullOrWhiteSpace(props.ValidationMessage)
+              ? null
+              : DOM.Span(
+                new Attributes { ClassName = "validation-message" },
+                props.ValidationMessage
+              )
+          );
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public bool Disabled;
-		  public string Content;
-		  public Action<string> OnChange;
-		  public string ValidationMessage;
-		}
-	  }
-	}
+        public class Props
+        {
+          public string ClassName;
+          public bool Disabled;
+          public string Content;
+          public Action<string> OnChange;
+          public string ValidationMessage;
+        }
+      }
+    }
 
 This allows the **MessageEditor** to be changed to use these **ValidatedTextInput**s instead of regular **TextInput**s, setting the "ValidationMessage" values according to whether the "Content" string has a value -
 
-	using System;
-	using Bridge.React;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using Bridge.React;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageEditor : StatelessComponent<MessageEditor.Props>
-	  {
-		public MessageEditor(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageEditor : StatelessComponent<MessageEditor.Props>
+      {
+        public MessageEditor(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  var formIsInvalid =
-			string.IsNullOrWhiteSpace(props.Title) ||
-			string.IsNullOrWhiteSpace(props.Content);
+        public override ReactElement Render()
+        {
+          var formIsInvalid =
+            string.IsNullOrWhiteSpace(props.Title) ||
+            string.IsNullOrWhiteSpace(props.Content);
 
-		  return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
-			DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
-			DOM.Span(new Attributes { ClassName = "label" }, "Title"),
-			new ValidatedTextInput(new ValidatedTextInput.Props
-			{
-			  ClassName = "title",
-			  Disabled = props.Disabled,
-			  Content = props.Title,
-			  OnChange = newTitle => props.OnChange(new MessageDetails
-			  {
-				Title = newTitle,
-				Content = props.Content
-			  }),
-			  ValidationMessage = string.IsNullOrWhiteSpace(props.Title)
-				? "Must enter a title"
-				: null
-			}),
-			DOM.Span(new Attributes { ClassName = "label" }, "Content"),
-			new ValidatedTextInput(new ValidatedTextInput.Props
-			{
-			  ClassName = "content",
-			  Disabled = props.Disabled,
-			  Content = props.Content,
-			  OnChange = newContent => props.OnChange(new MessageDetails
-			  {
-				Title = props.Title,
-				Content = newContent
-			  }),
-			  ValidationMessage = string.IsNullOrWhiteSpace(props.Content)
-				? "Must enter message content"
-				: null
-			}),
-			DOM.Button(
-			  new ButtonAttributes
-			  {
-			    Disabled = props.Disabled || formIsInvalid,
-			    OnClick = e => props.OnSave()
-			  },
-			  "Save"
-			)
-		  );
-		}
+          return DOM.FieldSet(new FieldSetAttributes { ClassName = props.ClassName },
+            DOM.Legend(null, string.IsNullOrWhiteSpace(props.Title) ? "Untitled" : props.Title),
+            DOM.Span(new Attributes { ClassName = "label" }, "Title"),
+            new ValidatedTextInput(new ValidatedTextInput.Props
+            {
+              ClassName = "title",
+              Disabled = props.Disabled,
+              Content = props.Title,
+              OnChange = newTitle => props.OnChange(new MessageDetails
+              {
+                Title = newTitle,
+                Content = props.Content
+              }),
+              ValidationMessage = string.IsNullOrWhiteSpace(props.Title)
+                ? "Must enter a title"
+                : null
+            }),
+            DOM.Span(new Attributes { ClassName = "label" }, "Content"),
+            new ValidatedTextInput(new ValidatedTextInput.Props
+            {
+              ClassName = "content",
+              Disabled = props.Disabled,
+              Content = props.Content,
+              OnChange = newContent => props.OnChange(new MessageDetails
+              {
+                Title = props.Title,
+                Content = newContent
+              }),
+              ValidationMessage = string.IsNullOrWhiteSpace(props.Content)
+                ? "Must enter message content"
+                : null
+            }),
+            DOM.Button(
+              new ButtonAttributes
+              {
+                Disabled = props.Disabled || formIsInvalid,
+                OnClick = e => props.OnSave()
+              },
+              "Save"
+            )
+          );
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public string Title;
-		  public string Content;
-		  public Action<MessageDetails> OnChange;
-		  public Action OnSave;
-		  public bool Disabled;
-		}
-	  }
-	}
+        public class Props
+        {
+          public string ClassName;
+          public string Title;
+          public string Content;
+          public Action<MessageDetails> OnChange;
+          public Action OnSave;
+          public bool Disabled;
+        }
+      }
+    }
 
 Now, the "Save" button is disabled if the **MessageEditor** is disabled (according to its props flag) *or* if the form entry is invalid. Now, it's not possible for the user to attempt a save that we will know will fail!
 
@@ -820,138 +820,138 @@ Now, the "Save" button is disabled if the **MessageEditor** is disabled (accordi
 
 To keep things looking pretty, adding the following to "styles.css" -
 
-	fieldset.message span.title, fieldset.message span.content { position: relative; }
-	fieldset.message span.validation-message
-	{
-	  position: absolute;
-	  top: -6px;
-	  right: 2px;
-	  padding: 2px 4px;
-	  font-size: 70%;
-	  background: #FFF9D8;
-	  border: 1px solid #EFE9CB;
-	  border-radius: 2px;
-	  color: #A8A390;
-	}
-	fieldset.message button { margin-left: 8px; }
+    fieldset.message span.title, fieldset.message span.content { position: relative; }
+    fieldset.message span.validation-message
+    {
+      position: absolute;
+      top: -6px;
+      right: 2px;
+      padding: 2px 4px;
+      font-size: 70%;
+      background: #FFF9D8;
+      border: 1px solid #EFE9CB;
+      border-radius: 2px;
+      color: #A8A390;
+    }
+    fieldset.message button { margin-left: 8px; }
 
 ### Message History
 
 What's the point in saving messages if we can't read them back out again? To enable this, the **IReadAndWriteMessages** needs a "GetMessages" method to accompany "SaveMessage" -
 
-	using System;
-	using System.Collections.Generic;
-	using System.Threading.Tasks;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public interface IReadAndWriteMessages
-	  {
-		Task SaveMessage(MessageDetails message);
-		Task<IEnumerable<Tuple<int, MessageDetails>>> GetMessages();
-	  }
+    namespace BridgeReactTutorial.API
+    {
+      public interface IReadAndWriteMessages
+      {
+        Task SaveMessage(MessageDetails message);
+        Task<IEnumerable<Tuple<int, MessageDetails>>> GetMessages();
+      }
     }
 
 This needs implementing in **MessageApi** -
 
-	using System;
-	using System.Collections.Generic;
-	using System.Threading.Tasks;
-	using Bridge.Html5;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+    using Bridge.Html5;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.API
-	{
-	  public class MessageApi : IReadAndWriteMessages
-	  {
-		private readonly List<Tuple<int, MessageDetails>> _messages;
-		public MessageApi()
-		{
-		  _messages = new List<Tuple<int, MessageDetails>>();
-		}
+    namespace BridgeReactTutorial.API
+    {
+      public class MessageApi : IReadAndWriteMessages
+      {
+        private readonly List<Tuple<int, MessageDetails>> _messages;
+        public MessageApi()
+        {
+          _messages = new List<Tuple<int, MessageDetails>>();
+        }
 
-		public Task SaveMessage(MessageDetails message)
-		{
-		  if (message == null)
-			throw new ArgumentNullException("message");
-		  if (string.IsNullOrWhiteSpace(message.Title))
-			throw new ArgumentException("A title value must be provided");
-		  if (string.IsNullOrWhiteSpace(message.Content))
-			throw new ArgumentException("A content value must be provided");
+        public Task SaveMessage(MessageDetails message)
+        {
+          if (message == null)
+            throw new ArgumentNullException("message");
+          if (string.IsNullOrWhiteSpace(message.Title))
+            throw new ArgumentException("A title value must be provided");
+          if (string.IsNullOrWhiteSpace(message.Content))
+            throw new ArgumentException("A content value must be provided");
 
-		  var task = new Task<object>(null);
-		  Window.SetTimeout(
-			() =>
-			{
-			  _messages.Add(Tuple.Create(_messages.Count, message));
-			  task.Complete();
-			},
-			1000 // Simulate a roundtrip to the server
-		  );
-		  return task;
-		}
+          var task = new Task<object>(null);
+          Window.SetTimeout(
+            () =>
+            {
+              _messages.Add(Tuple.Create(_messages.Count, message));
+              task.Complete();
+            },
+            1000 // Simulate a roundtrip to the server
+          );
+          return task;
+        }
 
-		public Task<IEnumerable<Tuple<int, MessageDetails>>> GetMessages()
-		{
-		  // ToArray is used to return a clone of the message set - otherwise, the caller would
-		  // end up with a list that is updated when the internal reference within this class
-		  // is updated (which sounds convenient but it's not the behaviour that would be
-		  // exhibited if this was really persisting messages to a server somewhere)
-		  var task = new Task<IEnumerable<Tuple<int, MessageDetails>>>(null);
-		  Window.SetTimeout(
-			() => task.Complete(_messages.ToArray()),
-			1000 // Simulate a roundtrip to the server
-		  );
-		  return task;
-		}
-	  }
-	}
+        public Task<IEnumerable<Tuple<int, MessageDetails>>> GetMessages()
+        {
+          // ToArray is used to return a clone of the message set - otherwise, the caller would
+          // end up with a list that is updated when the internal reference within this class
+          // is updated (which sounds convenient but it's not the behaviour that would be
+          // exhibited if this was really persisting messages to a server somewhere)
+          var task = new Task<IEnumerable<Tuple<int, MessageDetails>>>(null);
+          Window.SetTimeout(
+            () => task.Complete(_messages.ToArray()),
+            1000 // Simulate a roundtrip to the server
+          );
+          return task;
+        }
+      }
+    }
 
 Now, we'll need a way to render this information -
 
-	using System;
-	using System.Collections.Generic;
-	using System.Linq;
-	using Bridge.React;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using Bridge.React;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class MessageHistory : StatelessComponent<MessageHistory.Props>
-	  {
-		public MessageHistory(Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class MessageHistory : StatelessComponent<MessageHistory.Props>
+      {
+        public MessageHistory(Props props) : base(props) { }
 
-		public override ReactElement Render()
-		{
-		  var className = props.ClassName;
-		  if (!props.Messages.Any())
-			className = (className + " zero-messages").Trim();
+        public override ReactElement Render()
+        {
+          var className = props.ClassName;
+          if (!props.Messages.Any())
+            className = (className + " zero-messages").Trim();
 
-		  // Any time a set of child components is dynamically-created (meaning that the
-		  // numbers of items may vary from one render to another), each must have a unique
-		  // "Key" property set (this may be a int or a string). Here, this is simple as
-		  // each message tuple is a unique id and the contents of that message (and the
-		  // unique id is ideal for use as a unique "Key" property).
-		  var messageElements = props.Messages
-			.Select(idAndMessage => DOM.Div(new Attributes { Key = idAndMessage.Item1 },
-			  DOM.Span(new Attributes { ClassName = "title" }, idAndMessage.Item2.Title),
-			  DOM.Span(new Attributes { ClassName = "content" }, idAndMessage.Item2.Content)
-			));
+          // Any time a set of child components is dynamically-created (meaning that the
+          // numbers of items may vary from one render to another), each must have a unique
+          // "Key" property set (this may be a int or a string). Here, this is simple as
+          // each message tuple is a unique id and the contents of that message (and the
+          // unique id is ideal for use as a unique "Key" property).
+          var messageElements = props.Messages
+            .Select(idAndMessage => DOM.Div(new Attributes { Key = idAndMessage.Item1 },
+              DOM.Span(new Attributes { ClassName = "title" }, idAndMessage.Item2.Title),
+              DOM.Span(new Attributes { ClassName = "content" }, idAndMessage.Item2.Content)
+            ));
 
-		  return DOM.FieldSet(new FieldSetAttributes { ClassName = className },
-			DOM.Legend(null, "Message History"),
-			DOM.Div(null, messageElements)
-		  );
-		}
+          return DOM.FieldSet(new FieldSetAttributes { ClassName = className },
+            DOM.Legend(null, "Message History"),
+            DOM.Div(null, messageElements)
+          );
+        }
 
-		public class Props
-		{
-		  public string ClassName;
-		  public IEnumerable<Tuple<int, MessageDetails>> Messages;
-		}
-	  }
-	}
+        public class Props
+        {
+          public string ClassName;
+          public IEnumerable<Tuple<int, MessageDetails>> Messages;
+        }
+      }
+    }
 
 This highlights an important React principle - where there are sets of dynamic child components, each must be provided a unique key. In the component above, we take "props.Messages" and map the data onto a set of Div elements. It's very possible that different messages will be rendered each time and so this is precisely what is meant by "dynamic child components".
 
@@ -967,91 +967,91 @@ For our purposes here, providing a unique key for each **MessageHistory** row is
 
 Now we have to return to the **AppContainer** to tie everything together; we need to add the message history data to the **AppContainer**'s state, we need to read the message history after we save and we need to render the message history -
 
-	using System;
-	using System.Collections.Generic;
-	using Bridge.React;
-	using BridgeReactTutorial.API;
-	using BridgeReactTutorial.ViewModels;
+    using System;
+    using System.Collections.Generic;
+    using Bridge.React;
+    using BridgeReactTutorial.API;
+    using BridgeReactTutorial.ViewModels;
 
-	namespace BridgeReactTutorial.Components
-	{
-	  public class AppContainer : Component<AppContainer.Props, AppContainer.State>
-	  {
-		public AppContainer(AppContainer.Props props) : base(props) { }
+    namespace BridgeReactTutorial.Components
+    {
+      public class AppContainer : Component<AppContainer.Props, AppContainer.State>
+      {
+        public AppContainer(AppContainer.Props props) : base(props) { }
 
-		protected override State GetInitialState()
-		{
-		  return new State
-		  {
-			Message = new MessageDetails { Title = "", Content = "" },
-			IsSaveInProgress = false,
-			MessageHistory = new Tuple<int, MessageDetails>[0]
-		  };
-		}
+        protected override State GetInitialState()
+        {
+          return new State
+          {
+            Message = new MessageDetails { Title = "", Content = "" },
+            IsSaveInProgress = false,
+            MessageHistory = new Tuple<int, MessageDetails>[0]
+          };
+        }
 
-		public override ReactElement Render()
-		{
-		  return DOM.Div(null,
-			new MessageEditor(new MessageEditor.Props
-			{
-			  ClassName = "message",
-			  Title = state.Message.Title,
-			  Content = state.Message.Content,
-			  OnChange = newMessage => SetState(new State
-			  {
-				Message = newMessage,
-				IsSaveInProgress = state.IsSaveInProgress,
-				MessageHistory = state.MessageHistory
-			  }),
-			  OnSave = async () =>
-			  {
-				// Set SaveInProgress to true while the save operation is requested
-				SetState(new State {
-				  Message = state.Message,
-				  IsSaveInProgress = true,
-				  MessageHistory = state.MessageHistory
-				});
-				await props.MessageApi.SaveMessage(state.Message);
+        public override ReactElement Render()
+        {
+          return DOM.Div(null,
+            new MessageEditor(new MessageEditor.Props
+            {
+              ClassName = "message",
+              Title = state.Message.Title,
+              Content = state.Message.Content,
+              OnChange = newMessage => SetState(new State
+              {
+                Message = newMessage,
+                IsSaveInProgress = state.IsSaveInProgress,
+                MessageHistory = state.MessageHistory
+              }),
+              OnSave = async () =>
+              {
+                // Set SaveInProgress to true while the save operation is requested
+                SetState(new State {
+                  Message = state.Message,
+                  IsSaveInProgress = true,
+                  MessageHistory = state.MessageHistory
+                });
+                await props.MessageApi.SaveMessage(state.Message);
 
-				// After the save has completed, clear the message entry form and reset
-				// SaveInProgress to false
-				SetState(new State {
-				  Message = new MessageDetails { Title = "", Content = "" },
-				  IsSaveInProgress = false,
-				  MessageHistory = state.MessageHistory
-				});
+                // After the save has completed, clear the message entry form and reset
+                // SaveInProgress to false
+                SetState(new State {
+                  Message = new MessageDetails { Title = "", Content = "" },
+                  IsSaveInProgress = false,
+                  MessageHistory = state.MessageHistory
+                });
 
-				// Then re-load the message history state and re-render when that data arrives
-				var allMessages = await props.MessageApi.GetMessages();
-				SetState(new State {
-				  Message = state.Message,
-				  IsSaveInProgress = state.IsSaveInProgress,
-				  MessageHistory = allMessages
-				});
-			  },
-			  Disabled = state.IsSaveInProgress
-			}),
-			new MessageHistory(new MessageHistory.Props
-			{
-			  ClassName = "history",
-			  Messages = state.MessageHistory
-			})
-		  );
-		}
+                // Then re-load the message history state and re-render when that data arrives
+                var allMessages = await props.MessageApi.GetMessages();
+                SetState(new State {
+                  Message = state.Message,
+                  IsSaveInProgress = state.IsSaveInProgress,
+                  MessageHistory = allMessages
+                });
+              },
+              Disabled = state.IsSaveInProgress
+            }),
+            new MessageHistory(new MessageHistory.Props
+            {
+              ClassName = "history",
+              Messages = state.MessageHistory
+            })
+          );
+        }
 
-		public class Props
-		{
-		  public IReadAndWriteMessages MessageApi;
-		}
+        public class Props
+        {
+          public IReadAndWriteMessages MessageApi;
+        }
 
-		public class State
-		{
-		  public MessageDetails Message;
-		  public bool IsSaveInProgress;
-		  public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
-		}
-	  }
-	}
+        public class State
+        {
+          public MessageDetails Message;
+          public bool IsSaveInProgress;
+          public IEnumerable<Tuple<int, MessageDetails>> MessageHistory;
+        }
+      }
+    }
 
 The logic in this component is getting more complicated now, which is down to the event-handling; what needs to happen when this happens and then this happens and then this happens (eg. the user clicks save, we initiate a save request, the API completes the request, we update the UI to clear the form and then start loading the updated message history, then we update the UI with the new message content).
 
@@ -1066,18 +1066,18 @@ It's worth mentioning that, even though it's gotten more complicated, the **AppC
 
 To keep things look nice, add the following to "styles.css" -
 
-	fieldset.history
-	{
-	  opacity: 1;
-	  transition: opacity .5s ease-in-out;
-	}
-	fieldset.history.zero-messages { opacity: 0; }
-	fieldset.history span.title
-	{
-	  padding: 0 8px;
-	  font-weight: bold;
-	}
-	
+    fieldset.history
+    {
+      opacity: 1;
+      transition: opacity .5s ease-in-out;
+    }
+    fieldset.history.zero-messages { opacity: 0; }
+    fieldset.history span.title
+    {
+      padding: 0 8px;
+      font-weight: bold;
+    }
+
 This will have the **MessageHistory** invisible to begin with, fading in when the first message is available to display.
 
 ### Coming in Part Two..

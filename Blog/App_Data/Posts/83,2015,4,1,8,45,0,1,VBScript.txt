@@ -60,7 +60,7 @@ And, instead, imagine it described by a C# class thus:
         }
       }
     }
-    
+
 *Then* imagine that you have an entry point into a C# project (it could be a console application if the source VBScript was an admin script but for now let's assume it's an ASP.Net project). The work at this entry point could be something like:
 
     var env = new TranslatedProgram.EnvironmentReferences
@@ -71,7 +71,7 @@ And, instead, imagine it described by a C# class thus:
     {
       new TranslatedProgram.Runner(compatLayer).Go(env);
     }
-    
+
 This assumes that "Response" is a reference to an object that exposes the interface that the original script expected (which is only a "Write" method with a single property in the example above). If we're in an ASP.Net MVC Controller then we have just such a reference handily available. If we wanted to just write some test code then we could instead construct something like
 
     public class ResponseMock
@@ -81,7 +81,7 @@ This assumes that "Response" is a reference to an object that exposes the interf
         Console.Write(value);
       }
     }
-    
+
 and then use that as the value for the **TranslatedProgram.EnvironmentReferences** "response" property.
 
 Hurrah! We've just saved the stuck-in-VBScript world! Rejoice! Let's all use this magic translation process and leave VBScript behind.
@@ -140,19 +140,19 @@ Wrong! Oh, no no no. VBScript passes "by-ref" by default, so since the "b" argum
 So why does it not change during the F1 call but it *does* during the F2 call? Well, when you're not interested in the return value of a function then you shouldn't wrap the arguments in brackets. In fact, when the VBScript interpreter looks at the line
 
     o.F1(a)
-    
+
 It sees a function call where the set of arguments is *not* wrapped in brackets (because that's not allowed when the return value is not being considered) but where *the single value "a" is wrapped in brackets.* And VBScript takes this to mean pass this argument as by-value, even if the receiving function wants to take the argument by-ref.
 
 This is different to the line
 
     If o.F2(a) Then
-    
+
 since we *do* consider the return value, so the brackets *do* surround the function call's argument set and are *not* a special wrapper just around "a".
 
 So that it's clear that there is no ambiguity, if F1 took two arguments then it would not be valid to call it and ignore the return value *and* try to wrap the arguments in brackets thusly:
 
     o.F1(a, b)
-    
+
 This would result in a "compile error" (which is what happens when the interpreter refuses to even attempt to run the script) -
 
 > VBScript compilation error: Cannot use parenteses when calling a Sub
@@ -323,9 +323,9 @@ In terms of scoping, it's interesting to note that all variables and functions t
 The "Go" method sets the "o" and "a" properties of the **GlobalReferences** class right at the start with the lines:
 
     _outer.o = _.NEW(new c1(_, _env, _outer));
-    
+
     _outer.a = (Int16)1;
-    
+
 Then a reference to this **GlobalReferences** class is passed around any other translated classes - the class "C1" has become a C# class whose constructor takes an argument for the "compatibility layer" (that handles a lot of the nitty gritty of behaving precisely like VBScript) along with arguments for both the **EnvironmentReferences** and **GlobalReferences** instances. This **GlobalReferences** class is how state is shared between the outer scope and any class instances.
 
 The key difference between **EnvironmentReferences** and **GlobalReferences**, by the way, is that the former consists of undeclared variables - these might be external references (such as "Response"), which should be set by the calling code before executing "Go". Or they might just be variables that were never explicitly declared in the original source - why oh why was [Option Explicit](https://msdn.microsoft.com/en-us/library/y9341s4f.aspx) something to opt *into*?? (That's a rhetorical question, it's waaaaay too late to worry about it now). Meanwhile, **GlobalReferences** consists of variables and functions that were explicitly declared in the source - these are not exposed to the calling code, they are only used internally within the **TranslatedProgram** class' execution. So they both have a purpose and they may both be required by translated classes such as "C1" - you may conveniently note that both functions "F1" and "F2" refer to "\_env.response" and "\_outer.a" (properties from the **EnvironmentReferences** and **GlobalReferences** instances, respectively).
@@ -344,7 +344,7 @@ In C#, the following
       Console.WriteLine("GO!");
     }
     catch { }
-    
+
 would display
 
 > Go
@@ -352,7 +352,7 @@ would display
 > Go!
 
 But when you tell VBScript not to stop for errors, it takes its task seriously! This code:
-      
+
     On Error Resume Next
     Response.Write "<p>Go</p>"
     Response.Write "<p>Go!</p>"
@@ -396,41 +396,41 @@ This is why every line in the C# version of the code individually gets checked f
         value = value + 1
       End Function
     End Class
-    
+
     Class LazyBoy
       Function DoSomething(ByVal value)
         ' Lazy Boy doesn't actually do anything with the value
       End Function
     End Class
-    
+
 The line
 
     o.DoSomething value
-    
+
 would have to become either
 
     // This form is required when calling the LazyBoy's "DoSomething" method
     ((dynamic)o).DoSomething(ref value);
-    
+
 or
 
     // This form is required when calling the LazyBoy's "Incrementer" method
     ((dynamic)o).DoSomething(value);
-    
+
 There is no way to write that line such that it will work with a "ByRef" value *and* a "ByVal" method argument; one of them will fail at runtime. The only way to deal with it is to do some runtime analysis, which is pretty much what I do. If I can be absolutely sure when translating that the argument will be passed by-val (like if it's a literal such as a number, string, boolean or builtin constant, or if it's the return value of a function, or if it's wrapped in magic make-me-ByVal brackets like I talked about earlier, etc..) then the C# looks something like
 
     _.CALL(o, "DoSomething", _.ARGS.Val("abc"));
-    
+
 but if it may have to be passed by-ref, then it will look someting like
 
     _.CALL(o, "DoSomething", _.ARGS.Ref(value, v => { value = v; }));
-    
+
 The "Ref" variation has to accept the input argument value and then provide a way for the "CALL" method to push a new value back on top of it. When it executes, the target function's method signature is inspected and some jiggery pokery done if it *is* a by-ref argument.
 
 "Val" and "Ref" may be combined if there are multiple arguments with different characteristics - eg. if a method takes three arguments where the first and last are known to be by-val but the middle one might have to be by-ref then we get this:
 
     _.CALL(o, "DoSomethingElse", _.ARGS.Val(1).Ref(value, v => { value = v; }).Val(2));
-    
+
 **Runtime analysis? So it's really slow?** Reflection is used to try to identify what function on a target reference should be called - and what arguments, if any, need the by-ref treatment. This is not something that is particularly quick to do in .net (or anywhere, really; reflection is hardly something associated with ultimate, extreme, mind-bending performance). However, it does then compile and cache LINQ expressions for the calls - so if you are running the same code over and over again (if, say, you were hosting a web site and basically hitting a lot of the same code paths while people browse your site) then you would not pay the "reflection toll" over and over again.
 
 **So it's really fast and you've done performance analysis and it's a tightly optimised product?** No. It's not even a functionally-complete product yet. Stop getting so carried away.
@@ -438,11 +438,11 @@ The "Ref" variation has to accept the input argument value and then provide a wa
 **Why are the class and function names lower-cased in the C# code?** VBScript is a case-insensitive language. C# is not, C# *cares* about case. This means that, where direct named references exist, a consistency must be applied - for example, in the VBScript examples there was a class named "C1" which could be instantiated with
 
     Set o1 = new C1 ' Upper case "C1"
-    
+
 *or* with
 
     Set o1 = new c1 ' Lower case "c1"
-    
+
 .. in C# there will need to be consistency, so everything is lower-cased - this includes variable names, function names, property names, class names.
 
 There is some magic involved with the "CALL" method, so the string arguments passed to "CALL" are *not* monkeyed about with - but it knows at runtime what sort of manipulation might have to be supported and makes it all work. This is why the functions "f1" and "f2" have lower-cased names where they are defined, but when mentioned as arguments passed to the CALL method they appear in their original form of "F1" and "F2".
@@ -500,7 +500,7 @@ Now, as we already saw way up there somewhere, this code can be executed like so
     {
       new TranslatedProgram.Runner(compatLayer).Go(env);
     }
-    
+
 If you've *reallllllllllly* been paying attention, then you might have noticed that in the example above, the translated code to create a new instance of "C1" looks like this -
 
     _outer.o = _.NEW(new c1(_, _env, _outer));
@@ -512,15 +512,15 @@ One final note: the **DefaultTranslator** expects to operate only on "pure" VBSc
 *And* to do some manipulations with script blocks such as
 
     <% =GetName() %>
-    
+
 since they *also* need to be translated into explicit Response.Write calls. In this case:
 
     Response.Write GetName()
-    
+
 I've got something in the pipeline that will do this work, then you'll be able to reduce the translation work to this:
 
     var translatedStatements = DefaultASPTranslator.Translate(scriptContent);
-    
+
 It will even be able to default the assume-these-are-already-declared environment references to be the ASP Application, Response, Request, Session, and Server objects - meaning there's one less thing for you, the translation maestro, to have to specify. Hooray!
 
 ### The code

@@ -1,4 +1,4 @@
-﻿## TypeScript State Machines
+## TypeScript State Machines
 
 Last time, in [C# State Machines](Post61), I used the example of traffic lights at a crossroads to illustrate how complexity could be handled easily with the state machine pattern. This was a follow-on to my [Parsing CSS](Post57) post and inspired by the excellent article [Game Programming Patterns: State](http://gameprogrammingpatterns.com/state.html).
 
@@ -23,7 +23,7 @@ One thing that I don't like too much is that it isn't currently possible to spec
 
     interface IAmAStateTransition {
       GetTransitionType(): TransitionTypeOptions;
-      GetNewState(): IAmATrafficLightState; 
+      GetNewState(): IAmATrafficLightState;
     }
 
     enum ColourOptions {
@@ -385,7 +385,7 @@ Whether or not it's being hosted in the browser also affects how it logs out its
           }
         )
       );
-  
+
       var allTrafficLights = [ northSouthTrafficLight, eastWestTrafficLight ];
       return {
         Advance: function () {

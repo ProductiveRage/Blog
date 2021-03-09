@@ -1,4 +1,4 @@
-﻿## Supporting IDispatch through the COMInteraction wrapper
+## Supporting IDispatch through the COMInteraction wrapper
 
 Some time ago, I wrote some code that would generate a wrapper to apply a given interface to any object using reflection. The target object would need to expose the properties and methods of the interface but may not implement the interface itself. This was intended to wrap some old WSC components that I was having to work with but is just as easy to demonstrate with .Net classes:
 

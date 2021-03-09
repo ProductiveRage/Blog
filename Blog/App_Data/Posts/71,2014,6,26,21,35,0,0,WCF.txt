@@ -1,4 +1,4 @@
-﻿## WCF CORS (plus JSON & REST) - Complete Example
+## WCF CORS (plus JSON & REST) - Complete Example
 
 Someone asked me the other day if I knew how to enable CORS ([Cross Origin Resource Sharing](http://en.wikipedia.org/wiki/Cross-origin_resource_sharing) for a WCF service. This is commonly used to enable AJAX requests from a web page to retrieve content from a domain outside of the domain that delivered the page that the JavaScript is executing from. For a number of reasons, this is not allowed by default by web browsers but the security measure may be relaxed in modern browsers if the data is delivered with certain headers in the response:
 
@@ -218,13 +218,13 @@ We can work around it for now by manually adding some content into the client's 
     <?xml version="1.0"?>
     <!-- This is the CLIENT web.config (required to consume a WCF service that uses webHttpBinding) -->
     <configuration>
-  
+
        <!-- This is default web.config content -->
       <system.web>
         <compilation debug="true" targetFramework="4.5" />
         <httpRuntime targetFramework="4.5" />
       </system.web>
-  
+
       <!-- This is the content that needs adding to consume the service-->
       <system.serviceModel>
         <behaviors>
@@ -246,7 +246,7 @@ We can work around it for now by manually adding some content into the client's 
             behaviorConfiguration="webhttp" />
         </client>
       </system.serviceModel>
-  
+
     </configuration>
 
 *Note that the 51192 port in the endpoint address may vary for your test project. If you go to the project's properties page you should be able to find the port there.*
@@ -288,7 +288,7 @@ As a recap, here's the complete WCF service web.config we've built for the "CORS
       <appSettings>
         <add key="aspnet:UseTaskFriendlySynchronizationContext" value="true" />
       </appSettings>
-  
+
       <system.web>
         <compilation debug="true" targetFramework="4.5" />
         <httpRuntime targetFramework="4.5"/>
@@ -302,7 +302,7 @@ As a recap, here's the complete WCF service web.config we've built for the "CORS
               type="CORSExample.CORSEnablingBehavior, CORSExample, Version=1.0.0.0, Culture=neutral" />
           </behaviorExtensions>
         </extensions>
-    
+
         <behaviors>
           <serviceBehaviors>
             <behavior>
@@ -325,7 +325,7 @@ As a recap, here's the complete WCF service web.config we've built for the "CORS
         </services>
 
       </system.serviceModel>
-  
+
       <system.webServer>
         <modules runAllManagedModulesForAllRequests="true"/>
         <directoryBrowse enabled="true"/>

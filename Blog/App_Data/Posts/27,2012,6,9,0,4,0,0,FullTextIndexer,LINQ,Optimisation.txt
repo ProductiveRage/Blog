@@ -1,4 +1,4 @@
-﻿## Optimising the Plurality-Handling Normaliser
+## Optimising the Plurality-Handling Normaliser
 
 In the last post I took a first stab at an [English-language Plurality-handling String Normaliser](Post26) to work with a Full Text Indexer research project I'm playing with. I've been using it in conjunction with a normaliser that strips out punctuation from words, replaces accented characters with latin versions (eg. "é" replaced with "e") and lower-cases the content. This originally used a few regular expressions along with some character replacement but I wasn't delighted with the performance, so that was re-written to do one pass through the character and do it all at once and is now running much better. Whether that ties back into my [I don't like regular expressions](Post21) ramble well or not I'm not sure :)
 
@@ -8,7 +8,7 @@ The point at which it does the most work is here:
     {
         if (value == null)
             throw new ArgumentNullException("value");
-                
+
         if (_matchType == MatchTypeOptions.SuffixOnly)
         {
             var matchedSuffix = _values.FirstOrDefault(
@@ -40,7 +40,7 @@ The first approach I took was to take out some of the LINQ - it makes it easy to
     {
         if (value == null)
             throw new ArgumentNullException("value");
-                
+
         foreach (var suffix in _values)
         {
             if (_matchType == MatchTypeOptions.WholeWord)
@@ -68,7 +68,7 @@ The first approach I took was to take out some of the LINQ - it makes it easy to
                 value.Substring(0, value.Length - matchedSuffixLength) + _combinedValues;
             return true;
         }
-                
+
         valueTransformed = null;
         return false;
     }

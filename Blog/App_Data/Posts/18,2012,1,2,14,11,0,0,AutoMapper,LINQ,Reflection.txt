@@ -108,7 +108,7 @@ we had the class
         TDest Convert(TSource src);
     }
 
-which took a set of "Compilable Property Getters" that matched the arguments for a specified ConstructorInfo 
+which took a set of "Compilable Property Getters" that matched the arguments for a specified ConstructorInfo
 
     public interface ICompilablePropertyGetter : IPropertyGetter
     {
@@ -294,7 +294,7 @@ But the problem I opened with does *not* come under this "simple structure" umbr
 
 ### The CompilableTypeConverterPropertyGetter
 
-For inspiration, I go back to AutoMapper since it too can not magically handle nested types - 
+For inspiration, I go back to AutoMapper since it too can not magically handle nested types -
 
     class Program
     {
@@ -386,7 +386,7 @@ More importantly is the ICompilableTypeConverter GetTypeConverterExpression meth
             _propertyInfo = propertyInfo;
             _compilableTypeConverter = compilableTypeConverter;
         }
-        
+
         public override PropertyInfo Property
         {
             get { return _propertyInfo; }
@@ -615,7 +615,7 @@ which finally allows a setup such as:
     );
 
     var employeeConverter = employeeConverterFactory.Get<SourceEmployee, DestEmployee>();
-            
+
     var dest = employeeConverter.Convert(
         new SourceEmployee()
         {

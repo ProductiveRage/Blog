@@ -23,20 +23,20 @@ The way that I like to create React apps is to categorise components as one of t
 So, for my example app, I might have a component hierarchy that looks this:
 
     AppContainer
-	  Title
-	    TextInput
-	      Input
-	  MessageList
-	    MessageRow
-	      TextInput
-	        Input
-	      TextInput
-	        Input
-	    MessageRow
-	      TextInput
-	        Input
-	      TextInput
-	        Input
+      Title
+        TextInput
+          Input
+      MessageList
+        MessageRow
+          TextInput
+            Input
+          TextInput
+            Input
+        MessageRow
+          TextInput
+            Input
+          TextInput
+            Input
 
 There will be as many "MessageRow" components as there are messages to edit. **Input** is a standard React-rendered element and all of the others (**AppContainer**, **Title**, **MessageList**, **MessageRow** and **TextInput**) are custom components.
 
@@ -56,7 +56,7 @@ To start with the simplest example, below is the **TextInput** component. This j
       {
         return DOM.Input(new InputAttributes
         {
-		  Type = InputType.Text,
+          Type = InputType.Text,
           Value = props.Content,
           OnChange = OnTextChange
         });
@@ -72,7 +72,7 @@ To start with the simplest example, below is the **TextInput** component. This j
         public string Content { get; set; }
         public Action<string> OnChange { get; set; }
       }
-	}
+    }
 
 It is fairly easy to envisage how you might try to implement "ShouldComponentUpdate" here - given a "this is the new props value" reference (which gets passed into ShouldComponentUpdate as an argument called "nextProps") and the current props reference, you need only  look at the "Content" and "OnChange" references on the current and next props and, if both Content/Content and OnChange/OnChange references are the same, then we can return false (meaning "no, we do not need to re-draw this TextInput").
 
@@ -94,9 +94,9 @@ Now let's move on to the **MessageList** and **MessageRow** components, since th
             OnChange = newMessage => props.OnChange(idAndMessage.Item1, newMessage)
           }));
         return DOM.Div(
-		  new Attributes { ClassName = "message-list" },
-		  messageRows
-	    );
+          new Attributes { ClassName = "message-list" },
+          messageRows
+        );
       }
 
       public class Props
@@ -113,12 +113,12 @@ Now let's move on to the **MessageList** and **MessageRow** components, since th
       public override ReactElement Render()
       {
         // Note that the "Key" value from the props reference does not explicitly need
-		// to be mentioned here, the React bindings will deal with it (it is important
-		// to give dynamic children components unique key values, but it is handled by
-		// the bindings and the React library so long as a "Key" property is present
+        // to be mentioned here, the React bindings will deal with it (it is important
+        // to give dynamic children components unique key values, but it is handled by
+        // the bindings and the React library so long as a "Key" property is present
         // on the props)
-		// - See https://facebook.github.io/react/docs/multiple-components.html for
-		//   more details
+        // - See https://facebook.github.io/react/docs/multiple-components.html for
+        //   more details
         return DOM.Div(new Attributes { ClassName = "message-row" },
           new TextInput(new TextInput.Props
           {
@@ -195,7 +195,7 @@ It's still a little more verbose than the mutable version, admittedly, but I'm h
 When you have an instance of this new **MessageEditState** class, if you need to change one of the properties, you don't have to call the constructor each time to get a new instance, you can use the "With" extension methods that may be called on any **IAmImmutable** instance - eg.
 
     var updatedMessage = message.With(_ => _.Content, "New information");
-	
+
 This would mean that the change handlers from **MessageRow** could be altered from:
 
     private void OnContentChange(string newContent)
@@ -233,25 +233,25 @@ The "With" method also has a small trick up its sleeve in that it won't return a
 The next step would be to change the array type in the **MessageList.Props** type from
 
     public Tuple<int, MessageEditState>[] IdsAndMessages;
-	
+
 to
 
     public NonNullList<Tuple<int, MessageEditState>> IdsAndMessages;
 
 The **NonNullList** class is also in the [ProductiveRage.Immutable](https://www.nuget.org/packages/ProductiveRage.Immutable) NuGet package. It's basically an immutable **IEnumerable** that may be used in Bridge.NET projects. A simple example of it in use is:
 
-	// Create a new set of values (the static "Of" method uses type inference to determine
-	// the type of "T" in the returned "NonNullList<T>" - since 1, 2 and 3 are all ints, the
-	// "numbers" reference will be of type "NonNullList<int>")
-	var numbers = NonNullList.Of(1, 2, 3);
-	
-	// SetValue takes an index and a new value, so calling SetValue(2, 4) on a set
-	// containing 1, 2, 3 will return a new set containing the values 1, 2, 4
-	numbers = numbers.SetValue(2, 4);
-	
-	// Calling SetValue(2, 4) on a set containing values 1, 2, 4 does not require any
-	// changes, so the input reference is passed straight back out
-	numbers = numbers.SetValue(2, 4);
+    // Create a new set of values (the static "Of" method uses type inference to determine
+    // the type of "T" in the returned "NonNullList<T>" - since 1, 2 and 3 are all ints, the
+    // "numbers" reference will be of type "NonNullList<int>")
+    var numbers = NonNullList.Of(1, 2, 3);
+
+    // SetValue takes an index and a new value, so calling SetValue(2, 4) on a set
+    // containing 1, 2, 3 will return a new set containing the values 1, 2, 4
+    numbers = numbers.SetValue(2, 4);
+
+    // Calling SetValue(2, 4) on a set containing values 1, 2, 4 does not require any
+    // changes, so the input reference is passed straight back out
+    numbers = numbers.SetValue(2, 4);
 
 As with **IAmImmutable** instances we get two big benefits - we can rely on reference equality comparisons more often, since the data with any given reference can never change, and references will be reused in many cases if operations are requested that would not actually change the data. (It's worth noting that the guarantees fall apart if any property on an **IAmImmutable** reference is a of a mutable type, similarly if a **NonNullList** has elements that are a mutable type, or that have nested properties that are of a mutable type.. but so long as immutability is used "all the way down" then all will be well).
 
@@ -277,11 +277,11 @@ This is not an original idea, by a long shot. I first became aware of people doi
 
 So, this is largely just making it easy it when writing React applications with *Bridge*. However, using Bridge to do this *does* give us some extra advantages (on top of the joy of being able to write React apps in C#!). In the code earlier (from the **MessageRow** Render method) -
 
-	new TextInput(new TextInput.Props
-	{
-	  Content = props.Message.Content,
-	  OnChange = OnContentChange
-	})
+    new TextInput(new TextInput.Props
+    {
+      Content = props.Message.Content,
+      OnChange = OnContentChange
+    })
 
 Bridge will bind the "OnContentChange" method to the current **MessageRow** instance so that when it is called by the **TextInput**'s "OnChange" event, "this" is the **MessageRow** and not the **TextInput** (which is important because OnContentChange needs to access the "props" reference scoped to the **MessageRow**).
 
@@ -365,13 +365,13 @@ to:
           {
             Content = props.Message.Content,
             OnChange = newContent =>
-			  props.OnChange(props.Message.With(_ => _.Content, newContent))
+              props.OnChange(props.Message.With(_ => _.Content, newContent))
           }),
           new TextInput(new TextInput.Props
           {
             Content = props.Message.Author,
             OnChange = newAuthor =>
-			  props.OnChange(props.Message.With(_ => _.Author, newAuthor))
+              props.OnChange(props.Message.With(_ => _.Author, newAuthor))
           })
         );
       }
@@ -386,20 +386,20 @@ to:
 
 then there would be problems with the "OnChange" props values specified because each new lambda - eg..
 
-	OnChange = newContent =>
-	  props.OnChange(props.Message.With(_ => _.Content, newContent))
+    OnChange = newContent =>
+      props.OnChange(props.Message.With(_ => _.Content, newContent))
 
 would result in a new JavaScript function being passed to Bridge.fn.bind every time that it was called:
 
     onChange: Bridge.fn.bind(this, function (newContent) {
-	  this.getprops().onChange(
-	    ProductiveRage.Immutable.ImmutabilityHelpers.$with(
-	 	  this.getprops().message,
-		  function (_) { return _.getContent(); },
-		  newContent
-	    )
-	  );
-	})
+      this.getprops().onChange(
+        ProductiveRage.Immutable.ImmutabilityHelpers.$with(
+           this.getprops().message,
+          function (_) { return _.getContent(); },
+          newContent
+        )
+      );
+    })
 
 And this would prevent the **PureComponent**'s "ShouldComponentUpdate" logic from being effective, since the $method values from the current props "OnChange" and the nextProps "OnChange" bound functions would always be different.
 
@@ -407,11 +407,11 @@ I was quite disappointed when I realised this and was considering trying to come
 
 My disappointment was two-fold: firstly, using the lambdas allows for more succinct code and less syntactic noise - since the types of the lambda's argument(s) and return value (if any) are inferred, rather than having to be explicitly typed out.
 
-	newContent => props.OnChange(props.Message.With(_ => _.Content, newContent))
+    newContent => props.OnChange(props.Message.With(_ => _.Content, newContent))
 
 is clearly shorter than
 
-	private void OnContentChange(string newContent)
+    private void OnContentChange(string newContent)
     {
       props.OnChange(props.Message.With(_ => _.Content, newContent));
     }

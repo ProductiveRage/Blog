@@ -1,4 +1,4 @@
-﻿## The Full Text Indexer: Search Term Highlighting with Source Locations
+## The Full Text Indexer: Search Term Highlighting with Source Locations
 
 I made reference last time (in [The Full Text Indexer: Source Locations](Post53)) to using Source Location data to implement search term highlighting and since adding this functionality to the [Full Text Indexer](https://bitbucket.org/DanRoberts/full-text-indexer), I've rewritten the search term highlighting mechanism on my blog to illustrate it.
 

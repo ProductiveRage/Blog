@@ -14,7 +14,7 @@ Earlier this week, I was talking about parsing TypeScript definitions in an insp
         .Then(TypeScriptType, value => type = value)
         .ThenOptionally(Whitespace)
         .Then(Match(';'));
-        
+
       if (!readerAfterProperty.IsDefined)
         return null;
 
@@ -53,7 +53,7 @@ The **MatchResult** class looks like this:
     public static class MatchResult
     {
       /// <summary>
-      /// Convenience method to utilise C# type inherence 
+      /// Convenience method to utilise C# type inherence
       /// </summary>
       public static MatchResult<T> New<T>(T value, IReadStringContent reader)
       {
@@ -152,7 +152,7 @@ And we could make this a bit cleaner by tweaking **PartialPropertyDetails** -
     {
       public static PartialPropertyDetails Empty { get; }
         = new PartialPropertyDetails(null, null);
-        
+
       private PartialPropertyDetails(
         Optional<IdentifierDetails> name,
         Optional<ITypeDetails> type)
@@ -160,10 +160,10 @@ And we could make this a bit cleaner by tweaking **PartialPropertyDetails** -
         Name = name;
         Type = type;
       }
-      
+
       public Optional<IdentifierDetails> Name { get; }
       public Optional<ITypeDetails> Type { get; }
-      
+
       public PartialPropertyDetails WithName(IdentifierDetails value)
         => new PartialPropertyDetails(value, Type);
       public PartialPropertyDetails WithType(ITypeDetails value)
@@ -226,11 +226,11 @@ They're immutable types (so nothing is edited in-place, which is just as bad as 
 The compiler creates new classes for every distinct combination of properties (considering both property name and property type). This means that if you declare two anonymous objects that have the same properties then they will be represented by the same class. This is what allows the above code to declare "updater" implementations such as
 
     (value, name) => new { Name = name, Type = value.Type }
-    
+
 The "value" in the lambda will be an instance of an anonymous type and the returned value will be an instance of that same anonymous class because it specifies the exact same property names and types. This is key, because the "updater" is a delegate with the signature
 
     Func<TResult, TValue, TResult> updater
-    
+
 (and so the returned value must be of the same type as the first value that it was passed).
 
 This is not actually a bad solution, I don't think. There was no need to create a **PartialPropertyDetails** class and we have full type safety through those anonymous types. The only (admittedly minor) thing is that if the data becomes more complex then there will be more and more properties and so every instantiation of the anonymous types will get longer and longer. It's a pity that there's no way to create "With{Whatever}" functions for the anonymous types.
@@ -249,7 +249,7 @@ Before I go any further, there's another extension method I want to introduce. I
       ))
       .Then(Identifier, (value, name) => new { Name = name, Type = value.Type })
       // .. the rest of the parsing code continues here..
-      
+
 This could be neatened right up with an extension method such as this:
 
     public static Optional<MatchResult<T>> StartMatching<T>(
@@ -258,7 +258,7 @@ This could be neatened right up with an extension method such as this:
     {
       return MatchResult.New(value, reader);
     }
-  
+
 This uses C#'s type inference to ensure that you don't have to declare the type of **T** (which is handy if we're using an anonymous type because we have no idea what its type name might be!) and it relies on the fact that the **Optional** struct has an implicit operator that allows a value **T** to be returned as an **Optional&lt;T&gt;**; it will wrap the value up automatically. (For more details on the **Optional** type, read what I wrote [last time](Post88)).
 
 Now, the parsing code that we have look like this:
@@ -390,11 +390,11 @@ Well now. Isn't that easy on the eye! Ok.. maybe beauty is in the eye of the beh
 Those lambdas ("x => x.Name" and "x => x.Type") satisfy the form:
 
     Expression<Func<TResult, TValue>>
-    
+
 This means that they are expressions which must take a **TResult** and return a **TValue**. So in the call
 
     .Then(Identifier, x => x.Name)
-    
+
 .. the Expression describes how to take the anonymous type that we're threading through the "Then" calls and extract an **IdentifierDetails** instance from it (the type of this is dictated by the **TValue** type parameter on the "Then" method, which is inferred from the "Identifier" call - which returns an **Optional&lt;IdentifierDetails&gt;**).
 
 This is the difference between an **Expression** and a **Func** - the **Func** is executable and tells us how to do something (such as "take the 'Name' property from the 'x' reference") while the **Expression** tells us how the **Func** is constructed.
@@ -413,7 +413,7 @@ Anonymous types boil down to simple classes, a little bit like this:
       public T1 Name { get; }
       public T2 Type { get; }
     }
-    
+
 Note: I said earlier that the compiler generates distinct classes for anonymous types that have unique combinations of property names and types. That's a bit of a lie, it only has to vary them based upon the property names since it can use generic type parameters for the types of those properties. I confirmed this by using [ildasm](https://msdn.microsoft.com/en-us/library/aa309387(v=vs.71).aspx) on my binaries, which also showed that the name of the auto-generated class was **&lt;&gt;f\_AnonymousType1**.. it's not *really* called "CRAZY\_AUTO\_GEN\_NAME" :)
 
 So we can take the Expression "x => x.Name" and extract the fact the the "Name" property is being targeted. This allows us to match the constructor that takes a "Name" argument and a "Type" argument and to call that constructor - passing the new value into the "Name" argument and passing the existing "Type" property value into the "Type" argument.

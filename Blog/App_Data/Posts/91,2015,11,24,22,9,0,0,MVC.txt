@@ -9,15 +9,15 @@ Now, one argument might be that the 404-handling logic should be extracted out s
 The first thought that came to mind was - quite naively - to do the following within the DownloadController's processing function:
 
     var defaultController = new DefaultController();
-	return defaultController.Return404();
-	
+    return defaultController.Return404();
+
 But this wouldn't work because the Return404 Action requires a Server reference so that it can call MapPath to look for custom a "404.html" file in the site root.
 
 So I next tried to write
 
     var defaultController = new DefaultController();
-	defaultController.Server = Server;
-	return defaultController.Return404();
+    defaultController.Server = Server;
+    return defaultController.Return404();
 
 But, unfortunately, the Server property of a Controller is read-only.
 
@@ -26,7 +26,7 @@ So then I turned to Google (which is practically the same thing as saying "turne
 Searching for "asp.net mvc return result from another controller" returned a lot of matches where many of the results indicated that I should call "RedirectToAction" - eg.
 
     return RedirectToAction("Force404", "Default");
-	
+
 This didn't really sound like what I wanted because I didn't want to *redirect*, I just wanted to return the result from "Force404" as the result of the current Action. But I tried it anyway..
 
 And it didn't work! It failed with runtime error:
@@ -35,11 +35,11 @@ And it didn't work! It failed with runtime error:
 
 It turns out that you can't use RedirectToAction unless you have a route configured to handle it - eg.
 
-	routes.MapRoute(
-		"404-just-in-case",
-		"should-never-get-here-through-a-real-url",
-		new { controller = "Default", action = "Force404" }
-	);
+    routes.MapRoute(
+        "404-just-in-case",
+        "should-never-get-here-through-a-real-url",
+        new { controller = "Default", action = "Force404" }
+    );
 
 Even if I don't want any URL to match to this Controller / Action, I still need a route to be specified. Although the "RedirectToAction" function takes arguments for "actionName" and "controllerName", just specifying these is not enough - that route must exist. And the order in which the routes are specified is still important here - if there is a catch-all route before this route is specified then this route will not be hit. Maybe there's a good reason for all this, but I really can't see it. If there's a function called "RedirectToAction" and I give it an unambigous name of a Controller and an Action, then I expect it to redirect.. to.. that.. action.
 
@@ -48,11 +48,11 @@ Even if I don't want any URL to match to this Controller / Action, I still need 
 Eventually I read enough answers that I came to the correct information (after reading a *lot* more unhelpful suggestions about "RedirectToAction"). The credit goes to this answer: [stackoverflow.com/a/16453648](http://stackoverflow.com/a/16453648), but I'll take its information to complete my original example -
 
     var defaultController = new DefaultController();
-	defaultController.ControllerContext = new ControllerContext(
-		this.ControllerContext.RequestContext,
-		defaultController
-	);
-	return defaultController.Return404();
+    defaultController.ControllerContext = new ControllerContext(
+        this.ControllerContext.RequestContext,
+        defaultController
+    );
+    return defaultController.Return404();
 
 And that's it!
 

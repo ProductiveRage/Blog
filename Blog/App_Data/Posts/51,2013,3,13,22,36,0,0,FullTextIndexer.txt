@@ -1,4 +1,4 @@
-﻿## The Full Text Indexer - Structured Queries
+## The Full Text Indexer - Structured Queries
 
 I've considered in the past extending the way in which searches can be defined for use with the Full Text Indexer. The current approaches are:
 

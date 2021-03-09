@@ -1,4 +1,4 @@
-## Reflection and C# optional constructor arguments 
+## Reflection and C# optional constructor arguments
 ### Bonus provocative headline: Like AutoMapper, but 100x faster!
 
 I overheard someone at work bemoaning the fact that StructureMap doesn't seem to support optional constructor arguments (which, having a quick scout around the internet, does indeed seem to be the case, though there are solutions out there such as [Teaching StructureMap About C# 4.0 Optional Parameters and Default Values](http://www.sep.com/sep-blog/2010/06/04/teaching-structuremap-about-c-4-0-optional-parameters-and-default-values)).
@@ -158,7 +158,7 @@ The source and destination classes in the examples are as follow:
     {
       public string Name { get; set; }
       public List<RoleDetails> Roles { get; set; }
-    
+
       public class RoleDetails
       {
         public string Title { get; set; }
@@ -288,7 +288,7 @@ First off, the Compilable Type Converter isn't intended to compete feature-for-f
 
 So anyway.. making performance comparisons between the two libraries is probably not all that productive. But since I've banged on about the Compilable Type Converter producing LINQ-Expression-compiled converters, I'm going to anyway! :)
 
-We'll stick with the **ImmutablePersonDetails** to **MutablePersonDetails** mapping that was in the earlier examples. 
+We'll stick with the **ImmutablePersonDetails** to **MutablePersonDetails** mapping that was in the earlier examples.
 
 There are two aspects that need considering - the startup time and the conversion time. If the Compilable Type Converter can perform conversions faster than AutoMapper but with a greater initialisation cost (which we'd expect since there is expensive LINQ Expression compilation going on) then there will have to be a certain number of conversion performed before we "break even" on the startup time. But after that, it should be all win!
 

@@ -1,4 +1,4 @@
-﻿## Optimising the CSS Processor (ANTS and algorithms)
+## Optimising the CSS Processor (ANTS and algorithms)
 
 The Production Team at work have started using my best-practices-rules-validating LESS CSS Processor (which utilises [dotLess](http://www.dotlesscss.org/)). This is excellent news for me! And frankly, I think it's excellent news for them! :D
 

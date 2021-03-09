@@ -16,13 +16,13 @@ For some projects, these could be C++ COM components - I'm no expert on C++, but
         </public>
         <script language="VBScript">
         <![CDATA[
-		
+
           Function DoSomething(ByVal objOutput)
-		    Dim intIndex: For intIndex = 1 To 5
-			  objOutput.WriteLine "Entry " & iIndex
-			Next
+            Dim intIndex: For intIndex = 1 To 5
+              objOutput.WriteLine "Entry " & iIndex
+            Next
           End Function
-		  
+
         ]]>
         </script>
       </component>
@@ -36,11 +36,11 @@ If this is the case, then it's easy enough to use these working components from 
 
     var filename = "ExampleComponent.wsc";
     dynamic component = Microsoft.VisualBasic.Interaction.GetObject(
-	  "script:" + new FileInfo(filename).FullName,
-	  null
-	);
-	component.DoSomething(new ConsoleWriter());
-	
+      "script:" + new FileInfo(filename).FullName,
+      null
+    );
+    component.DoSomething(new ConsoleWriter());
+
 *Note: In order for the above code to run with the WSC presented further up, the C# code needs to provide a ComVisible "objOutput" reference which has a "WriteLine" method that takes a single (string) argument. The snippet above uses a **ConsoleWriter** class, which could be implemented as follows:*
 
     [ComVisible(true)]
@@ -51,7 +51,7 @@ If this is the case, then it's easy enough to use these working components from 
         Console.WriteLine(value);
       }
     }
-	
+
 But what if there *isn't* an agreement to rewrite any WSCs that need work and what if there are some that need bug-fixing or new functionality? Well, good luck! Error messages from these components tend to be vague and - just to really add a little extra joy to your life - they don't include line numbers. Oh, "Object expected"? Great.. will you tell me where? No. Oh, good.
 
 If you were so intrigued by what I've written here so far that you've actually been playing along and have saved the WSC content from the top of this post into a file and executed it using the C# above, you might have noticed another problem when you ran it. Below is what is output to the console:
@@ -99,16 +99,16 @@ Before I go through these steps, let me just explain briefly what the problem wa
 The loop variable in the code
 
     Dim intIndex: For intIndex = 1 To 5
-	  objOutput.WriteLine "Entry " & iIndex
-	Next
-	
+      objOutput.WriteLine "Entry " & iIndex
+    Next
+
 is named "intIndex" but the line that writes out the text refers to "iIndex", which is an undeclared variable.
 
 In C#, if we tried to do something similar then the compiler would bring it immediately to our attention - eg.
 
     for (var i = 1; i <= 5; i++)
-	  Console.WriteLine("Entry " + j);
-	  
+      Console.WriteLine("Entry " + j);
+
 Presuming that "j" was not defined elsewhere within the scope of the above code, we would be informed that
 
 > The name 'j' does not exist in the current context
@@ -120,9 +120,9 @@ VBScript does support a mode that requires that variables be declared before the
     Option Explicit
 
     Dim intIndex: For intIndex = 1 To 5
-	  objOutput.WriteLine "Entry " & iIndex
-	Next
-	
+      objOutput.WriteLine "Entry " & iIndex
+    Next
+
 then we would get an error at runtime:
 
 > Variable is undefined: 'iIndex'
@@ -134,13 +134,13 @@ To illustrate, the following script will run successfully *except on Saturdays* 
     Option Explicit
 
     Dim intIndex: For intIndex = 1 To 5
-	  If IsSaturday() Then
-	    objOutput.WriteLine "Entry " & iIndex
-	  Else
-	    objOutput.WriteLine "Entry " & intIndex
-	  End If
-	Next
-	
+      If IsSaturday() Then
+        objOutput.WriteLine "Entry " & iIndex
+      Else
+        objOutput.WriteLine "Entry " & intIndex
+      End If
+    Next
+
     Function IsSaturday()
       IsSaturday = WeekDay(Now()) = 7
     End Function
@@ -226,14 +226,14 @@ After the [VBScriptTranslator](https://www.nuget.org/packages/VBScriptTranslator
     foreach (var vbscriptCodeSection in GetVBScriptSections(wscContent))
     {
       // When translating the VBScript, add in new lines before the content so
-	  // that the lines indexes in the only-VBScript content match the line
-	  // indexes in the WSC
+      // that the lines indexes in the only-VBScript content match the line
+      // indexes in the WSC
       var lineIndexInSourceFile = vbscriptCodeSection.Item2;
-	  var blankLinesToInject = string.Join(
-	    "",
-		Enumerable.Repeat(Environment.NewLine, lineIndexInSourceFile)
-	  );
-	  
+      var blankLinesToInject = string.Join(
+        "",
+        Enumerable.Repeat(Environment.NewLine, lineIndexInSourceFile)
+      );
+
       var vbscriptContent = vbscriptCodeSection.Item1;
       var translatedStatements = DefaultTranslator.Translate(
         blankLinesToInject + vbscriptContent,
@@ -258,16 +258,16 @@ Now that we have a C# interpretation of the source code, though, it seems like w
 Imagine if the original VBScript content was something more like this -
 
     Function DoSomething(ByVal objOutput)
-	  Dim intIndex, strName
-	  
-	  ' .. loads of code
-	  
-	  For intIndex = 1 To 5
-	    objOutput.Write "Entry " & iIndex
-	  Next
-	  
-	  ' .. loads more code
-	  
+      Dim intIndex, strName
+
+      ' .. loads of code
+
+      For intIndex = 1 To 5
+        objOutput.Write "Entry " & iIndex
+      Next
+
+      ' .. loads more code
+
     End Function
 
 Those legacy VBScript writers sure did love their huge functions with 100s of lines of code! So the "loads of code" sections above really could be *loads* of code.
@@ -311,12 +311,12 @@ Adding the [Microsoft.CodeAnalysis.CSharp](https://www.nuget.org/packages/Micros
       {
         var errorMessages = result.Diagnostics
           .Where(diagnostic =>
-		    diagnostic.IsWarningAsError || (diagnostic.Severity == DiagnosticSeverity.Error)
-		  )
+            diagnostic.IsWarningAsError || (diagnostic.Severity == DiagnosticSeverity.Error)
+          )
           .Select(diagnostic => $"{diagnostic.Id}: {diagnostic.GetMessage()}");
         throw new Exception(
-		  "Compilation of generated C# code failed: " + string.Join(", ", errorMessages)
-		);
+          "Compilation of generated C# code failed: " + string.Join(", ", errorMessages)
+        );
       }
       return result.Diagnostics
         .Where(diagnostic => diagnostic.Id == "CS0219")
@@ -336,36 +336,36 @@ In the VBScriptTranslator-calling code from step 2, we got a list of translated 
 
 But that's not important right now, what we really want are two things; a single string for the entirety of the generated C# content (to compile with Roslyn) and we want mappings for line index values in the C# back to line index values in the source VBScript. The C# code may have more or less lines than the VBScript (the translation process is not a simple line-to-line process), which is why these line index mappings will be important.
 
-	// Each "translatedStatements" item has a Content string and a
-	// LineIndexOfStatementStartInSource value (these are used to
-	// create a single string of C# code and to map each line in
-	// the C# back to a line in the VBScript)
-	var translatedContent = string.Join(
-	  Environment.NewLine,
-	  translatedStatements.Select(c => c.Content)
-	);
-	var lineIndexMappings = translatedStatements
-	  .Select((line, index) => new { Line = line, Index = index })
-	  .ToDictionary(
-		entry => entry.Index,
-		entry => entry.Line.LineIndexOfStatementStartInSource
-	  );
-	  
+    // Each "translatedStatements" item has a Content string and a
+    // LineIndexOfStatementStartInSource value (these are used to
+    // create a single string of C# code and to map each line in
+    // the C# back to a line in the VBScript)
+    var translatedContent = string.Join(
+      Environment.NewLine,
+      translatedStatements.Select(c => c.Content)
+    );
+    var lineIndexMappings = translatedStatements
+      .Select((line, index) => new { Line = line, Index = index })
+      .ToDictionary(
+        entry => entry.Index,
+        entry => entry.Line.LineIndexOfStatementStartInSource
+      );
+
 Now it's a simple case of bringing things together -
 
-	foreach (var unusedVariableWarning in GetUnusedVariables(translatedContent))
-	{
-	  var unusedVariableWarningMessage = unusedVariableWarning.Item1;
-	  var lineIndexInTranslatedContent = unusedVariableWarning.Item2;
-	  var lineIndexInSourceContent = lineIndexMappings[lineIndexInTranslatedContent];
-	  
-	  // Line index values are zero-based but warnings messages that refer to
-	  // a line generally refer to a line NUMBER, which is one-based (hence
-	  // the +1 operation)
-	  Console.WriteLine(
-	    $"{unusedVariableWarningMessage} (line {lineIndexInSourceContent + 1})"
-	  );
-	}
+    foreach (var unusedVariableWarning in GetUnusedVariables(translatedContent))
+    {
+      var unusedVariableWarningMessage = unusedVariableWarning.Item1;
+      var lineIndexInTranslatedContent = unusedVariableWarning.Item2;
+      var lineIndexInSourceContent = lineIndexMappings[lineIndexInTranslatedContent];
+
+      // Line index values are zero-based but warnings messages that refer to
+      // a line generally refer to a line NUMBER, which is one-based (hence
+      // the +1 operation)
+      Console.WriteLine(
+        $"{unusedVariableWarningMessage} (line {lineIndexInSourceContent + 1})"
+      );
+    }
 
 If this was run against our second WSC sample, then we would get a new warning reported:
 
@@ -379,11 +379,11 @@ I must admit, I haven't thought too much about what other possibilities are avai
 
 As an example of the frankly terrible errors that you get when working with VBScript WSCs, if you took the WSC example from earlier and decided to refactor the FUNCTION into a SUB (in VBScript, a SUB is basically a FUNCTION that can not return a value) and you made the silly mistake of changing the function "header" but not its "terminator" - eg.
 
-	Sub DoSomething(ByVal objOutput)
-	  Dim intIndex: For intIndex = 1 To 5
-	    objOutput.Write "Entry " & iIndex
-	  Next
-	End Function
+    Sub DoSomething(ByVal objOutput)
+      Dim intIndex: For intIndex = 1 To 5
+        objOutput.Write "Entry " & iIndex
+      Next
+    End Function
 
 Then you would get a particularly unhelpful error when trying to load the WSC into the .net runtime -
 
@@ -400,30 +400,30 @@ Ok.. I'll admit that this is not the friendliest error message ever formed. What
 Another idea that springs to mind is to try to identify functions that have inconsistent return types, in terms of whether they are value types or object references. In VBScript, you must be aware of this distinction at all times - if calling a function that you expect to return an object, then you need to write the function call using the "SET" keyword - eg.
 
     Set objPrice = GetPriceDetails(order)
-	
+
 But if you expect it to return a value type, then you would write it as
-    
-	sngPrice = GetPriceDetails(order)
+
+    sngPrice = GetPriceDetails(order)
 
 VBScript has a special kind of null that represents an object with no value; "Nothing". This allows you to write functions that will always return an object reference, but that may return a reference that means "no result" - eg.
 
-	Function GetPriceDetails(ByVal x)
-	  If IsObject(x) Then
-	    Set GetPriceDetails = x.PriceDetails
-	    Exit Function
-	  End If
-	  Set GetPriceDetails = Nothing
-	End Function
+    Function GetPriceDetails(ByVal x)
+      If IsObject(x) Then
+        Set GetPriceDetails = x.PriceDetails
+        Exit Function
+      End If
+      Set GetPriceDetails = Nothing
+    End Function
 
 However, I've seen code that forgets this and returns a value type "Null" instead - eg.
 
-	Function GetPriceDetails(ByVal x)
-	  If IsObject(x) Then
-	    Set GetPriceDetails = x.PriceDetails
-	    Exit Function
-	  End If
-	  GetPriceDetails = Null
-	End Function
+    Function GetPriceDetails(ByVal x)
+      If IsObject(x) Then
+        Set GetPriceDetails = x.PriceDetails
+        Exit Function
+      End If
+      GetPriceDetails = Null
+    End Function
 
 Now, when calling GetPriceDetails, you will get an object reference sometimes and a value type other times. How do you know whether to use "SET" when calling it if you don't know whether you are expecting an object reference or a value type back? Answer: You don't. Most likely whoever wrote the code used "SET" because they tested the "happy case" (which returns an object reference) and forgot to test the less-happy case, which returned a "Null" value type (and that would fail at runtime if called with use of "SET").
 
@@ -443,7 +443,7 @@ Below is a complete example. I won't go too deeply into the details, since that 
         End Function";
 
       // Note: An "AbstractFunctionBlock" is a Function, a Sub, or a Property - they are
-	  // all variations on a theme
+      // all variations on a theme
       var codeBlocks = DefaultTranslator.Parse(scriptContent);
       foreach (var function in GetAllCodeBlocks(codeBlocks).OfType<AbstractFunctionBlock>())
       {
@@ -459,7 +459,7 @@ Below is a complete example. I won't go too deeply into the details, since that 
           .Select(v => v.ValueToSet.Tokens.First().LineIndex + 1)
           .Distinct();
         if (valueTypeReturnValueSetterLineNumbers.Any()
-		&& objectReturnValueSetterLineNumbers.Any())
+        && objectReturnValueSetterLineNumbers.Any())
         {
           Console.WriteLine(
             "{0} \"{1}\" has both LET (lines {2}) and SET (lines {3}) return values",
@@ -500,12 +500,12 @@ Below is a complete example. I won't go too deeply into the details, since that 
           valueSetterTarget.Content.Equals(target.Content, StringComparison.OrdinalIgnoreCase);
       };
     }
-	
+
 This will write out the warning
 
 > FunctionBlock "GetPriceDetails" has both LET (lines 7) and SET (lines 4) return value setters
 
-Hurrah! Very helpful! No more waiting for run time execution to find out that some code paths return object references and some return value types!	
+Hurrah! Very helpful! No more waiting for run time execution to find out that some code paths return object references and some return value types!
 
 Static analysis is very valuable. It's one of the reasons why I like C# so much because there is a lot of power in static analysis - and I'm always looking out for ways to leverage it further, such as more strongly-typed classes (should a phone number really be a string or should it be a "PhoneNumber" class?) and technologies such as code contracts (which I've been meaning to look back into for about a year now.. must stop making excuses).
 
@@ -514,16 +514,16 @@ But there's one other thing that could be done with VBScript WSCs and the VBScri
 The output from a "DefaultTranslator.Translate" call is content that may be saved into a file that will then define a class called "TranslatedProgram" (this string content is what we were earlier pushing through Roslyn for further analysis). This may be executed using a runtime library included in the [VBScriptTranslator](https://www.nuget.org/packages/VBScriptTranslator) NuGet package (or that is available on its own, in the [VBScriptTranslator.RuntimeSupport](https://www.nuget.org/packages/VBScriptTranslator.RuntimeSupport) NuGet package) with the following code -
 
     // The "compatLayer" provides implementations of VBScript functions (like "CInt")
-	// to the translated code, along with functions such as "CALL", which enable late-
-	// bound method calls to be executed (which are then compiled into LINQ expressions
-	// and cached so that subsequent calls are close in performance to hand-written C#)
+    // to the translated code, along with functions such as "CALL", which enable late-
+    // bound method calls to be executed (which are then compiled into LINQ expressions
+    // and cached so that subsequent calls are close in performance to hand-written C#)
     using (var compatLayer = DefaultRuntimeSupportClassFactory.Get())
     {
-	  // The Runner's "Go" function returns a new instance of the translated
-	  // component. The "DoSomething" method from the component may then be
-	  // called. Translated names are all lower-cased, it makes the mismatch
-	  // between VBScript's case insensitivity and C#'s case SENSITIVITY
-	  // less important.
+      // The Runner's "Go" function returns a new instance of the translated
+      // component. The "DoSomething" method from the component may then be
+      // called. Translated names are all lower-cased, it makes the mismatch
+      // between VBScript's case insensitivity and C#'s case SENSITIVITY
+      // less important.
       var component = new TranslatedProgram.Runner(compatLayer).Go();
       component.dosomething(new ConsoleWriter());
     }

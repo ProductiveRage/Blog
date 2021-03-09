@@ -86,7 +86,7 @@ I learned from [Writing Brackets extension - part 1](http://artoale.com/tutorial
 and that this essentially means that each file has a standard format
 
     define(function (require, exports, module) {
-    
+
     });
 
 where define is a method that is provided by the dependency management system that calls an anonymous factory method that it provides with function arguments "require" (for nested dependencies), "export" (the same as with Node) and "module" (which I'm not going to talk about until further down). The factory method returns an object which is the dependency that has been loaded.
@@ -96,7 +96,7 @@ The advantage of it being a non-immediately invoked function is that it can be d
 To mirror the example earlier, this could be
 
     define(function (require, exports, module) {
-    
+
         return {
             Process: function (value) {
                 // Whatever..

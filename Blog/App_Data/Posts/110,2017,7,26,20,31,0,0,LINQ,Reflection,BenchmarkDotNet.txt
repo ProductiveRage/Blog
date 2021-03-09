@@ -4,14 +4,14 @@ If you're thinking that you should try changing a readonly property.. well, in s
 
 For example, the following class has a property that should *only* be set in its constructor and then never mutated again -
 
-	public sealed class Example
-	{
-	  public Example(int id)
-	  {
-	    Id = id;
-	  }
-	  public int Id { get; }
-	}
+    public sealed class Example
+    {
+      public Example(int id)
+      {
+        Id = id;
+      }
+      public int Id { get; }
+    }
 
 *And it is a good thing* that we are able to write code so easily that communicates precisely when a property may (and may not) change.
 
@@ -29,26 +29,26 @@ I'll show three approaches, in decreasing order of ease of writing. They all dep
 
 C# 6 introduced read-only auto-properties. Before thoses were available, you had two options to do something similar. You could use a private setter -
 
-	public sealed class Example
-	{
-	  public Example(int id)
-	  {
-	    Id = id;
-	  }
-	  public int Id { get; private set; }
-	}
-	
+    public sealed class Example
+    {
+      public Example(int id)
+      {
+        Id = id;
+      }
+      public int Id { get; private set; }
+    }
+
 .. or you could manually create a private readonly backing field for the property -
 
-	public sealed class Example
-	{
-	  private readonly int _id;
-	  public Example(int id)
-	  {
-	    _id = id;
-	  }
-	  public int Id { get { return _id; } }
-	}
+    public sealed class Example
+    {
+      private readonly int _id;
+      public Example(int id)
+      {
+        _id = id;
+      }
+      public int Id { get { return _id; } }
+    }
 
 The first approach requires less code but the guarantees that it claims to make are less strict. When a field is readonly then it may *only* be set within a constructor but when it has a private setter then it could feasibly change *at any point* in the lifetime of the instance. In the class above, it's clear to see that it *is* only set in the constructor but there are no compiler assurances that someone won't come along and add a method to the **Example** class that mutates the private-setter "Id" property. If you have a readonly "_id" backing field then it would not be possible to write a method to mutate the value\*.
 
@@ -62,40 +62,40 @@ Interestingly, the compiler generates IL that is essentially identical to that w
 
 This is sufficient information for us to try to identify the compiler-generated backing field using reflection. Going back to this version of the class:
 
-	public sealed class Example
-	{
-	  public Example(int id)
-	  {
-	    Id = id;
-	  }
-	  public int Id { get; }
-	}
+    public sealed class Example
+    {
+      public Example(int id)
+      {
+        Id = id;
+      }
+      public int Id { get; }
+    }
 
 .. we can identify the backing field for the "Id" property with the following code:
 
-	var type = typeof(Example);
-	var property = type.GetProperty("Id");
-	
-	var backingField = type
-	  .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
-	  .FirstOrDefault(field =>
-		field.Attributes.HasFlag(FieldAttributes.Private) &&
-		field.Attributes.HasFlag(FieldAttributes.InitOnly) &&
-		field.CustomAttributes.Any(attr => attr.AttributeType == typeof(CompilerGeneratedAttribute)) &&
-		(field.DeclaringType == property.DeclaringType) &&
-		field.FieldType.IsAssignableFrom(property.PropertyType) &&
-		field.Name.StartsWith("<" + property.Name + ">")
-	  );	
+    var type = typeof(Example);
+    var property = type.GetProperty("Id");
+
+    var backingField = type
+      .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+      .FirstOrDefault(field =>
+        field.Attributes.HasFlag(FieldAttributes.Private) &&
+        field.Attributes.HasFlag(FieldAttributes.InitOnly) &&
+        field.CustomAttributes.Any(attr => attr.AttributeType == typeof(CompilerGeneratedAttribute)) &&
+        (field.DeclaringType == property.DeclaringType) &&
+        field.FieldType.IsAssignableFrom(property.PropertyType) &&
+        field.Name.StartsWith("<" + property.Name + ">")
+      );
 
 With this backingField reference, we can start doing devious things. Like this:
 
-	// Create an instance with a readonly auto-property
-	var x = new Example(123);
-	Console.WriteLine(x.Id); // Prints "123"
+    // Create an instance with a readonly auto-property
+    var x = new Example(123);
+    Console.WriteLine(x.Id); // Prints "123"
 
-	// Now change the value of that readonly auto-property!
-	backingField.SetValue(x, 456);
-	Console.WriteLine(x.Id); // Prints "456"
+    // Now change the value of that readonly auto-property!
+    backingField.SetValue(x, 456);
+    Console.WriteLine(x.Id); // Prints "456"
 
 We took an instance of a class that has a readonly property (meaning that it should never change after the instance has been constructed) and we *changed* that property. Evil.
 
@@ -107,39 +107,39 @@ Enough with the boring warnings, though - let's get to the real nub of the matte
 
 If **Example** had a regular private field that we wanted to set - eg.
 
-	public sealed class Example
-	{
-	  private int _somethingElse;
-	  public Example(int id, int somethingElse)
-	  {
-	    Id = id;
-		_somethingElse = somethingElse;
-	  }
-	  
-	  public int Id { get; }
-	  
-	  public int GetSomethingElse()
-	  {
-		return _somethingElse;
-	  }
-	}
+    public sealed class Example
+    {
+      private int _somethingElse;
+      public Example(int id, int somethingElse)
+      {
+        Id = id;
+        _somethingElse = somethingElse;
+      }
+
+      public int Id { get; }
+
+      public int GetSomethingElse()
+      {
+        return _somethingElse;
+      }
+    }
 
 Then we could use reflection to get a reference to that field once and build a delegate using LINQ Expressions that would allow us to update that field value using something like this:
 
-	var field = typeof(Example).GetField("_somethingElse", BindingFlags.Instance | BindingFlags.NonPublic);
+    var field = typeof(Example).GetField("_somethingElse", BindingFlags.Instance | BindingFlags.NonPublic);
 
-	var sourceParameter = Expression.Parameter(typeof(Example), "source");
-	var valueParameter = Expression.Parameter(field.FieldType, "value");
-	var fieldSetter =
-	  Expression.Lambda<Action<Example, int>>(
-	    Expression.Assign(
-	      Expression.MakeMemberAccess(sourceParameter, field),
-	      valueParameter
-	    ),
-	    sourceParameter,
-	    valueParameter
-	  )
-	  .Compile();
+    var sourceParameter = Expression.Parameter(typeof(Example), "source");
+    var valueParameter = Expression.Parameter(field.FieldType, "value");
+    var fieldSetter =
+      Expression.Lambda<Action<Example, int>>(
+        Expression.Assign(
+          Expression.MakeMemberAccess(sourceParameter, field),
+          valueParameter
+        ),
+        sourceParameter,
+        valueParameter
+      )
+      .Compile();
 
 We could then cache that "fieldSetter" delegate and call it any time that we wanted to update the private "_somethingElse" field on an **Example** instance. There would be a one-off cost to the reflection that identifies the field and a one-off cost to generating that delegate initially but any subsequent call should be comparably quick to hand-written field-updating code (obviously it's not possible to hand-write code to update a private field from outside the class.. but you get the point).
 
@@ -165,20 +165,20 @@ It's been a long time since I've written any IL-generating code, so let's take i
 
 The first thing to do is to create some scaffolding. The following code is almost enough to create a new method of type **Action&lt;Example, int&gt;** -
 
-	// Set restrictedSkipVisibility to true to avoid any pesky "visibility" checks being made (in other
-	// words, let the IL in the generated method access any private types or members that it tries to)
-	var method = new DynamicMethod(
-	  name: "SetSomethingElseField",
-	  returnType: null,
-	  parameterTypes: new[] { typeof(Example), typeof(int) },
-	  restrictedSkipVisibility: true
-	);
+    // Set restrictedSkipVisibility to true to avoid any pesky "visibility" checks being made (in other
+    // words, let the IL in the generated method access any private types or members that it tries to)
+    var method = new DynamicMethod(
+      name: "SetSomethingElseField",
+      returnType: null,
+      parameterTypes: new[] { typeof(Example), typeof(int) },
+      restrictedSkipVisibility: true
+    );
 
-	var gen = method.GetILGenerator();
-	
-	// TODO: Emit require IL op codes here..
+    var gen = method.GetILGenerator();
 
-	var fieldSetter = (Action<Example, int>)method.CreateDelegate(typeof(Action<Example, int>));
+    // TODO: Emit require IL op codes here..
+
+    var fieldSetter = (Action<Example, int>)method.CreateDelegate(typeof(Action<Example, int>));
 
 The only problem is that "TODO" section.. the bit where we have to know what IL to generate.
 
@@ -186,51 +186,51 @@ There are basically two ways you can go about working out what to write here. Yo
 
 To make things as simple as possible, I created a new class in a C# project -
 
-	class SomethingWithPublicField
-	{
-	  public int Id;
-	}
+    class SomethingWithPublicField
+    {
+      public int Id;
+    }
 
 and then created a static method that I would want to look at the disassembly of:
 
-	static void MethodToCopy(SomethingWithPublicField source, int value)
-	{
-	  source.Id = value;
-	}
-	
+    static void MethodToCopy(SomethingWithPublicField source, int value)
+    {
+      source.Id = value;
+    }
+
 I compiled the console app, opened the exe in ildasm and located the method. Double-clicking it revealed this:
 
-	.method private hidebysig static void  MethodToCopy(class Test.Program/SomethingWithPublicField source,
-														int32 'value') cil managed
-	{
-	  // Code size         9 (0x9)
-	  .maxstack  8
-	  IL_0000:  nop
-	  IL_0001:  ldarg.0
-	  IL_0002:  ldarg.1
-	  IL_0003:  stfld      int32 Test.Program/SomethingWithPublicField::Id
-	  IL_0008:  ret
-	} // end of method Program::MethodToCopyTyped
+    .method private hidebysig static void  MethodToCopy(class Test.Program/SomethingWithPublicField source,
+                                                        int32 'value') cil managed
+    {
+      // Code size         9 (0x9)
+      .maxstack  8
+      IL_0000:  nop
+      IL_0001:  ldarg.0
+      IL_0002:  ldarg.1
+      IL_0003:  stfld      int32 Test.Program/SomethingWithPublicField::Id
+      IL_0008:  ret
+    } // end of method Program::MethodToCopyTyped
 
 Ok. That actually couldn't be much simpler. The "ldarg.0" code means "load argument 0 onto the stack", "ldarg.1" means "load argument 1 onto the stack" and "stfld" means take the instance of the first object on the stack and set the specified field to be the second object on the stack. "ret" just means exit method (returning any value, if there is one - which there isn't in this case).
 
 This means that the "TODO" comment in my scaffolding code may be replaced with real content, resulting in the following:
 
-	var field = typeof(Example).GetField("_somethingElse", BindingFlags.Instance | BindingFlags.NonPublic);
-	
-	var method = new DynamicMethod(
-	  name: "SetSomethingElseField",
-	  returnType: null,
-	  parameterTypes: new[] { typeof(Example), typeof(int) },
-	  restrictedSkipVisibility: true
-	);
-	var gen = method.GetILGenerator();
-	gen.Emit(OpCodes.Ldarg_0);
-	gen.Emit(OpCodes.Ldarg_1);
-	gen.Emit(OpCodes.Stfld, field);
-	gen.Emit(OpCodes.Ret);
-	
-	var fieldSetter = (Action<Example, int>)method.CreateDelegate(typeof(Action<Example, int>));
+    var field = typeof(Example).GetField("_somethingElse", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    var method = new DynamicMethod(
+      name: "SetSomethingElseField",
+      returnType: null,
+      parameterTypes: new[] { typeof(Example), typeof(int) },
+      restrictedSkipVisibility: true
+    );
+    var gen = method.GetILGenerator();
+    gen.Emit(OpCodes.Ldarg_0);
+    gen.Emit(OpCodes.Ldarg_1);
+    gen.Emit(OpCodes.Stfld, field);
+    gen.Emit(OpCodes.Ret);
+
+    var fieldSetter = (Action<Example, int>)method.CreateDelegate(typeof(Action<Example, int>));
 
 That's it! We now have a delegate that is a compiled method for writing a new **int** into the private field "_somethingElse" for any given instance of **Example**.
 
@@ -275,107 +275,107 @@ to
 
 Then I put the following together. There are six benchmarks in total; three to measure the creation of the different types of property-setting delegates and three to then measure the execution time of those delegates -
 
-	class Program
-	{
-		static void Main(string[] args)
-		{
-			BenchmarkRunner.Run<TimedSetter>();
-			Console.ReadLine();
-		}
-	}
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            BenchmarkRunner.Run<TimedSetter>();
+            Console.ReadLine();
+        }
+    }
 
-	[CoreJob, ClrJob]
-	public class TimedSetter
-	{
-		private SomethingWithPrivateField _target;
-		private FieldInfo _field;
-		private Action<SomethingWithPrivateField, int>
-			_reflectionSetter,
-			_linqExpressionSetter,
-			_emittedILSetter;
+    [CoreJob, ClrJob]
+    public class TimedSetter
+    {
+        private SomethingWithPrivateField _target;
+        private FieldInfo _field;
+        private Action<SomethingWithPrivateField, int>
+            _reflectionSetter,
+            _linqExpressionSetter,
+            _emittedILSetter;
 
-		[GlobalSetup]
-		public void GlobalSetup()
-		{
-			_target = new SomethingWithPrivateField();
+        [GlobalSetup]
+        public void GlobalSetup()
+        {
+            _target = new SomethingWithPrivateField();
 
-			_field = typeof(SomethingWithPrivateField)
-				.GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
-				.FirstOrDefault(f => f.Name == "_id");
+            _field = typeof(SomethingWithPrivateField)
+                .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(f => f.Name == "_id");
 
-			_reflectionSetter = ConstructReflectionSetter();
-			_linqExpressionSetter = ConstructLinqExpressionSetter();
-			_emittedILSetter = ConstructEmittedILSetter();
-		}
+            _reflectionSetter = ConstructReflectionSetter();
+            _linqExpressionSetter = ConstructLinqExpressionSetter();
+            _emittedILSetter = ConstructEmittedILSetter();
+        }
 
-		[Benchmark]
-		public Action<SomethingWithPrivateField, int> ConstructReflectionSetter()
-		{
-			return (source, value) => _field.SetValue(source, value);
-		}
+        [Benchmark]
+        public Action<SomethingWithPrivateField, int> ConstructReflectionSetter()
+        {
+            return (source, value) => _field.SetValue(source, value);
+        }
 
-		[Benchmark]
-		public Action<SomethingWithPrivateField, int> ConstructLinqExpressionSetter()
-		{
-			var sourceParameter = Expression.Parameter(typeof(SomethingWithPrivateField), "source");
-			var valueParameter = Expression.Parameter(_field.FieldType, "value");
-			var fail = Expression.Assign(
-				Expression.MakeMemberAccess(sourceParameter, _field),
-				valueParameter
-			);
-			return Expression.Lambda<Action<SomethingWithPrivateField, int>>(
-					Expression.Assign(
-						Expression.MakeMemberAccess(sourceParameter, _field),
-						valueParameter
-					),
-					sourceParameter,
-					valueParameter
-				)
-				.Compile();
-		}
+        [Benchmark]
+        public Action<SomethingWithPrivateField, int> ConstructLinqExpressionSetter()
+        {
+            var sourceParameter = Expression.Parameter(typeof(SomethingWithPrivateField), "source");
+            var valueParameter = Expression.Parameter(_field.FieldType, "value");
+            var fail = Expression.Assign(
+                Expression.MakeMemberAccess(sourceParameter, _field),
+                valueParameter
+            );
+            return Expression.Lambda<Action<SomethingWithPrivateField, int>>(
+                    Expression.Assign(
+                        Expression.MakeMemberAccess(sourceParameter, _field),
+                        valueParameter
+                    ),
+                    sourceParameter,
+                    valueParameter
+                )
+                .Compile();
+        }
 
-		[Benchmark]
-		public Action<SomethingWithPrivateField, int> ConstructEmittedILSetter()
-		{
-			var method = new DynamicMethod(
-				name: "SetField",
-				returnType: null,
-				parameterTypes: new[] { typeof(SomethingWithPrivateField), typeof(int) },
-				restrictedSkipVisibility: true
-			);
-			var gen = method.GetILGenerator();
-			gen.Emit(OpCodes.Ldarg_0);
-			gen.Emit(OpCodes.Ldarg_1);
-			gen.Emit(OpCodes.Stfld, _field);
-			gen.Emit(OpCodes.Ret);
-			return (Action<SomethingWithPrivateField, int>)method.CreateDelegate(
-			  typeof(Action<SomethingWithPrivateField, int>)
-			);
-		}
+        [Benchmark]
+        public Action<SomethingWithPrivateField, int> ConstructEmittedILSetter()
+        {
+            var method = new DynamicMethod(
+                name: "SetField",
+                returnType: null,
+                parameterTypes: new[] { typeof(SomethingWithPrivateField), typeof(int) },
+                restrictedSkipVisibility: true
+            );
+            var gen = method.GetILGenerator();
+            gen.Emit(OpCodes.Ldarg_0);
+            gen.Emit(OpCodes.Ldarg_1);
+            gen.Emit(OpCodes.Stfld, _field);
+            gen.Emit(OpCodes.Ret);
+            return (Action<SomethingWithPrivateField, int>)method.CreateDelegate(
+              typeof(Action<SomethingWithPrivateField, int>)
+            );
+        }
 
-		[Benchmark]
-		public void SetUsingReflection()
-		{
-			_reflectionSetter(_target, 1);
-		}
+        [Benchmark]
+        public void SetUsingReflection()
+        {
+            _reflectionSetter(_target, 1);
+        }
 
-		[Benchmark]
-		public void SetUsingLinqExpressions()
-		{
-			_linqExpressionSetter(_target, 1);
-		}
+        [Benchmark]
+        public void SetUsingLinqExpressions()
+        {
+            _linqExpressionSetter(_target, 1);
+        }
 
-		[Benchmark]
-		public void SetUsingEmittedIL()
-		{
-			_emittedILSetter(_target, 1);
-		}
-	}
-	
-	public class SomethingWithPrivateField
-	{
-		private int _id;
-	}
+        [Benchmark]
+        public void SetUsingEmittedIL()
+        {
+            _emittedILSetter(_target, 1);
+        }
+    }
+
+    public class SomethingWithPrivateField
+    {
+        private int _id;
+    }
 
 The "GlobalSetup" method will be run once and will construct the delegates for delegate-executing benchmark methods ("SetUsingReflection", "SetUsingLinqExpressions" and "SetUsingEmittedIL"). The time that it takes to execute the [GlobalSetup] method does not contribute to any of the benchmark method times - the benchmark methods will record *only* their own execution time.
 
@@ -442,17 +442,17 @@ I'm really happy with how easy BenchmarkDotNet makes it to measure these sorts o
 I forget each time that I start a new project how the running-benchmarks-against-multiple-frameworks functionality works, so I'll add a note here for anyone else that gets confused (and, likely, for me in the future!) - the first thing to do is to manually edit the .csproj file of the benchmark project so that it includes the following:
 
     <TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
-	
+
 It's not currently possible to specify multiple projects using the VS GUI, so your .csproj file will normally have a line like this:
 
     <TargetFramework>netcoreapp2.0</TargetFramework>
-	
+
 (Not only is there only a single framework specified but the node is called "TargetFramework" - without an "s" - as opposed to "TargetFrameworks" *with* an "s")
 
 After you've done this, you need to run the benchmark project from the command line (if you try to run it from within VS, even in Release configuation, you will get a warning that the results may be inaccurate as a debugger is attached). You do that with a command like this (it may vary if you're using a different version of .NET Core) -
 
     dotnet run --framework netcoreapp2.0 --configuration release
-	
+
 You have to specify a framework to run the project as but (and this is the important part) that does *not* mean that the benchmarks will only be run against the framework. What happens when you run this command is that multiple executables are built and then executed, which run the tests in each of the frameworks that you specified in the benchmark attributes and in the "TargetFrameworks" node in the .csproj file. The results of these multiple executables are aggregated to give you the final benchmark output.
 
 ### .NET Core upsets me again
@@ -463,10 +463,10 @@ When I was hand-editing the .csproj file to target multiple frameworks (I still 
 
 When it *was* ready to build and target both .NET Framework 4.6.1 and .NET Core 1.1, I got a cryptic warning:
 
-> Detected package downgrade: Microsoft.NETCore.App from 1.1.2 to 1.1.1 
+> Detected package downgrade: Microsoft.NETCore.App from 1.1.2 to 1.1.1
 >
->  CoreExeTest (>= 1.0.0) -> BenchmarkDotNet (>= 0.10.8) -> Microsoft.NETCore.App (>= 1.1.2) 
->  CoreExeTest (>= 1.0.0) -> Microsoft.NETCore.App (>= 1.1.1)				
+>  CoreExeTest (>= 1.0.0) -> BenchmarkDotNet (>= 0.10.8) -> Microsoft.NETCore.App (>= 1.1.2)
+>  CoreExeTest (>= 1.0.0) -> Microsoft.NETCore.App (>= 1.1.1)
 
 Everything seemed to build alright but I didn't know if this was something to worry about or not (I like my projects to be zero-warning). It suggested to me that I was targeting .NET Core 1.1 and BenchmarkDotNet was expecting .NET Core 1.1.2 - sounds simple enough, surely I can upgrade? I first tried changing the .csproj to target "netcoreapp1.1.2" but that didn't work. In fact, it "didnt work" in a very unhelpful way; when I ran the project it would open in a window and immediately close, with no way to break and catch the exception in the debugger. I used "dotnet run"\* on the command line to try to see more information and was then able to see the error message:
 
@@ -514,113 +514,113 @@ Finally, it was interesting to see how the .NET Framework compared to .NET Core 
 
 A comment on this post by "ai_enabled" asked about the use of the reflection method "SetValueDirect" instead of "SetValue". I must admit that I was unaware of this method but it was an interesting question posed about its performance in comparison to "SetValue" *and* there was a very important point made about the code that I'd presented so far when it comes to structs; in particular, because structs are copied when they're passed around, the property-update mechanisms that I've shown wouldn't have worked. I'll try to demonstrate this with some code:
 
-	public static void Main()
-	{
-		var field = typeof(SomeStructWithPrivateField)
-		  .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
-		  .FirstOrDefault(f => f.Name == "_id");
+    public static void Main()
+    {
+        var field = typeof(SomeStructWithPrivateField)
+          .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
+          .FirstOrDefault(f => f.Name == "_id");
 
-		// FAIL! "target" will still have an "_id" value of zero :(
-		var target = new SomeStructWithPrivateField();
-		field.SetValue(target, 123);
-	}
+        // FAIL! "target" will still have an "_id" value of zero :(
+        var target = new SomeStructWithPrivateField();
+        field.SetValue(target, 123);
+    }
 
-	public struct SomeStructWithPrivateField
-	{
-		private int _id;
-	}
+    public struct SomeStructWithPrivateField
+    {
+        private int _id;
+    }
 
 Because the "SetValue" method's first parameter is of type **object**, the "target" struct will get boxed - any time that a non-reference type is passed as an argument where a reference type is expected, it effectively gets "wrapped up" into an **object**. I won't go into all of the details of boxing / unboxing here (if you're interested, though, then "[Boxing and Unboxing (C# Programming Guide)](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/types/boxing-and-unboxing)" is a good starting point) but one important thing to note is that structs are copied as part of the boxing process. This means "SetValue" will be working on a copy of "target" and so the "_id" property of the "target" value will not be changed by the "SetValue" call!
 
 The way around this is to use "SetValueDirect", which takes a special **TypedReference** argument. The way in which this is done is via the little-known "__makeref" keyword (I wasn't aware of it before looking into "SetValueDirect") -
 
-	public static void Main()
-	{
-		var field = typeof(SomeStructWithPrivateField)
-		  .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
-		  .FirstOrDefault(f => f.Name == "_id");
+    public static void Main()
+    {
+        var field = typeof(SomeStructWithPrivateField)
+          .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
+          .FirstOrDefault(f => f.Name == "_id");
 
-		// SUCCESS! "target" will have its "_id" value updated!
-		var target = new SomeStructWithPrivateField();
-		field.SetValueDirect(__makeref(target), 123);
-	}
+        // SUCCESS! "target" will have its "_id" value updated!
+        var target = new SomeStructWithPrivateField();
+        field.SetValueDirect(__makeref(target), 123);
+    }
 
 If we wanted to wrap this up into a delegate then we need to ensure that the target parameter is marked as being "ref", otherwise we'll end up creating another place that the struct gets copied and the update lost. That means that we can no longer use something like:
 
     Action<SomeStructWithPrivateField, int>
-	
+
 In fact, we can't use the generic **Action** class at all because it doesn't allow for "ref" parameters to be specified. Instead, we'll need to define a new delegate -
-	
-	public delegate void Updater(ref SomeStructWithPrivateField target, int value);
+
+    public delegate void Updater(ref SomeStructWithPrivateField target, int value);
 
 Instances of this may be created like this:
 
-	var field = typeof(SomeStructWithPrivateField)
-	  .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
-	  .FirstOrDefault(f => f.Name == "_id");
+    var field = typeof(SomeStructWithPrivateField)
+      .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
+      .FirstOrDefault(f => f.Name == "_id");
 
-	Updater updater = (ref SomeStructWithPrivateField target, int value)
-	  => field.SetValueDirect(__makeref(target), id);
+    Updater updater = (ref SomeStructWithPrivateField target, int value)
+      => field.SetValueDirect(__makeref(target), id);
 
 If we want to do the same with the LINQ Expressions or generated IL approaches then we need only make some minor code tweaks to what we saw earlier. The first argument of the generated delegates must be changed to be a "ref" type and we need to generate a delegate of type **Updater** instead of **Action&lt;SomeStructWithPrivateField, int&gt;** -
 
-	// Construct an "Updater" delegate using LINQ Expressions
-	var sourceParameter = Expression.Parameter(
-	  typeof(SomeStructWithPrivateField).MakeByRefType(),
-	  "source"
-	);
-	var valueParameter = Expression.Parameter(field.FieldType, "value");
-	var fail = Expression.Assign(
-	  Expression.MakeMemberAccess(sourceParameter, field),
-	  valueParameter
-	);
-	var linqExpressionUpdater = Expression.Lambda<Updater>(
-	    Expression.Assign(
-	      Expression.MakeMemberAccess(sourceParameter, field),
-	      valueParameter
-	    ),
-	    sourceParameter,
-	    valueParameter
-	  )
-	  .Compile();
-	  
-	// Construct an "Updater" delegate by generating IL
-	var method = new DynamicMethod(
-	  name: "SetField",
-	  returnType: null,
-	  parameterTypes: new[] { typeof(SomeStructWithPrivateField).MakeByRefType(), typeof(int) },
-	  restrictedSkipVisibility: true
-	);
-	var gen = method.GetILGenerator();
-	gen.Emit(OpCodes.Ldarg_0);
-	gen.Emit(OpCodes.Ldind_Ref);
-	gen.Emit(OpCodes.Ldarg_1);
-	gen.Emit(OpCodes.Stfld, field);
-	gen.Emit(OpCodes.Ret);
-	var emittedIlUpdater = (Updater)method.CreateDelegate(typeof(Updater));
-	
+    // Construct an "Updater" delegate using LINQ Expressions
+    var sourceParameter = Expression.Parameter(
+      typeof(SomeStructWithPrivateField).MakeByRefType(),
+      "source"
+    );
+    var valueParameter = Expression.Parameter(field.FieldType, "value");
+    var fail = Expression.Assign(
+      Expression.MakeMemberAccess(sourceParameter, field),
+      valueParameter
+    );
+    var linqExpressionUpdater = Expression.Lambda<Updater>(
+        Expression.Assign(
+          Expression.MakeMemberAccess(sourceParameter, field),
+          valueParameter
+        ),
+        sourceParameter,
+        valueParameter
+      )
+      .Compile();
+
+    // Construct an "Updater" delegate by generating IL
+    var method = new DynamicMethod(
+      name: "SetField",
+      returnType: null,
+      parameterTypes: new[] { typeof(SomeStructWithPrivateField).MakeByRefType(), typeof(int) },
+      restrictedSkipVisibility: true
+    );
+    var gen = method.GetILGenerator();
+    gen.Emit(OpCodes.Ldarg_0);
+    gen.Emit(OpCodes.Ldind_Ref);
+    gen.Emit(OpCodes.Ldarg_1);
+    gen.Emit(OpCodes.Stfld, field);
+    gen.Emit(OpCodes.Ret);
+    var emittedIlUpdater = (Updater)method.CreateDelegate(typeof(Updater));
+
 *(Note: There is an additional "Ldind_Ref" instruction required for the IL to "unwrap" the ref argument but it's otherwise the same)*
 
 I used BenchmarkDotNet again to compare the performance of the two reflection methods ("SetValue" and "SetValueDirect") against LINQ Expressions and emitted IL when setting a private field on an instance and found that having to call "__makeRef" and "SetValueDirect" was much slower on .NET 4.6.1 than just calling "SetValue" (about 17x slower) but actually marginally *faster* on .NET Core.
 
-									 Method | Runtime |           Mean |         Error |        StdDev |
-	--------------------------------------- |-------- |----------------|---------------|---------------|
-				  ConstructReflectionSetter |     Clr |      11.285 ns |     0.3082 ns |     0.8281 ns |
-	 ConstructReflectionWithSetDirectSetter |     Clr |      10.597 ns |     0.2845 ns |     0.4345 ns |
-			  ConstructLinqExpressionSetter |     Clr | 196,194.530 ns | 2,075.5246 ns | 1,839.8983 ns |
-				   ConstructEmittedILSetter |     Clr | 170,913.441 ns | 2,289.5219 ns | 2,141.6200 ns |
-						 SetUsingReflection |     Clr |     142.976 ns |     2.8706 ns |     3.3058 ns |
-			 SetUsingReflectionAndSetDirect |     Clr |   2,444.816 ns |    40.9226 ns |    38.2790 ns |
-					SetUsingLinqExpressions |     Clr |       2.370 ns |     0.0795 ns |     0.0744 ns |
-						  SetUsingEmittedIL |     Clr |       2.616 ns |     0.0849 ns |     0.0834 ns |
-				  ConstructReflectionSetter |    Core |      10.595 ns |     0.2196 ns |     0.1946 ns |
-	 ConstructReflectionWithSetDirectSetter |    Core |      10.540 ns |     0.2838 ns |     0.3378 ns |
-			  ConstructLinqExpressionSetter |    Core | 117,697.478 ns |   758.9277 ns |   672.7696 ns |
-				   ConstructEmittedILSetter |    Core |  82,080.062 ns |   310.8230 ns |   275.5365 ns |
-						 SetUsingReflection |    Core |   2,782.834 ns |    17.5705 ns |    16.4355 ns |
-			 SetUsingReflectionAndSetDirect |    Core |   2,541.563 ns |    21.8272 ns |    20.4172 ns |
-					SetUsingLinqExpressions |    Core |       2.421 ns |     0.0227 ns |     0.0212 ns |
-						  SetUsingEmittedIL |    Core |       2.655 ns |     0.0090 ns |     0.0080 ns |
+                                     Method | Runtime |           Mean |         Error |        StdDev |
+    --------------------------------------- |-------- |----------------|---------------|---------------|
+                  ConstructReflectionSetter |     Clr |      11.285 ns |     0.3082 ns |     0.8281 ns |
+     ConstructReflectionWithSetDirectSetter |     Clr |      10.597 ns |     0.2845 ns |     0.4345 ns |
+              ConstructLinqExpressionSetter |     Clr | 196,194.530 ns | 2,075.5246 ns | 1,839.8983 ns |
+                   ConstructEmittedILSetter |     Clr | 170,913.441 ns | 2,289.5219 ns | 2,141.6200 ns |
+                         SetUsingReflection |     Clr |     142.976 ns |     2.8706 ns |     3.3058 ns |
+             SetUsingReflectionAndSetDirect |     Clr |   2,444.816 ns |    40.9226 ns |    38.2790 ns |
+                    SetUsingLinqExpressions |     Clr |       2.370 ns |     0.0795 ns |     0.0744 ns |
+                          SetUsingEmittedIL |     Clr |       2.616 ns |     0.0849 ns |     0.0834 ns |
+                  ConstructReflectionSetter |    Core |      10.595 ns |     0.2196 ns |     0.1946 ns |
+     ConstructReflectionWithSetDirectSetter |    Core |      10.540 ns |     0.2838 ns |     0.3378 ns |
+              ConstructLinqExpressionSetter |    Core | 117,697.478 ns |   758.9277 ns |   672.7696 ns |
+                   ConstructEmittedILSetter |    Core |  82,080.062 ns |   310.8230 ns |   275.5365 ns |
+                         SetUsingReflection |    Core |   2,782.834 ns |    17.5705 ns |    16.4355 ns |
+             SetUsingReflectionAndSetDirect |    Core |   2,541.563 ns |    21.8272 ns |    20.4172 ns |
+                    SetUsingLinqExpressions |    Core |       2.421 ns |     0.0227 ns |     0.0212 ns |
+                          SetUsingEmittedIL |    Core |       2.655 ns |     0.0090 ns |     0.0080 ns |
 
 It's worth noting that the LINQ Expressions and emitted-IL approaches are slightly slower when working with a "ref" parameter than they were in the original version of the code. I suppose that this makes sense because there is an extra instruction explicitly required in the emitted-IL code and the LINQ-Expression-constructed delegate will have to deal with the added indirection under the hood (though this happens "by magic" and the way that LINQ Expressions code doesn't need to be changed to account for it).
 
@@ -638,22 +638,22 @@ If you want to try to reproduce this for yourself in .NET Core then (accurate as
 
 Once you have these bleeding edge bits, though, you can build a project with BenchmarkDotNet tests configured to run in both .NET Framework and .NET Core with a .csproj like this:
 
-	<Project Sdk="Microsoft.NET.Sdk">
+    <Project Sdk="Microsoft.NET.Sdk">
 
-	  <PropertyGroup>
-		<OutputType>Exe</OutputType>
-		<TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
-		<PlatformTarget>AnyCPU</PlatformTarget>
-	  </PropertyGroup>
+      <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
+        <PlatformTarget>AnyCPU</PlatformTarget>
+      </PropertyGroup>
 
-	  <ItemGroup>
-		<PackageReference Include="BenchmarkDotNet" Version="0.10.8" />
-	  </ItemGroup>
+      <ItemGroup>
+        <PackageReference Include="BenchmarkDotNet" Version="0.10.8" />
+      </ItemGroup>
 
-	</Project>
+    </Project>
 
 and you can run the tests in *both* frameworks using this:
 
     dotnet run --framework netcoreapp2.0 --configuration release
-	
+
 Don't be fooled by the fact that you have to specify a single framework - through BenchmarkDotNet magic, the tests *will* be run for both frameworks (so long as you annotate the benchmark class with "[CoreJob, ClrJob]") and the results will be displayed in one convenient combined table at the end.

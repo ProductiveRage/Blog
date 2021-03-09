@@ -12,10 +12,10 @@ While we're doing some sort of validation on the constructor arguments I think i
 
     public class Employee
     {
-      public string Title { get; set; }  	
-      public string FirstName { get; set; }  	
-      public string LastName { get; set; }  	
-      public string[] Roles { get; set; }  	
+      public string Title { get; set; }
+      public string FirstName { get; set; }
+      public string LastName { get; set; }
+      public string[] Roles { get; set; }
     }
 
 This is the sort of thing that's found all over the place - especially across webservice interfaces. Assume that we have the requirements that Title, FirstName and LastName *all* have values and that all Employees have zero or more Roles. I think describing the requirements in constructor validation and then some liberal commenting ends up in nicer code:
@@ -307,7 +307,7 @@ Since this code is a bit long to jam in the middle of the article, here it is in
       {
         if (list == null)
           throw new ArgumentNullException("list");
-        
+
         // Use same trick as above methods to cheat - we're changing the state of the object after
         // instantiation, but after returning from
         // this method it can be considered immutable

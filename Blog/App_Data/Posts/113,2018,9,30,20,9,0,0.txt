@@ -55,10 +55,10 @@ There was a lot of talk above of how "each request is allocated a thread to work
 A thread in C# *can* be created using:
 
     var thread = new Thread(nameOfMethodThatHasWorkToDoOnTheNewThread);
-	
+
 However, threads are a relatively expensive resource to new up and then discard over and over again and so .NET offers a way to "pool" threads. What this boils down to is that the **ThreadPool** framework class will maintain a list of threads and reuse them when someone needs one. This is used internally in many places within the .NET framework and it may be used like this:
 
-	ThreadPool.QueueUserWorkItem(nameOfMethodThatHasWorkToDoOnTheNewThread);
+    ThreadPool.QueueUserWorkItem(nameOfMethodThatHasWorkToDoOnTheNewThread);
 
 The **ThreadPool** will keep track of how many threads would need to exist at any given time to service all "QueueUserWorkItem" requests and it will track this over time so it can try to keep its pool at the optimium size for the application - too many means a waste of resources but too few means that it will take longer before the work requested via "QueueUserWorkItem" calls can be executed (if there is no thread free when a "QueueUserWorkItem" is made then that work will still happen but it will be queued up until the **ThreadPool** has a thread become free).
 
@@ -75,52 +75,52 @@ Easy peasy.
 
 However.. some project types get a bit possessive about their threads - when a request starts on one thread then it wants to be able to continue to use that thread forever. I suspect that this is most commonly known about WinForms projects where it was common to see code that looked like the following (that I have borrowed from a [Stack Overflow answer](https://stackoverflow.com/a/661686/3813189)):
 
-	private void OnWorkerProgressChanged(object sender, ProgressChangedArgs e)
-	{
-		// Cross thread - so you don't get the cross-threading exception
-		if (this.InvokeRequired)
-		{
-			this.BeginInvoke((MethodInvoker)delegate
-			{
-				OnWorkerProgressChanged(sender, e);
-			});
-			return;
-		}
+    private void OnWorkerProgressChanged(object sender, ProgressChangedArgs e)
+    {
+        // Cross thread - so you don't get the cross-threading exception
+        if (this.InvokeRequired)
+        {
+            this.BeginInvoke((MethodInvoker)delegate
+            {
+                OnWorkerProgressChanged(sender, e);
+            });
+            return;
+        }
 
-		// Change control
-		this.label1.Text = e.Progress;
-	}
-	
+        // Change control
+        this.label1.Text = e.Progress;
+    }
+
 With WinForms, you must never block the main thread because then your whole application window will go into a "not responding" state. So, if you wanted to start a process that is unlikely to complete instantly - such as a file upload - then you might have a component that performs the work on a different thread and that has events for "progress changed" (so that it can report {x}% complete) and "upload completed". When these events are raised, we'll want to update the UI of the application but there is a problem: when these callbacks are executed, they will be run on the thread that the file upload is running on and not the main UI thread. The reason that this is a problem is that UI components may *only* be updated by code that is running on the UI thread. The way around this is to check the "InvokeRequired" property on a UI component before trying to update any of the component's properties. If "InvokeRequired" returns false then it meant that the current thread is the UI thread and that no funny business was required. However, if it returns true then it means that the current thread is *not* the UI thread and that a special method "BeginInvoke" would have to be called, which was a way to say "please execute this code on the UI thread".
 
 Eventually, people got used to this and would ensure that they used "InvokeRequired" and  "BeginInvoke" when updating UI elements if they were dealing with code that might do some "background processing".
 
 When async / await were introduced, though, one of the aims was to make it easy and neat and tidy to write async code - basically, to be able to write code that *looked* synchronous while still getting the benefits of being *asynchronous*. That meant trying to avoid code that looked like this:
 
-	private async void btnUpload_Click(object sender, EventArgs e)
-	{
-		var filename = await UploadContent();
+    private async void btnUpload_Click(object sender, EventArgs e)
+    {
+        var filename = await UploadContent();
 
-		// Why do I need to do this?! I haven't (explicitly) fired
-		// up any new threads or anything! :S
-		if (this.InvokeRequired)
-		{
-			this.BeginInvoke((MethodInvoker)delegate
-			{
-				this.lblFilename.Text = filename;
-			});
-			return;
-		}
-		this.lblFilename.Text = filename;
-	}
+        // Why do I need to do this?! I haven't (explicitly) fired
+        // up any new threads or anything! :S
+        if (this.InvokeRequired)
+        {
+            this.BeginInvoke((MethodInvoker)delegate
+            {
+                this.lblFilename.Text = filename;
+            });
+            return;
+        }
+        this.lblFilename.Text = filename;
+    }
 
 Instead, it should just look like this:
 
-	private async void btnUpload_Click(object sender, EventArgs e)
-	{
-		var filename = await UploadContent();
-		this.lblFilename.Text = filename;
-	}
+    private async void btnUpload_Click(object sender, EventArgs e)
+    {
+        var filename = await UploadContent();
+        this.lblFilename.Text = filename;
+    }
 
 The problem with this is that some magic will be required somewhere. If the **ThreadPool** is responsible for providing a thread to execute on after async work has completed, things are going to go wrong if it provides one thread to start the request on and a different thread to continue on after the async work has completed. It was fine for the Windows Service example request above to start on Thread "A" and then change to working on Thread "B" because Windows Services don't have limitations on what threads can and can't do, whereas WinForms UI components *do*.
 
@@ -139,22 +139,22 @@ There is another downside, though, which is that it's quite easy to get into bot
 This problem has been encountered so many times that a lot of async'ers recognise it straight away and there are plenty of questions on Stack Overflow about it. There is also good advice that  is often repeated about how to prevent it. However, I think that it's particularly nasty because the code might not look hideously wrong at a glance but it will be able to cause your application to hang when it's run - not throw an exception (which at least makes it clear where something has gone wrong), but to just *hang*.
 
     public class HomeController
-	{
-	    public ActionResult Index()
-		{
-			return View(
-				GetTitleAsync().Result
-			);
-		}
-		
-		private async Task<string> GetTitleAsync()
-		{
-			// This Task.Delay call simulates an async call that might go off to the
-			// database or other external service
-		    await Task.Delay(1000);
-			return "Hello!";
-		}
-	}
+    {
+        public ActionResult Index()
+        {
+            return View(
+                GetTitleAsync().Result
+            );
+        }
+
+        private async Task<string> GetTitleAsync()
+        {
+            // This Task.Delay call simulates an async call that might go off to the
+            // database or other external service
+            await Task.Delay(1000);
+            return "Hello!";
+        }
+    }
 
 When I encountered this problem, I was much deeper down the stack but the concept was the same -
 
@@ -184,28 +184,28 @@ So let's look at solutions.
 **Approach two: Always use ".ConfigureAwait(false)"**. This is the oft-repeated good advice that I mentioned earlier. As a rule of thumb, many people recommend *always* including ".ConfigureAwait(false)" when you use await, like this:
 
     await Task.Delay(1000).ConfigureAwait(false);
-	
+
 The "false" value is for the "continueOnCapturedContext" parameter and this parameter effectively overrides the synchronization context about what thread the work must continue on when the async work has completed.
 
 If we changed our code to this:
 
     public class HomeController
-	{
-	    public ActionResult Index()
-		{
-			return View(
-				GetTitleAsync().Result
-			);
-		}
-		
-		private async Task<string> GetTitleAsync()
-		{
-			// This Task.Delay call simulates an async call that might go off to the
-			// database or other external service
-		    await Task.Delay(1000).ConfigureAwait(false);
-			return "Hello!";
-		}
-	}
+    {
+        public ActionResult Index()
+        {
+            return View(
+                GetTitleAsync().Result
+            );
+        }
+
+        private async Task<string> GetTitleAsync()
+        {
+            // This Task.Delay call simulates an async call that might go off to the
+            // database or other external service
+            await Task.Delay(1000).ConfigureAwait(false);
+            return "Hello!";
+        }
+    }
 
 .. then the chain of events goes more like this:
 
@@ -228,82 +228,82 @@ Instead, we could consider..
 **Approach three: Disabling the synchronization context before calling async code**. The .NET environment allows the host to specify its own synchronization context but it also allows *any* code to specify a particular context. We could use this to our advantage by doing something like this:
 
     public class HomeController
-	{
-	    public ActionResult Index()
-		{
-			// Get a reference to whatever the current context is, so that we can set
-			// it back after the async work is done
-			var currentSyncContext = SynchronizationContext.Current;
-			string result;
-			try
-			{
-				// Set the context to null so that any restrictions are removed that
-				// relate to what threads async code can continue on
-				SynchronizationContext.SetSynchronizationContext(null);
-				
-				// Block this thread until the async work is complete
-				result = GetTitleAsync().Result;
-			}
-			finally
-			{
-				// Set the context back to whatever it was before
-				SynchronizationContext.SetSynchronizationContext(currentSyncContext);
-			}
-			
-			return View(result);
-		}
-		
-		private async Task<string> GetTitleAsync()
-		{
-			// This Task.Delay call simulates an async call that might go off to the
-			// database or other external service
-		    await Task.Delay(1000);
-			return "Hello!";
-		}
-	}
+    {
+        public ActionResult Index()
+        {
+            // Get a reference to whatever the current context is, so that we can set
+            // it back after the async work is done
+            var currentSyncContext = SynchronizationContext.Current;
+            string result;
+            try
+            {
+                // Set the context to null so that any restrictions are removed that
+                // relate to what threads async code can continue on
+                SynchronizationContext.SetSynchronizationContext(null);
+
+                // Block this thread until the async work is complete
+                result = GetTitleAsync().Result;
+            }
+            finally
+            {
+                // Set the context back to whatever it was before
+                SynchronizationContext.SetSynchronizationContext(currentSyncContext);
+            }
+
+            return View(result);
+        }
+
+        private async Task<string> GetTitleAsync()
+        {
+            // This Task.Delay call simulates an async call that might go off to the
+            // database or other external service
+            await Task.Delay(1000);
+            return "Hello!";
+        }
+    }
 
 This means that we don't have to use ".ConfigureAwait(false)" and we *still* don't get any deadlocks. We can include code like this at the boundary where non-async code calls async code and then we won't have to worry about whether the async code includes any await calls that do not specify ".ConfigureAwait(false)".
 
 You wouldn't want to include this extra code *every* time that you called async code from non-async code and so it would make sense to encapsulate the logic in a method. Something like this:
 
-	public class HomeController : Controller
-	{
-		public ActionResult Index()
-		{
-			return View(
-				AsyncCallHelpers.WaitForAsyncResult(GetTitleAsync())
-			);
-		}
+    public class HomeController : Controller
+    {
+        public ActionResult Index()
+        {
+            return View(
+                AsyncCallHelpers.WaitForAsyncResult(GetTitleAsync())
+            );
+        }
 
-		private async static Task<string> GetTitleAsync()
-		{
-			// This Task.Delay call simulates an async call that might go off to the
-			// database or other external service
-		    await Task.Delay(1000);
-			return "Hello!";
-		}
-	}
+        private async static Task<string> GetTitleAsync()
+        {
+            // This Task.Delay call simulates an async call that might go off to the
+            // database or other external service
+            await Task.Delay(1000);
+            return "Hello!";
+        }
+    }
 
-	public static class AsyncCallHelpers
-	{
-		/// <summary>
-		/// Avoid the 'classic deadlock problem' when blocking on async work from non-async
-		/// code by disabling any synchronization context while the async work takes place
-		/// </summary>
-		public static T WaitForAsyncResult<T>(Task<T> work)
-		{
-			var currentSyncContext = SynchronizationContext.Current;
-			try
-			{
-				SynchronizationContext.SetSynchronizationContext(null);
-				return work.Result;
-			}
-			finally
-			{
-				SynchronizationContext.SetSynchronizationContext(currentSyncContext);
-			}
-		}
-	}
+    public static class AsyncCallHelpers
+    {
+        /// <summary>
+        /// Avoid the 'classic deadlock problem' when blocking on async work from non-async
+        /// code by disabling any synchronization context while the async work takes place
+        /// </summary>
+        public static T WaitForAsyncResult<T>(Task<T> work)
+        {
+            var currentSyncContext = SynchronizationContext.Current;
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(null);
+                return work.Result;
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(currentSyncContext);
+            }
+        }
+    }
 
 I think that this is quite an elegant solution and makes for clear code (it is hopefully fairly clear to a reader of the code that there is something interesting going on at the non-async / async boundary and there is a nice summary comment explaining why).
 
@@ -311,53 +311,53 @@ A variation on this theme is..
 
 **Approach four: Use a custom INotifyCompletion implementation**. When **Task**/**Task&lt;T&gt;** was added to .NET along with async / await, the design included ways to override how awaiting a task should be handled and this gives us another way to remove the synchronization context for async work. We can take advantage of this facility by doing something like this:
 
-	public class HomeController : Controller
-	{
-		public ActionResult Index()
-		{
-			return View(
-				GetTitleAsync().Result
-			);
-		}
+    public class HomeController : Controller
+    {
+        public ActionResult Index()
+        {
+            return View(
+                GetTitleAsync().Result
+            );
+        }
 
-		private async static Task<string> GetTitleAsync()
-		{
-			await new SynchronizationContextRemover();
-			
-			// This Task.Delay call simulates an async call that might go off to the
-			// database or other external service
-			await Task.Delay(1000);
-			return "Hello!";
-		}
-	}
+        private async static Task<string> GetTitleAsync()
+        {
+            await new SynchronizationContextRemover();
 
-	/// <summary>
-	/// This prevents any synchronization context from affecting what happens within
-	/// an async method and so we don't need to worry if a non-async caller wants to
-	/// block while waiting for the result of the async method
-	/// </summary>
-	public struct SynchronizationContextRemover : INotifyCompletion
-	{
-		public bool IsCompleted => SynchronizationContext.Current == null;
+            // This Task.Delay call simulates an async call that might go off to the
+            // database or other external service
+            await Task.Delay(1000);
+            return "Hello!";
+        }
+    }
 
-		public void OnCompleted(Action continuation)
-		{
-			var prevContext = SynchronizationContext.Current;
-			try
-			{
-				SynchronizationContext.SetSynchronizationContext(null);
-				continuation();
-			}
-			finally
-			{
-				SynchronizationContext.SetSynchronizationContext(prevContext);
-			}
-		}
+    /// <summary>
+    /// This prevents any synchronization context from affecting what happens within
+    /// an async method and so we don't need to worry if a non-async caller wants to
+    /// block while waiting for the result of the async method
+    /// </summary>
+    public struct SynchronizationContextRemover : INotifyCompletion
+    {
+        public bool IsCompleted => SynchronizationContext.Current == null;
 
-		public SynchronizationContextRemover GetAwaiter() => this;
+        public void OnCompleted(Action continuation)
+        {
+            var prevContext = SynchronizationContext.Current;
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(null);
+                continuation();
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(prevContext);
+            }
+        }
 
-		public void GetResult() { }
-	}
+        public SynchronizationContextRemover GetAwaiter() => this;
+
+        public void GetResult() { }
+    }
 
 *(This code comes from the article "[An alternative to ConfigureAwait(false) everywhere](https://blogs.msdn.microsoft.com/benwilli/2017/02/09/an-alternative-to-configureawaitfalse-everywhere/)")*
 
@@ -389,21 +389,21 @@ To quickly recap, the commonly-suggested recommendations for avoiding the 'class
 **Approach six: Use Task.Run** - this is a workaround that I have seen in some Stack Overflow answers. We could change our example code to look like this:
 
     public class HomeController
-	{
-	    public ActionResult Index()
-		{
-			var result = Task.Run(async () => { return await GetTitleAsync(); }).Result;
-			return View(result);
-		}
-		
-		private async Task<string> GetTitleAsync()
-		{
-			// This Task.Delay call simulates an async call that might go off to the
-			// database or other external service
-		    await Task.Delay(1000);
-			return "Hello!";
-		}
-	}
+    {
+        public ActionResult Index()
+        {
+            var result = Task.Run(async () => { return await GetTitleAsync(); }).Result;
+            return View(result);
+        }
+
+        private async Task<string> GetTitleAsync()
+        {
+            // This Task.Delay call simulates an async call that might go off to the
+            // database or other external service
+            await Task.Delay(1000);
+            return "Hello!";
+        }
+    }
 
 This works because "Task.Run" will result in work being performed on a **ThreadPool** thread and so the thread that calls into GetTitleAsync will not be associated with an ASP.NET synchronization context and so the deadlock won't occur.
 

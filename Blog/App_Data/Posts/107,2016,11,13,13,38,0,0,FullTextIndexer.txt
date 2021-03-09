@@ -1,4 +1,4 @@
-﻿## Migrating my Full Text Indexer to .NET Core (supporting multi-target NuGet packages)
+## Migrating my Full Text Indexer to .NET Core (supporting multi-target NuGet packages)
 
 So it looks increasingly like .NET Core is going to be an important technology in the near future, in part because Microsoft is developing much of it in the open (in a significant break from their past approach to software), in part because some popular projects support it ([Dapper](https://github.com/StackExchange/dapper-dot-net), [AutoMapper](http://automapper.org/), [Json.NET](http://www.newtonsoft.com/json)) and in part because of excitement from blog posts such as [ASP.NET Core – 2300% More Requests Served Per Second](http://web.ageofascent.com/asp-net-core-exeeds-1-15-million-requests-12-6-gbps/).
 
@@ -46,37 +46,37 @@ Unfortunately, the projects that rely on Common weren't compiling because their 
 
 The problem is that Common is being built for "netstandard1.6" but *only* that framework. I also want it to support a "full fat" .NET framework, like 4.5.2 - in order to do this I need to edit the project.json file so that the build process creates multiple versions of the project, one .NET 4.5.2 as well as the one for netstandard. That means changing it from this:
 
-	{
-	  "version": "1.0.0-*",
+    {
+      "version": "1.0.0-*",
 
-	  "dependencies": {
-		"NETStandard.Library": "1.6.0"
-	  },
+      "dependencies": {
+        "NETStandard.Library": "1.6.0"
+      },
 
-	  "frameworks": {
-		"netstandard1.6": {
-		  "imports": "dnxcore50"
-		}
-	  }
-	}
+      "frameworks": {
+        "netstandard1.6": {
+          "imports": "dnxcore50"
+        }
+      }
+    }
 
 to this:
 
-	{
-	  "version": "1.0.0-*",
+    {
+      "version": "1.0.0-*",
 
-	  "dependencies": {},
+      "dependencies": {},
 
-	  "frameworks": {
-		"netstandard1.6": {
-		  "imports": "dnxcore50",
-		  "dependencies": {
-			"NETStandard.Library": "1.6.0"
-		  }
-		},
-		"net452": {}
-	  }
-	}
+      "frameworks": {
+        "netstandard1.6": {
+          "imports": "dnxcore50",
+          "dependencies": {
+            "NETStandard.Library": "1.6.0"
+          }
+        },
+        "net452": {}
+      }
+    }
 
 Two things have happened - an additional entry has been added to the "frameworks" section ("net452" joins "netstandard1.6") and the "NETStandard.Library" dependency has moved from being something that is always required by the project to something that is only required by the project when it's being built for netstandard.
 
@@ -115,24 +115,24 @@ However, it still didn't compile.
 In the "Core" project lives the **EnglishPluralityStringNormaliser** class, which
 is used to adjust tokens (ie. words) so that the singular and plural versions of the same word are considered equivalent (eg. "cat" and "cats", "category" and "categories"). Internally, it generates a compiled LINQ expression to try to perform its work as efficiently as possible and it requires reflection to do that. Calling "GetMethod" and "GetProperty" on a **Type** is not supported in netstandard, though, and an additional dependency is required. So the Core project.json file needed to be changed to look like this:
 
-	{
-	  "version": "1.0.0-*",
+    {
+      "version": "1.0.0-*",
 
-	  "dependencies": {
-		"Common": "1.0.0-*"
-	  },
+      "dependencies": {
+        "Common": "1.0.0-*"
+      },
 
-	  "frameworks": {
-		"netstandard1.6": {
-		  "imports": "dnxcore50",
-		  "dependencies": {
-			"NETStandard.Library": "1.6.0"
-        	"System.Reflection.TypeExtensions": "4.1.0"
-		  }
-		},
-		"net452": {}
-	  }
-	}
+      "frameworks": {
+        "netstandard1.6": {
+          "imports": "dnxcore50",
+          "dependencies": {
+            "NETStandard.Library": "1.6.0"
+            "System.Reflection.TypeExtensions": "4.1.0"
+          }
+        },
+        "net452": {}
+      }
+    }
 
 The Common project is a dependency regardless of what the target framework is during the build process but the "System.Reflection.TypeExtensions" package is also required when building for netstandard (but not .NET 4.5.2), as this includes extensions methods for **Type** such as "GetMethod" and "GetProperty".
 
@@ -140,8 +140,8 @@ The Common project is a dependency regardless of what the target framework is du
 
 There was one other dependency that was required for Core to build - "System.Globalization.Extensions". This was because the **DefaultStringNormaliser** class includes the line
 
-	var normalisedValue = value.Normalize(NormalizationForm.FormKD);
-	
+    var normalisedValue = value.Normalize(NormalizationForm.FormKD);
+
 which resulted in the error
 
 > 'string' does not contain a definition for 'Normalize' and no extension method 'Normalize' accepting a first argument of type 'string' could be found (are you missing a using directive or an assembly reference?)
@@ -176,7 +176,7 @@ The second is that, presuming you want the Visual Studio test runner integration
 
 Fourthly, you need to add a line
 
-	"testRunner": "xunit",
+    "testRunner": "xunit",
 
 to the project.json file.
 
@@ -203,7 +203,7 @@ There are no nasty workarounds required for the references (like when the not-ye
 The project.json file has enough information that the "dotnet" command line can create a NuGet package from it. So, if you run the following command (you need to be in the root of the project that you're interested in to do this) -
 
     dotnet pack
-	
+
 .. then you will get a NuGet package built, ready to distribute! This is very handy, it makes things very simple. And if the project.json targets both netstandard1.6 and net452 then you will get a NuGet package that may be added to either a .NET Core project or a .NET 4.5.2 (or later) project.
 
 I hadn't created the Full Text Indexer as a NuGet package before now, so this seemed like a good time to think about how exactly I wanted to do it.
@@ -221,7 +221,7 @@ For points one and two, the "[project.json reference](https://docs.microsoft.com
 So, it sounds like I could add a line to the Common project -
 
     "name": "FullTextIndexer.Common",
-	
+
 .. which would result in the NuGet package for "Common" having the ID "FullTextIndexer.Common". And it does!
 
 However, there is a problem with doing this.
@@ -240,67 +240,67 @@ To cut a long story short, after some trial and error experimenting (and having 
 
 The [project.json reference](https://docs.microsoft.com/en-us/dotnet/articles/core/tools/project-json) made the second task simple, though, by documenting the "[packOptions](https://docs.microsoft.com/en-us/dotnet/articles/core/tools/project-json#packoptions)" section. To cut to the chase, I changed the Common's project.json to the following:
 
-	{
-	  "version": "1.0.0-*",
+    {
+      "version": "1.0.0-*",
 
-	  "packOptions": {
-		"iconUrl": "https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200",
-		"projectUrl": "https://bitbucket.org/DanRoberts/full-text-indexer",
-		"tags": [ "C#", "full text index", "search" ]
-	  },
-	  "authors": [ "ProductiveRage" ],
-	  "copyright": "Copyright 2016 ProductiveRage",
+      "packOptions": {
+        "iconUrl": "https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200",
+        "projectUrl": "https://bitbucket.org/DanRoberts/full-text-indexer",
+        "tags": [ "C#", "full text index", "search" ]
+      },
+      "authors": [ "ProductiveRage" ],
+      "copyright": "Copyright 2016 ProductiveRage",
 
-	  "dependencies": {},
+      "dependencies": {},
 
-	  "frameworks": {
-		"netstandard1.6": {
-		  "imports": "dnxcore50",
-		  "dependencies": {
-			"NETStandard.Library": "1.6.0"
-		  }
-		},
-		"net452": {}
-	  }
-	}
+      "frameworks": {
+        "netstandard1.6": {
+          "imports": "dnxcore50",
+          "dependencies": {
+            "NETStandard.Library": "1.6.0"
+          }
+        },
+        "net452": {}
+      }
+    }
 
 I updated the other class library projects similarly and updated the dependency names on all of the projects in the solution so that everything was consistent and compiling.
 
 Finally, I created an additional project named simply "FullTextIndexer" whose only role in life is to generate a NuGet package that includes all of the others (it doesn't have any code of its own). Its project.json file looks like this:
 
-	{
-	  "version": "1.0.0-*",
+    {
+      "version": "1.0.0-*",
 
-	  "packOptions": {
-		"summary": "A project to try implementing a full text index service from scratch in C# and .NET Core",
-		"iconUrl": "https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200",
-		"projectUrl": "https://bitbucket.org/DanRoberts/full-text-indexer",
-		"tags": [ "C#", "full text index", "search" ]
-	  },
-	  "authors": [ "ProductiveRage" ],
-	  "copyright": "Copyright 2016 ProductiveRage",
+      "packOptions": {
+        "summary": "A project to try implementing a full text index service from scratch in C# and .NET Core",
+        "iconUrl": "https://secure.gravatar.com/avatar/6a1f781d4d5e2d50dcff04f8f049767a?s=200",
+        "projectUrl": "https://bitbucket.org/DanRoberts/full-text-indexer",
+        "tags": [ "C#", "full text index", "search" ]
+      },
+      "authors": [ "ProductiveRage" ],
+      "copyright": "Copyright 2016 ProductiveRage",
 
-	  "dependencies": {
-		"FullTextIndexer.Common": "1.0.0-*",
-		"FullTextIndexer.Core": "1.0.0-*",
-		"FullTextIndexer.Helpers": "1.0.0-*",
-		"FullTextIndexer.Querier": "1.0.0-*"
-	  },
+      "dependencies": {
+        "FullTextIndexer.Common": "1.0.0-*",
+        "FullTextIndexer.Core": "1.0.0-*",
+        "FullTextIndexer.Helpers": "1.0.0-*",
+        "FullTextIndexer.Querier": "1.0.0-*"
+      },
 
-	  "frameworks": {
-		"netstandard1.6": {
-		  "imports": "dnxcore50",
-		  "dependencies": {
-			"NETStandard.Library": "1.6.0"
-		  }
-		},
-		"net452": {}
-	  }
-	}
+      "frameworks": {
+        "netstandard1.6": {
+          "imports": "dnxcore50",
+          "dependencies": {
+            "NETStandard.Library": "1.6.0"
+          }
+        },
+        "net452": {}
+      }
+    }
 
 One final note about NuGet packages before I move on - the default behaviour of "dotnet pack" is to build the project in Debug configuration. If you want to build in release mode then you can use the following:
 
-	dotnet pack --configuration Release
+    dotnet pack --configuration Release
 
 ### "Fixing" the serialisation problem
 
@@ -320,13 +320,15 @@ The problem with recommendations such as [Json.NET](http://www.newtonsoft.com/js
 
 For the sake of this post, I'm going to cheat a little. While I have come up with a way to serialise index data that works with netstandard, it would probably best be covered another day (and it isn't compatible with historical data, unfortunately). A good-enough-for-now approach was to use "[conditional directives](https://msdn.microsoft.com/en-us/library/4y6tbswk.aspx)", which are basically a way to say "if you're building in this configuration then include this code (and if you're not, then don't)". This allowed me the restore all of the **[Serializable]** attributes that I removed earlier - but only if building for .NET 4.5.2 (and not for .NET Core). For example:
 
-	#if NET452
-		[Serializable]
-	#endif
-		public class Whatever
-		{
-		
+    #if NET452
+        [Serializable]
+    #endif
+        public class Whatever
+        {
+
 The **[Serializable]** attribute will be included in the binaries for .NET 4.5.2 and not for .NET Core.
+
+**Update (9th March 2021):** This isn't actually true any more - the BinaryFormatter and Serializable attribute are available in more current versions of .NET Standard and I've recently updated the FullTextIndexer NuGet packages to target such a version. There remains an **IndexDataJsonSerialiser** class in the FullTextIndexer.Serialisation.Json package, though, which you may find preferable as [Microsoft strongly warns against using the BinaryFormatter](https://docs.microsoft.com/en-gb/dotnet/standard/serialization/binaryformatter-security-guide) (it only applies to untrusted input, which is not an expected use case for deserialisation of index data but you still may wish to err on the safe side).
 
 You need to be careful with precisely what conditions you specify, though. When I first tried this, I used the line "if #net452" (where the string "net452" is consistent with the framework target string in the project.json files) but the attribute wasn't being included in the .NET 4.5.2 builds. There was no error reported, it just wasn't getting included. I had to look up the supported values to see if I'd made a silly mistake and it was the casing - it needs to be "NET452" and not "net452".
 

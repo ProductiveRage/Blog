@@ -1,4 +1,4 @@
-﻿## Cross Browser (Pseudo) Source Mapping with LESS
+## Cross Browser (Pseudo) Source Mapping with LESS
 
 I have a component that is set up to load LESS stylesheets with what is essentially
 
@@ -71,7 +71,7 @@ Much more useful! Each style block still shows "**Styles.less (line 1)**" in big
 
 There is a problem, though. When the LESS source files start to get large and - more significantly - increasingly deeply-nested, the content that the **DotLessCompilingLoader** generates from the nested "Source Mapping Marker Ids" balloons. In one case, I had 116kb (which, granted, is *a lot* of rules) explode past 6mb. That's a huge amount of CSS that needs parsing and unnecessary selectors trimming from.
 
-Incidentally, the size of the delivered CSS (with "tidied" markers ids) was 119kb, an overhead of 17%. When gzip'd, the content without marker ids was 15.6kb while the content *with* marker ids was 18.9kb, an overhead of 20%. 
+Incidentally, the size of the delivered CSS (with "tidied" markers ids) was 119kb, an overhead of 17%. When gzip'd, the content without marker ids was 15.6kb while the content *with* marker ids was 18.9kb, an overhead of 20%.
 
 ### Is this necessary at all?
 
@@ -173,7 +173,7 @@ So I had to write:
 and then instantiate a **LessEngine** with
 
     var engine = new LessEngine();
-    engine.Plugins = new[] { 
+    engine.Plugins = new[] {
       new SelectorRewriterVisitorPluginConfigurator(_markerIdRetriever)
     };
 

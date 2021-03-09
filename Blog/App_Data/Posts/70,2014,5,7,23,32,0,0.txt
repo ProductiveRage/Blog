@@ -1,4 +1,4 @@
-﻿## Happy Logging
+## Happy Logging
 
 I started a project recently and got to the point where some of the classes needed a way to write out warnings and other debug messages so I started hashing out a quick **ILogEvents** interface, as I've done for other projects.
 
@@ -180,7 +180,7 @@ Ok, now we're through the intro, let's get to the real meat! There are implement
 
 The **ConsoleLogger**, **TraceLogger** and **FileLogger** all write out message details in a default format that can overridden if required.
 
-But this is still child's play. 
+But this is still child's play.
 
 I said right at the start that one of my aims was to be able to buffer messages / process them asynchronously. For scenarios like this, there is the **ThrottlingLogger**, which places all messages onto an internal queue and periodically flushes its queue's contents to another logger. The flushing period can be based upon a minimum frequency (in terms of time) or upon an upper limit on the number of items in the queue (or both!).
 

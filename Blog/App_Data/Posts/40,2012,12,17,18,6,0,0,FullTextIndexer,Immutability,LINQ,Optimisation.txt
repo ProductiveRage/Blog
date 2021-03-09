@@ -1,4 +1,4 @@
-﻿## The Full Text Indexer Post Round-up
+## The Full Text Indexer Post Round-up
 
 This is a compilation of links to articles outlining some of the details of the Full Text Indexer project I put together, just so I could point a link to everything all in one place (like from the BitBucket ReadMe!)
 

@@ -1,4 +1,4 @@
-﻿## CSS Minifier - Caching
+## CSS Minifier - Caching
 
 A week or so ago I wrote about [Extending the CSS Minifier](Post47) and some new facilities in my project on Bitbucket (the imaginatively-named [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier)). Particularly the **EnhancedNonCachedLessCssLoaderFactory** which you can use to get up and running with all of the fancy new features in no time!
 
@@ -26,7 +26,7 @@ The simplest caching mechanism uses the **CachingTextFileLoader** which wraps a 
     {
       DateTime GetLastModifiedDate(string relativePath);
     }
-    
+
     // Type param must be a class (not a value type) so that null may be returned from the getter to indicate
     // that the item is not present in the cache
     public interface ICacheThingsWithModifiedDates<T> where T : class, IKnowWhenIWasLastModified
@@ -35,7 +35,7 @@ The simplest caching mechanism uses the **CachingTextFileLoader** which wraps a 
       void Add(string cacheKey, T value);
       void Remove(string cacheKey);
     }
-    
+
     public interface IKnowWhenIWasLastModified
     {
       DateTime LastModified { get;  }
@@ -96,7 +96,7 @@ If you're using the **SameFolderImportFlatteningCssLoader** then the **SingleFol
             Remove(cacheKey);
             return null;
           }
-        
+
           return cachedTextFileContentsData;
         }
       }
@@ -230,7 +230,7 @@ This code is taken from the CSSMinifiedDemo project in the [CSSMinifier](https:/
             errorBehaviour,
             logger
           )).Get();
-      
+
           var diskCachingCssLoader = new DiskCachingTextFileLoader(
             cssLoader,
             relativePathRequested => new FileInfo(relativePathMapper.MapPath(relativePathRequested) + ".cache"),

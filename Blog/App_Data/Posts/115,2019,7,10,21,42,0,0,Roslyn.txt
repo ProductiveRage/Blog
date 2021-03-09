@@ -38,9 +38,9 @@ If I opened the MyLibrary.csproj from the example earlier then I could add the f
         <OutputItemType>Analyzer</OutputItemType>
       </ProjectReference>
     </ItemGroup>
-  
+
 .. and the MyAnalyser would now be added to MyLibrary and it would check over the code that I'd written in MyLibrary project - reporting any resulting messages, warnings or error in the VS Error List. Hurrah!
-  
+
 It seems like a pity that something seemingly so simple needs to be done by hand-editing the .csproj file instead of there being something in the VS GUI to do this but there are other features where you have to do the same. For example, if you want a project to target multiple frameworks when it's built then you have to manually edit the .csproj file and rename the "targetframework" node to "targetframeworks" and then type in a semi-colon-delimited list of IDs of frameworks that you're interested in - eg. from this:
 
     <TargetFramework>netcoreapp2.1</TargetFramework>
@@ -48,7 +48,7 @@ It seems like a pity that something seemingly so simple needs to be done by hand
 .. to this:
 
     <TargetFrameworks>netcoreapp2.1;net461</TargetFrameworks>
-	
+
 (It's quite common to do this in [BenchmarkDotNet](https://benchmarkdotnet.org/) projects so that you can see how the results vary when your library is imported into different frameworks)
 
 The good news is that hand-editing the .csproj file is much easier with the file format that we have now than the old one! So having to do this is not the end of the world.

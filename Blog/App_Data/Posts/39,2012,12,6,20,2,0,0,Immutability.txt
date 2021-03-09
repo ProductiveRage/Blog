@@ -1,4 +1,4 @@
-﻿## Persistent Immutable Lists - Extended
+## Persistent Immutable Lists - Extended
 
 In my last post ([Persistent Immutable Lists](Post38)) I offered some code as an alternate (and more performant) way to write an immutable list to that I suggested right back in my first post ([I love Immutable Data](Post1)). Well now I'd like to present a minor follow-up to the follow-up! I've incorporated the new list implementation into a few projects and have filled out a few more methods such as a "Remove" method (to remove a particular value, rather than removing from a given index with "RemoveAt" or "RemoveRange"), alternate "Sort" signatures and a "To" method that allows for derived types to be written that return their the derived type from the manipulation methods (see examples below):
 
@@ -527,7 +527,7 @@ The final piece of the puzzle I've used in my code is to throw in some extension
         {
             return new ImmutableList<T>(data);
         }
-        
+
         /// <summary>
         /// valueValidator is optional (may be null)
         /// </summary>

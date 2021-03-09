@@ -80,7 +80,7 @@ Then the GetIDsofNames is called to determine whether a given method is present:
 
     var hrRet = ((IDispatch)source).GetIDsOfNames
     (
-      ref IID_NULL, // 
+      ref IID_NULL,
       new string[1] { name },
       1, // number of names to get ids for
       LOCALE_SYSTEM_DEFAULT,
@@ -289,13 +289,13 @@ Particularly the concerns about the pointer arithmetic which I wasn't sure C# wo
       int[] arr = { 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 };
       unsafe {
         fixed(int* parr = arr) {
-          IntPtr ptr = new IntPtr(parr);   
+          IntPtr ptr = new IntPtr(parr);
           for (int ctr = 0; ctr < arr.Length; ctr++)
           {
             IntPtr newPtr = IntPtr.Add(ptr, ctr * sizeof(Int32));
             Console.Write("{0}   ", Marshal.ReadInt32(newPtr));
           }
-        }      
+        }
       }
     }
 

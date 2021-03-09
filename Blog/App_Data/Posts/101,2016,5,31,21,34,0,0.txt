@@ -21,13 +21,13 @@ It's not a silver bullet. But, then, nothing is. Static typing is a valuable too
 To take a simple example that will illustrate a variety of principles, the following is a LINQ call made in C# to take a set of **EmployeeDetails** instances and determine the average age (we'll assume that **EmployeeDetails** is a class with an integer Age property) -
 
     var averageAge = employees.Average(employee => employee.Age);
-	
+
 If we were implementing the "Average" function ourselves, then we would need to populate the following -
 
     public static int Average<T>(this IEnumerable<T> source, Func<T, int> selector)
-	{
-	}
-	
+    {
+    }
+
 Static typing gives us a lot of clues here. It ensures that anyone calling "Average" has to provide a set of values that may be enumerated and they have to provide a lambda that extracts an integer from each of those values. If the caller tried to provide a lambda that extracted a string (eg. the employee's name) from the values then it wouldn't compile. The type signature documents many of the the requirements of the method.
 
 However, the type system does not ensure that the implementation of "Average" is correct. It would be entirely possible to write an "Average" function that returned the *highest* value, rather than the [mean](https://en.wikipedia.org/wiki/Arithmetic_mean) value.

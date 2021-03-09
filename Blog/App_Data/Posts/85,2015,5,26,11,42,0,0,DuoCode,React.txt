@@ -76,7 +76,7 @@ The "ComponentWrapper" is a DuoCode binding, meaning it's not a class that the D
     {
       protected readonly ComponentProps<TProps> props;
       protected ComponentWrapper(ComponentProps<TProps> props) { }
-      
+
       [Js(Name = "render")]
       public abstract Element Render();
     }
@@ -111,7 +111,7 @@ With all this, it would be possible to create a React "Element" from the Compone
       typeof(ExampleComponent),
       new ExampleComponent.Props { Name = "test" }
     );
-    
+
 .. but I thought that would be a bit unwieldy every time it was required - it needs "ExampleComponent" to be typed three times!
 
 To make it a little less arduous, I've created a helper class -
@@ -140,19 +140,19 @@ To make it a little less arduous, I've created a helper class -
         }
       }
     }
-    
+
 C# supports generic type parameter inference in method calls, so long as only a single type parameter needs to be resolved. This means that the call
 
     Ele.Props<TProps>(props)
-    
+
 can be reduced to
 
     Ele.Props(props)
-    
+
 and "TProps" will be inferred to be whatever the type of "props" is. Then the call
 
     Ele.Props(props).As<TComponent>()
-    
+
 will know that "TProps" in the type constaint "TComponent : ComponentWrapper&lt;TProps&gt;" is whatever the type of "props" was.
 
 It's a bit back-to-front, specifying the "props" before declaring the type of the Component class, but it's succinct at least! And it's what allows the Component classes' static "New" factory methods to be declared thusly:
@@ -161,9 +161,9 @@ It's a bit back-to-front, specifying the "props" before declaring the type of th
     {
       public static Element New(Props props) { return Ele.Props(props).As<ExampleComponent>(); }
       private ExampleComponent(ComponentProps<Props> props) : base(props) { }
-      
+
       // .. rest of the Component goes here ..
-      
+
 In other words, instead of having to type "ExampleComponent" three times, you only to do so once :)
 
 ### Component compromises
@@ -178,7 +178,7 @@ The third and final compromise is that the "createElement" function does somethi
     {
       public string Name { get; set; }
     }
-    
+
 then you would have problems, since DuoCode will generate a JavaScript object with get\_Name and set\_Name functions on the Props *prototype* (which is best practices for JavaScript, it means that the functions themselves are shared between all instance of the class, rather than there being identical copies of the functions present on every Props instance) - "createElement" will loop over the properties and anything that doesn't return true for "hasOwnProperty" will be lost, so the "get\_Name" and "set\_Name" functions will go astray. This will only become clear when code in your C# Components tries to access the Name property and fails at runtime.
 
 The workaround for this is to wrap the "props" reference in a container object, since "createElement" only enumerates (and interferes with!) the top level properties. That's why the "GetElement" function in the "ReactComponentWrapper" looks like this:
@@ -192,7 +192,7 @@ It gets a "props" reference and it wraps it up so that React doesn't try to hurt
     // Note: The "props" property is a wrapped ComponentProps<TProps> instance,
     // rather than just being TProps
     protected readonly ComponentProps<TProps> props;
-    
+
 The "ComponentProps" class looks like this:
 
     [Js(Extern = true)]
@@ -227,7 +227,7 @@ So let's deal with the most obvious one first:
       [Js(Extern = true, Name = "render")]
       public extern static void Render(Element element, HTMLElement container);
     }
-    
+
 There's a few things to talk about here. I've named the function "Render" and used the "Js" attribute to map it back on to the library function "render" - note the change in case. In the code that I write, C# functions are pascal-cased, so I wanted to be able to call "Render" from my C# code, rather than "render". The "HTMLElement" type is a DuoCode class, used to describe DOM elements (if you call "Global.window.document.getElementById(x)" then you get one of these back). This is just what React wants for the second argument of the "render" call; a DOM element, so that's great. But for the first argument, the "Element" type is a React type that needs a binding -
 
     [Js(Extern = true)]
@@ -242,7 +242,7 @@ This is not something that we're ever going to instantiate directly, so it is se
 There *is* one other way that it comes into play, however - there is an implicit conversion from the string type. This is required because strings are frequently used as child elements in React - eg.
 
     React.DOM.span({ className: "greeting" }, "Hi!")
-    
+
 The implicit operator here, as part of an "extern" class, simply serves to tell the compiler that it's ok to use a string anywhere that a React Element is required - it doesn't have to do anything special, it just has to allow it. The consistency of the DuoCode translation process and the flexibility of the C# language really play together beautifully here and I was delighted to see how easily it was possible to dictate this to the type system.
 
 Speaking of the React.Dom class.. So far, I've only covered a fraction of the total library, but hopefully it's enough to make it clear how it may be expanded on (and I intend to add support for element types as and when I need them).
@@ -255,7 +255,7 @@ Speaking of the React.Dom class.. So far, I've only covered a fraction of the to
       public extern static Element input(InputAttributes properties, params Element[] children);
       public extern static Element span(HTMLAttributes properties, params Element[] children);
     }
-    
+
     public class HTMLAttributes
     {
       public string className;
@@ -266,21 +266,21 @@ Speaking of the React.Dom class.. So far, I've only covered a fraction of the to
       public Action<FormEvent<InputEventTarget>> onChange;
       public string value;
     }
-    
+
     [Js(Extern = true)]
     public class FormEvent<T> : FormEvent where T : EventTarget
     {
       [Js(Name = "target")]
       public new T target;
     }
-    
+
     [Js(Extern = true)]
     public class FormEvent : SyntheticEvent
     {
       [Js(Name = "target")]
       public EventTarget target;
     }
-    
+
     [Js(Extern = true)]
     public class SyntheticEvent
     {
@@ -297,14 +297,14 @@ Speaking of the React.Dom class.. So far, I've only covered a fraction of the to
     {
       public string value;
     }
-    
+
     [Js(Extern = true)]
     public class EventTarget { }
 
 Note that some of these types are external and some aren't. The simple rule is that if they must be explicitly created by C# code then they are not external, and if they are only received by C# code then the *are* external. To illustrate:
 
     DOM.input(new InputAttributes {
-      className = "message", 
+      className = "message",
       onChange = ev => Global.console.log("Input.onChange: " + ev.target.value)
     })
 
@@ -316,7 +316,7 @@ However, one of things that I dislike about the TypeScript version is that the t
 
     // TypeScript
     React.DOM.input({
-      className = "message", 
+      className = "message",
       onChange = ev => console.log("Input.onChange: " + (<any>ev.target).value)
     })
 
