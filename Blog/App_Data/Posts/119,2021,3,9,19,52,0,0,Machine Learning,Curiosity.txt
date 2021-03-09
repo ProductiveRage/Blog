@@ -1,0 +1,150 @@
+## Language detection and words-in-sentence classification in C#
+
+### TL;(BG)DR
+
+Using an open source .NET library, it's easy to determine what language a sentence / paragraph / document is written in and to then classify the words in each sentence into verbs, nouns, etc..
+
+### What library?
+
+I recently parted ways on very good terms with my last employers (and friends!) at [Curiosity AI](https://curiosity.ai/) but that doesn't mean that I'm not still excited by their technology, some really useful aspects of which they have released as open source\*.
+
+\* *(For the full service, ask yourself if your team or your company have ever struggled to find some information that you know exists somewhere but that might be in one of your network drives containing 10s of 1,000s of files **or** in your emails **or** in Sharepoint **or** GDrive somewhere - with Curiosity, you can set up a system that will index all that data so that it's searchable in one place, as well as learning synonyms and abbreviations in case you can't conjure up the precise terms to search for. It can even find similar documents for those case where have one document to hand and just know that there's another related to it but are struggling to find it - plus it has an ingrained permissions model so that your team could all index their emails and GDrive files and be secure in the knowledge that only they and people that they've shared the files with can see them; they don't get pulled in in such a way that your private, intimate, confidential emails are now visible to everyone!)*
+
+I have a little time off between jobs and so I wanted to write a little bit about some of the open-sourced projects that they released that I think are cool.
+
+This first one is a really simple example but I think that it demonstrates how easily you can access capabilities that are pretty impressive.
+
+This is my cat Cass:
+
+![Cute little girl](/Content/Images/Posts/Cass.jpg)
+
+She looks so cute that you'd think butter wouldn't melt. But, of my three cats, she is the prime suspect for the pigeon carcus that was recently dragged through the cat flap one night, up a flight of stairs and deposited outside my home office - and, perhaps not coincidentally, a mere six feet away from where she'd recently made herself a cosy bed in a duvet cover that I'd left out to remind myself to wash.
+
+I think that it's a fair conclusion to draw that:
+
+> My cat Cass is a lovely fluffy little pigeon-killer!
+
+Now you and I can easily see that that is a sentence written in English. But if you wanted a computer to work it out, how would you go about it?
+
+Well, one way would be to install the [Catalyst](https://github.com/curiosity-ai/catalyst) [NuGet package](https://www.nuget.org/packages/Catalyst) and write the following code:
+
+    using System;
+    using System.IO;
+    using System.Threading.Tasks;
+    using Catalyst;
+    using Catalyst.Models;
+    using Mosaik.Core;
+    using Version = Mosaik.Core.Version;
+
+    namespace CatalystExamples
+    {
+        internal static class Program
+        {
+            private static async Task Main()
+            {
+                const string text = "My cat Cass is a lovely fluffy little pigeon-killer!";
+
+                Console.WriteLine("Downloading/reading language detection models..");
+                const string modelFolderName = "catalyst-models";
+                if (!new DirectoryInfo(modelFolderName).Exists)
+                    Console.WriteLine("- Downloading for the first time, so this may take a little while");
+                
+                Storage.Current = new OnlineRepositoryStorage(new DiskStorage(modelFolderName));
+                var languageDetector = await FastTextLanguageDetector.FromStoreAsync(
+                    Language.Any,
+                    Version.Latest,
+                    ""
+                );
+                Console.WriteLine();
+
+                var doc = new Document(text);
+                languageDetector.Process(doc);
+
+                Console.WriteLine(text);
+                Console.WriteLine($"Detected language: {doc.Language}");
+            }
+        }
+    }
+
+Running this code will print the following to the console:
+
+    Downloading/reading language detection models..
+    - Downloading for the first time, so this may take a little while
+    
+    My cat Cass is a lovely fluffy little pigeon-killer!
+    Detected language: English
+
+Just to prove that it doesn't _only_ detect English, I ran the sentence through Google Translate to get a German version (unfortunately, the languages I'm fluent in are only English and a few computer languages and so Google Translate was very much needed!) - thus changing the "text" definition to:
+
+    const string text = "Meine Katze Cass ist eine wunderschöne, flauschige kleine Taubenmörderin!";
+
+Running the altered program results in the following console output:
+
+    Downloading/reading language detection models..
+    
+    Meine Katze Cass ist eine wunderschöne, flauschige kleine Taubenmörderin!
+    Detected language: German
+
+Great success!
+
+The next thing that we can do is analyse the grammatical constructs of the sentence. I'm going to return to the English version for this because it will be easier for me to be confident that the word classifications are correct.
+
+Add the following code immediately after the Console.WriteLine calls in the Main method from earlier:
+
+    Console.WriteLine();
+    Console.WriteLine($"Downloading/reading part-of-speech model for {doc.Language}..");
+    var pipeline = await Pipeline.ForAsync(doc.Language);
+    pipeline.Add(
+        await AveragePerceptronEntityRecognizer.FromStoreAsync(
+            doc.Language,
+            Version.Latest,
+            tag: "WikiNER"
+        )
+    );
+    pipeline.ProcessSingle(doc);
+    foreach (var sentence in doc)
+    {
+        foreach (var token in sentence)
+            Console.WriteLine($"{token.Value}{new string(' ', 20 - token.Value.Length)}{token.POS}");
+    }
+
+The program will now write the following to the console:
+
+Downloading/reading language detection models..
+
+    My cat Cass is a lovely fluffy little pigeon-killer!
+    Detected language: English
+    
+    Downloading/reading part-of-speech model for English..
+    My                  PRON
+    cat                 NOUN
+    Cass                PROPN
+    is                  AUX
+    a                   DET
+    lovely              ADJ
+    fluffy              ADJ
+    little              ADJ
+    pigeon-killer       NOUN
+    !                   PUNCT
+
+The "Part of Speech" (PoS) categories shown above are (as quoted from [universaldependencies.org/u/pos/all.html](https://universaldependencies.org/u/pos/all.html)) -
+
+Word(s) | Code | Name | Description
+--- | --- | --- | ---
+My | PRON | Pronoun | words that substitute for nouns or noun phrases, whose meaning is recoverable from the linguistic or extralinguistic context
+cat, pigeon-killer | NOUN | Noun | a part of speech typically denoting a person, place, thing, animal or idea
+Cass | PNOUN | Proper Noun | a noun (or nominal content word) that is the name (or part of the name) of a specific individual, place, or object
+is | AUX | Auxiullary Verb | a function word that accompanies the lexical verb of a verb phrase and expresses grammatical distinctions not carried by the lexical verb, such as person, number, tense, mood, aspect, voice or evidentiality
+a | DET | Determiner | words that modify nouns or noun phrases and express the reference of the noun phrase in context
+lovely, fluffy, little | ADJ | Adjective | words that typically modify nouns and specify their properties or attributes
+! | PUNCT | Punctuation | non-alphabetical characters and character groups used in many languages to delimit linguistic units in printed text
+
+How easy was that?! There are a myriad of uses for this sort of analysis (one of the things that the full Curiosity system uses it for is identifying nouns throughout documents and creating tags that any documents sharing a given noun are linked via; so if you found one document about "Flux Capacitors" then you could easily identify all of the other documents / emails / memos that mentioned it - though that really is just the tip of the iceberg).
+
+### Very minor caveats
+
+I have only a couple of warnings before signing off this post. I've seen the sentence detector get confused if it has very little data to work with (a tiny segment fragment, for example) or if there is a document that has different sections written in multiple languages - but I don't think that either case is unreasonable, the library is very clever but it can't perform magic!
+
+### Coming soon
+
+I've got another post relating to their open-sourced libraries in the pipeline, hopefully I'll get that out this week! Let's just say that I'm hoping that my days of having to manually maintain the "you may also be interested" links between my posts will soon be behind me!
