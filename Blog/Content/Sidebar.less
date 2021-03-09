@@ -1,139 +1,139 @@
 body
 {
-	.SidebarContainer()
-	{
-		border: 1px solid #bf7c52;
-		background: url("../Content/Images/SidebarBackground.jpg") top right repeat-x #595959;
-		padding: 8px;
-		margin: 8px 0;
+    .SidebarContainer()
+    {
+        border: 1px solid #bf7c52;
+        background: url("../Content/Images/SidebarBackground.jpg") top right repeat-x #595959;
+        padding: 8px;
+        margin: 8px 0;
 
-		> h2
-		{
-			color: white;
-			font-weight: bold;
-		}
-	}
+        > h2
+        {
+            color: white;
+            font-weight: bold;
+        }
+    }
 
-	.SidebarContainerWithParagraphs()
-	{
-		.SidebarContainer();
-		> p
-		{
-			color: white;
-			padding: 8px 0;
-			line-height: 21px;
-		}
-	}
+    .SidebarContainerWithParagraphs()
+    {
+        .SidebarContainer();
+        > p
+        {
+            color: white;
+            padding: 8px 0;
+            line-height: 21px;
+        }
+    }
 
-	.SidebarLink()
-	{
-		color: #f1f1f1;
-		display: block;
-		&:hover { color: #c0c0c0; }
-	}
+    .SidebarLink()
+    {
+        color: #f1f1f1;
+        display: block;
+        &:hover { color: #c0c0c0; }
+    }
 
-	.SidebarContainerWithLinkListItems()
-	{
-		.SidebarContainer();
-		> ul
-		{
-			margin: 8px 0 4px 8px;
-			> li
-			{
-				text-indent: -8px; // Indent any wrapped lines
-				line-height: 20px;
-				> a { .SidebarLink(); }
-			}
-		}
-	}
+    .SidebarContainerWithLinkListItems()
+    {
+        .SidebarContainer();
+        > ul
+        {
+            margin: 8px 0 4px 8px;
+            > li
+            {
+                text-indent: -8px; // Indent any wrapped lines
+                line-height: 20px;
+                > a { .SidebarLink(); }
+            }
+        }
+    }
 
-	div.About
-	{
-		.SidebarContainerWithParagraphs();
-		a.Email
-		{
-			font-weight: bold;
-			color: white;
-			font-size: 14px; // I can't get work-breaking to word properly around the @ symbol in address (in IE, at least) so I've resorted to shrinking the font size slightly
-			@media screen and (max-width: 70em) { font-size: inherit; } // The above isn't required on smaller form factors since the sidebars become full-width, below the main content
-		}
-	}
-	
-	div.Recent,
-	div.Featured
-	{
-		.SidebarContainerWithLinkListItems();
-		> ul > li { padding: 0 0 8px 0; }
-		div.RSSFeedLink
-		{
-			padding: 8px 0 0 0;
-			> a
-			{
-				.SidebarLink();
-				font-weight: bold;
-				background: url("../Content/Images/RSSFeedIcon.png") 0 1px no-repeat;
-				padding: 1px 0 3px 20px;
-				&:hover { background-position: 0 -47px; }
-				@media screen and (max-width: 70em) { background-position-y: 4px; }
-			}
-		}
-		@media screen and (max-width: 35em)
-		{
-			> ul > li
-			{
-				padding: 0 0 16px 0;
-				line-height: 24px;
-			}
-		}
-	}
+    div.About
+    {
+        .SidebarContainerWithParagraphs();
+        a.Email
+        {
+            font-weight: bold;
+            color: white;
+            font-size: 14px; // I can't get work-breaking to word properly around the @ symbol in address (in IE, at least) so I've resorted to shrinking the font size slightly
+            @media screen and (max-width: 70em) { font-size: inherit; } // The above isn't required on smaller form factors since the sidebars become full-width, below the main content
+        }
+    }
 
-	div.History
-	{
-		.SidebarContainerWithLinkListItems();
-		div.EveryTitle {
-			padding-top: 8px;
-			> a
-			{
-				.SidebarLink();
-				font-weight: bold;
-			}
-		}
-		@media screen and (max-width: 35em) { > ul > li { padding: 0 0 16px 0; } }
-	}
+    div.Recent,
+    div.Featured
+    {
+        .SidebarContainerWithLinkListItems();
+        > ul > li { padding: 0 0 8px 0; }
+        div.RSSFeedLink
+        {
+            padding: 8px 0 0 0;
+            > a
+            {
+                .SidebarLink();
+                font-weight: bold;
+                background: url("../Content/Images/RSSFeedIcon.png") 0 1px no-repeat;
+                padding: 1px 0 3px 20px;
+                &:hover { background-position: 0 -47px; }
+                @media screen and (max-width: 70em) { background-position-y: 4px; }
+            }
+        }
+        @media screen and (max-width: 35em)
+        {
+            > ul > li
+            {
+                padding: 0 0 16px 0;
+                line-height: 24px;
+            }
+        }
+    }
 
-	div.Search
-	{
-		.SidebarContainer();
-		text-align: right;
-		@media screen and (max-width: 70em) { text-align: left; }
-		input.SiteSearch
-		{
-			font-size: 12px;
-			width: 100%;
-		}
-		input.SiteSearchSubmit
-		{
-			font-size: 12px;
-			margin: 4px 0 0 0;
-			padding: 3px 6px;
-		}
-	}
+    div.History
+    {
+        .SidebarContainerWithLinkListItems();
+        div.EveryTitle {
+            padding-top: 8px;
+            > a
+            {
+                .SidebarLink();
+                font-weight: bold;
+            }
+        }
+        @media screen and (max-width: 35em) { > ul > li { padding: 0 0 16px 0; } }
+    }
 
-	div.ac_results
-	{
-		background: #f8f8f8;
-		font-size: 12px;
-		width: 151px !important; // Have to use "!important" to override the element styling applied by the plugin javascript
-		
-		> ul > li
-		{
-			padding: 3px 5px;
-			&.ac_even { background: #f1f1f1; }
-			&.ac_over
-			{
-				background: #c0c0c0;
-				color: White;
-			}
-		}
-	}
+    div.Search
+    {
+        .SidebarContainer();
+        text-align: right;
+        @media screen and (max-width: 70em) { text-align: left; }
+        input.SiteSearch
+        {
+            font-size: 12px;
+            width: 100%;
+        }
+        input.SiteSearchSubmit
+        {
+            font-size: 12px;
+            margin: 4px 0 0 0;
+            padding: 3px 6px;
+        }
+    }
+
+    div.ac_results
+    {
+        background: #f8f8f8;
+        font-size: 12px;
+        width: 151px !important; // Have to use "!important" to override the element styling applied by the plugin javascript
+
+        > ul > li
+        {
+            padding: 3px 5px;
+            &.ac_even { background: #f1f1f1; }
+            &.ac_over
+            {
+                background: #c0c0c0;
+                color: White;
+            }
+        }
+    }
 }

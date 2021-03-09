@@ -1,77 +1,77 @@
 body
 {
-	div.Header
-	{
-		margin: 0 auto 16px auto;
-		width: 1030px;
+    div.Header
+    {
+        margin: 0 auto 16px auto;
+        width: 1030px;
 
-		@media screen and (max-width: 70em)
-		{
-			margin: 0 0 16px 0;
-			width: 100%;
-			min-width: 250px;
-			left: 0;
-		}
-	}
+        @media screen and (max-width: 70em)
+        {
+            margin: 0 0 16px 0;
+            width: 100%;
+            min-width: 250px;
+            left: 0;
+        }
+    }
 
-	div.WrapperOuter
-	{
-		margin: 0 auto;
-		width: 1060px; // This needs to be wider than the header since we pull the side bar back over a bit to overlap the main content
-		@media screen and (max-width: 70em)
-		{
-			width: 100%;
-			min-width: 250px;
-		}
+    div.WrapperOuter
+    {
+        margin: 0 auto;
+        width: 1060px; // This needs to be wider than the header since we pull the side bar back over a bit to overlap the main content
+        @media screen and (max-width: 70em)
+        {
+            width: 100%;
+            min-width: 250px;
+        }
 
-		div.Wrapper
-		{
-			float: left;
-			width: 100%;
+        div.Wrapper
+        {
+            float: left;
+            width: 100%;
 
-			margin: 0 0 0 15px;
+            margin: 0 0 0 15px;
 
-			@media screen and (max-width: 70em) {
+            @media screen and (max-width: 70em) {
                 float: none;
                 margin: 0;
-			}
+            }
 
-			div.Main
-			{
-				float: left;
-				&.HasSideBar { width: 834px; }
-				@media screen and (max-width: 70em)
-				{
-					float: none;
-					&.HasSideBar { width: 100%; }
-				}
+            div.Main
+            {
+                float: left;
+                &.HasSideBar { width: 834px; }
+                @media screen and (max-width: 70em)
+                {
+                    float: none;
+                    &.HasSideBar { width: 100%; }
+                }
 
-				p.SearchResultContent, p.NoResults { min-width: 764px; }
+                p.SearchResultContent, p.NoResults { min-width: 764px; }
 
-				p.SearchResultContent > strong { color: #121212; } // Undo the softening of bold for main content when highlighted search term matches
-			}
+                p.SearchResultContent > strong { color: #121212; } // Undo the softening of bold for main content when highlighted search term matches
+            }
 
-			div.SideBar
-			{
-				float: right;
-				clear: right;
-				position: relative;
-				left: -30px;
-				width: 210px;
-				@media screen and (max-width: 70em)
-				{
-					clear: both;
-					float: none;
-					left: 0;
-					width: 100%;
-					min-width: 250px;
-				}
-			}
-		}
-	}
+            div.SideBar
+            {
+                float: right;
+                clear: right;
+                position: relative;
+                left: -30px;
+                width: 210px;
+                @media screen and (max-width: 70em)
+                {
+                    clear: both;
+                    float: none;
+                    left: 0;
+                    width: 100%;
+                    min-width: 250px;
+                }
+            }
+        }
+    }
 
-	@media screen and (max-width: 70em)
-	{
-		div.Footer { display: none; }
-	}
+    @media screen and (max-width: 70em)
+    {
+        div.Footer { display: none; }
+    }
 }
