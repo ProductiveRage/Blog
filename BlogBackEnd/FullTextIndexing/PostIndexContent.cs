@@ -21,7 +21,7 @@ namespace BlogBackEnd.FullTextIndexing
 		private const string SearchIndexIsCustomSerialisedName = "BlogBackEnd.FullTextIndexing:SearchIndexIsCustomSerialised";
 		private const string SearchIndexName = "BlogBackEnd.FullTextIndexing:SearchIndex";
 		private const string AutoCompleteContentName = "BlogBackEnd.FullTextIndexing:AutoCompleteContent";
-		protected PostIndexContent(SerializationInfo info, StreamingContext context)
+		private PostIndexContent(SerializationInfo info, StreamingContext context)
 		{
 			if (info == null)
 				throw new ArgumentNullException(nameof(info));
