@@ -246,6 +246,27 @@ But, again, to try to find a silver lining, I also tried the non-readonly-privat
 
 Although I decided last month that [I'm still not convinced that .NET Core is ready for me to use in work](Post109), I *am* impressed by how much *does* work with it.
 
+**Update (9th March 2021):** I realised some time after writing this post that it *is* possible to make this work with emitted IL, the only difference required is to take this code:
+
+    var method = new DynamicMethod(
+      name: "SetSomethingElseField",
+      returnType: null,
+      parameterTypes: new[] { typeof(Example), typeof(int) },
+      restrictedSkipVisibility: true
+    );
+
+.. and add an additional argument like this:
+
+    var method = new DynamicMethod(
+      name: "SetSomethingElseField",
+      returnType: null,
+      parameterTypes: new[] { typeof(Example), typeof(int) },
+      m: field.DeclaringType.Module,
+      restrictedSkipVisibility: true
+    );
+
+I haven't recreated the benchmarks to try this code, I'm hoping that the performance difference will be minimal between setting a private readonly field via emitted IL and setting a private non-readonly field via emitted IL (which *is* benchmarked below). I'm using this approach in my [DanSerialiser](https://github.com/ProductiveRage/DanSerialiser/blob/7dee571d57f13d0f63b6707d8d78d0e83b5f8ee8/DanSerialiser/Reflection/ReflectionTypeAnalyser.cs#L265) project.
+
 ### Performance comparison
 
 So we've ascertained that there is only one way\* to set a readonly field on an existing instance and, regrettably, it's also the slowest. I guess that a pertinent question to ask, though, is just *how much* slower is the slowest?
