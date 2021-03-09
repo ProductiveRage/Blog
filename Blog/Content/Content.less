@@ -1,250 +1,250 @@
-body
-{
-	div.Content
-	{
-		position: relative; // This is just for the a.ArchiveByTagReadMore elements
-		margin: 0 0 16px 0;
-		padding: 16px 48px 16px 16px;
+body {
+    div.Content {
+        position: relative; // This is just for the a.ArchiveByTagReadMore elements
+        margin: 0 0 16px 0;
+        padding: 16px 48px 16px 16px;
         width: 100%;
         box-sizing: border-box;
-		@media screen and (max-width: 70em) { padding: 16px; }
-		
-		background: white;
 
-		float: left; // Ensure any floated images in the content are wrapped
+        @media screen and (max-width: 70em) { padding: 16px; }
 
-		border: 1px solid #c0c0c0;
+        background: white;
+        float: left; // Ensure any floated images in the content are wrapped
+        border: 1px solid #c0c0c0;
 
-		&.ArchiveByTag {
-			height: 255px;
-			overflow: hidden;
+        &.ArchiveByTag {
+            height: 255px;
+            overflow: hidden;
 
-			a.ArchiveByTagReadMore {
-				display: block;
-				position: absolute;
-				bottom: 0;
-				right: 0;
-				padding: 8px 42px 8px 8px;
-				border: 1px solid #99f;
+            a.ArchiveByTagReadMore {
+                display: block;
+                position: absolute;
+                bottom: 0;
+                right: 0;
+                padding: 8px 42px 8px 8px;
+                border: 1px solid #99f;
                 border-right: none;
                 border-bottom: none;
-				text-decoration: none;
-
-				// I want a nice translucent pale blue background with white text, but for browsers that don't support rgba a white background will
+                text-decoration: none;
+                // I want a nice translucent pale blue background with white text, but for browsers that don't support rgba a white background will
                 // suffice, with the default link / link-hover colour (text colour is conditionally set by the use of rgba; even though it isn't
                 // really translucent, defining it with rgba means that non-supporting browsers will ignore the rule)
                 background: white;
-				background: rgba(128, 128, 255, 0.7);
+                background: rgba(128, 128, 255, 0.7);
                 color: rgba(255, 255, 255, 0.99);
 
-				&:hover {
-    				background: rgba(128, 128, 255, 0.95);
-					border-color: #88f;
-				}
-			}
-		}
+                &:hover {
+                    background: rgba(128, 128, 255, 0.95);
+                    border-color: #88f;
+                }
+            }
+        }
 
-		> p
-		{
-			padding: 0 0 16px 0;
-			line-height: 21px;
+        > p {
+            padding: 0 0 16px 0;
+            line-height: 21px;
             word-break: break-word; // Don't allow really long words to force horizontal scrolling for small form factors ("mobile friendly")
+            @media screen and (max-width: 35em) { line-height: 28px; }
+        }
 
-			@media screen and (max-width: 35em) { line-height: 28px; }
-		}
-
-		> pre
-		{
-			margin: 0 0 16px 0;
-			padding: 8px;
-			border: 1px solid #eee;
-			font-family: Consolas, Courier New, Courier, monospace;
-			font-size: 12px;
-			line-height: 18px;
+        > pre {
+            margin: 0 0 16px 0;
+            padding: 8px;
+            border: 1px solid #eee;
+            font-family: Consolas, Courier New, Courier, monospace;
+            font-size: 12px;
+            line-height: 18px;
             clear: both; // Don't allow code alongside an image, ensure it goes underneath in order to allow the full width of the post to be used
-
             box-sizing: border-box; // Allow us to combine padding with width: 100%
             width: 100%;
-
             overflow: auto;
 
-			> code
-			{
-				display: block;
-				width: 100%;
-			}
-		}
+            > code {
+                display: block;
+                width: 100%;
+            }
+        }
 
-		.ContentList()
-		{
-			> li { line-height: 28px; }
-		}
+        > table {
+            margin: 0 0 16px 0;
 
-		.TopLevelList()
-		{
-			.ContentList();
-			margin: 0 16px 24px 32px;
+            > thead > tr > th {
+                font-weight: bold;
+                text-align: left;
+                padding: 4px 8px;
+            }
 
-			.NestedList()
-			{
-				.ContentList();
-				margin: 0 16px 0 32px;
-			}
+            > tbody > tr {
+                &:nth-child(odd) { background: #eee; }
 
-			> li
-			{
-				> ol
-				{
-					.NestedList();
-					> li { list-style-type: lower-alpha; }
-				}
-				> ul
-				{
-					.NestedList();
-					> li { list-style-type: circle; }
-				}
-			}
-		}
+                &:nth-child(even) { background: #ddd; }
 
-		> ol
-		{
-			.TopLevelList();
-			> li {  list-style-type: decimal; }
-		}
+                > td {
+                    background: none;
+                    padding: 4px 8px;
+                }
+            }
+        }
 
-		> ul
-		{
-			.TopLevelList();
-			> li {  list-style-type: disc; }
-		}
+        .ContentList() {
+            > li { line-height: 28px; }
+        }
 
-		div.PreviousAndNext
-		{
-			div.Previous, div.Next
-			{
-				// Emulate the appearane of a list item so that it looks consistent with the "You may also be interested in" links
-				margin: 0 0 1em 0;
-				> a
-				{
-					display: list-item;
-					list-style-type: disc;
-					list-style-position: outside;
-					margin: 0 0 0 2em;
-					line-height: 28px;
-				}
-			}
-		}
+        .TopLevelList() {
+            .ContentList();
+            margin: 0 16px 24px 32px;
 
-		div.Tags
-		{
-			margin: 0 0 16px 0;
-			> ul
-			{
-				/* 2014-05-07 DWR: This margin is required to override that targeted
-				 by ".TopLevelList();" in "> ul" above since there is an issue with
-				 the LESS Processor integration I've used here, it's out of date
-				 and I've resolved the problem some time ago - I need to update
-				 the binaries here when I get a chance! */
-				margin: 0 0 8px 0;
-				display: inline;
-				> li
-				{
-					display: inline;
-					margin: 0 0 0 4px;
-					list-style-type: none;
-				}
-			}
-		}
+            .NestedList() {
+                .ContentList();
+                margin: 0 16px 0 32px;
+            }
 
-        &.ArchiveByEveryTitle div.Tags { margin: 0; }
+            > li {
+                > ol {
+                    .NestedList();
 
-		> blockquote
-		{
-			color: #666;
-			margin: 0 0 16px 24px;
-			padding: 0 0 0 8px;
-			line-height: 21px;
-			border-left: 3px solid #ccc;
-			background: #f8f8f8;
+                    > li { list-style-type: lower-alpha; }
+                }
 
-			> p { padding: 5px 0 11px 0; }
-		}
+                > ul {
+                    .NestedList();
 
-		@HeaderColour: #30a;
-		> h2
-		{
-			padding: 0 0 11px 0;
-			color: @HeaderColour;
-			font-size: 22px;
-			@media screen and (max-width: 35em) { font-size: 26px; }
-			> a { text-decoration: none; }
-		}
-		> h3
-		{
-			padding: 0 0 10px 0;
-			font-size: 20px;
-			color: @HeaderColour;
-			@media screen and (max-width: 35em) { font-size: 23px; }
-		}
-		> h4
-		{
-			padding: 0 0 9px 0;
-			font-size: 18px;
-			color: @HeaderColour;
-			@media screen and (max-width: 35em) { font-size: 22px; }
-		}
-		> h5
-		{
-			padding: 0 0 8px 0;
-			font-size: 17px;
-			color: @HeaderColour;
-			@media screen and (max-width: 35em) { font-size: 21px; }
-		}
+                    > li { list-style-type: circle; }
+                }
+            }
+        }
 
-		.PostTimeText()
-		{
-			font-family: "Lucida Console", "Lucida Grande", Verdana;
-		}
-		h3.PostDate
-		{
-			.PostTimeText();
-		}
-		p.PostTime
-		{
-			.PostTimeText();
-			clear: both; // Ensure this tucks beneath any floated images, ensuring the always encloses around images
-		}
+        > ol {
+            .TopLevelList();
 
-		> p > img, > img
-		{
-			display: block;
-			float: left;
-			margin: 8px 16px 8px 0;
+            > li { list-style-type: decimal; }
+        }
+
+        > ul {
+            .TopLevelList();
+
+            > li { list-style-type: disc; }
+        }
+
+        div.PreviousAndNext {
+            div.Previous, div.Next {
+                // Emulate the appearance of a list item so that it looks consistent with the "You may also be interested in" links
+                margin: 0 0 1em 0;
+
+                > a {
+                    display: list-item;
+                    list-style-type: disc;
+                    list-style-position: outside;
+                    margin: 0 0 0 2em;
+                    line-height: 28px;
+                }
+            }
+        }
+
+        div.Tags {
+            margin: 0 0 16px 0;
+
+            > ul {
+                /* 2014-05-07 DWR: This margin is required to override that targeted
+                 by ".TopLevelList();" in "> ul" above since there is an issue with
+                 the LESS Processor integration I've used here, it's out of date
+                 and I've resolved the problem some time ago - I need to update
+                 the binaries here when I get a chance! */
+                margin: 0 0 8px 0;
+                display: inline;
+
+                > li {
+                    display: inline;
+                    margin: 0 0 0 4px;
+                    list-style-type: none;
+                }
+            }
+        }
+
+        &.ArchiveByEveryTitle div.Tags {
+            margin: 0;
+        }
+
+        > blockquote {
+            color: #666;
+            margin: 0 0 16px 24px;
+            padding: 0 0 0 8px;
+            line-height: 21px;
+            border-left: 3px solid #ccc;
+            background: #f8f8f8;
+
+            > p { padding: 5px 0 11px 0; }
+        }
+
+        @HeaderColour: #30a;
+
+        > h2 {
+            padding: 0 0 11px 0;
+            color: @HeaderColour;
+            font-size: 22px;
+
+            @media screen and (max-width: 35em) { font-size: 26px; }
+
+            > a { text-decoration: none; }
+        }
+
+        > h3 {
+            padding: 0 0 10px 0;
+            font-size: 20px;
+            color: @HeaderColour;
+
+            @media screen and (max-width: 35em) { font-size: 23px; }
+        }
+
+        > h4 {
+            padding: 0 0 9px 0;
+            font-size: 18px;
+            color: @HeaderColour;
+
+            @media screen and (max-width: 35em) { font-size: 22px; }
+        }
+
+        > h5 {
+            padding: 0 0 8px 0;
+            font-size: 17px;
+            color: @HeaderColour;
+
+            @media screen and (max-width: 35em) { font-size: 21px; }
+        }
+
+        .PostTimeText() { font-family: "Lucida Console", "Lucida Grande", Verdana; }
+
+        h3.PostDate {
+            .PostTimeText();
+        }
+
+        p.PostTime {
+            .PostTimeText();
+            clear: both; // Ensure this tucks beneath any floated images, ensuring the always encloses around images
+        }
+
+        > p > img, > img {
+            display: block;
+            float: left;
+            margin: 8px 16px 8px 0;
             max-width: 100%;
+            border: 1px solid silver;
 
-			border: 1px solid silver;
-
-			&.NoBorder { border: none; }
+            &.NoBorder { border: none; }
 
             &.HalfWidth { width: 50%; }
 
-			// Remove the floating on wide images when in reduced layout mode to try to ensure that text alongside wouldn't get smushed up..
-			&.WideImage
-			{
-				@media screen and (max-width: 70em)
-				{
-					float: none;
-					width: 100%;
-				}
-			}
+            // Remove the floating on wide images when in reduced layout mode to try to ensure that text alongside wouldn't get smushed up..
+            &.WideImage {
+                @media screen and (max-width: 70em) {
+                    float: none;
+                    width: 100%;
+                }
+            }
+            // .. or for images with the class "AlwaysFullWidth"
+            &.AlwaysFullWidth { float: none; }
+        }
 
-			// .. or for images with the class "AlwaysFullWidth"
-			&.AlwaysFullWidth { float: none; }
-		}
-
-		p.Comments
-		{
-			display: none; // Hide by default unless javascript is enabled
-		}
-	}
+        p.Comments { display: none; } // Hide by default unless javascript is enabled
+    }
 }

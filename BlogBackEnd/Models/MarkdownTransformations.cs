@@ -10,6 +10,7 @@ namespace BlogBackEnd.Models
 	{
 		private static readonly MarkdownPipeline _markdigPipeline = new MarkdownPipelineBuilder()
 			.UseSoftlineBreakAsHardlineBreak()
+			.UsePipeTables()
 			.Build();
 
 		public static string ToHtml(string markdown)
