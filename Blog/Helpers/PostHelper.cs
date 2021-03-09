@@ -129,7 +129,7 @@ namespace Blog.Helpers
             if (postSlugRetriever == null)
                 throw new ArgumentNullException("postSlugRetriever");
 
-            var markdownContent = HandlePostLinks(
+            var markdownContent = await HandlePostLinks(
                 helper,
                 includeTitle ? (await ReplaceFirstLineHashHeaderWithPostLink(post, postSlugRetriever)) : RemoveTitle(post.MarkdownContent),
                 postSlugRetriever
@@ -175,7 +175,7 @@ namespace Blog.Helpers
                 {
                     content.AppendFormat(
                         "<li>{0}</li>",
-                        helper.RenderedActionLink(relatedPost.Title, "ArchiveBySlug", "ViewPost", new { Slug = relatedPost.Slug }, null)
+                        helper.RenderedActionLink(relatedPost.Title, "ArchiveBySlug", "ViewPost", new { relatedPost.Slug }, null)
                     );
                 }
                 content.Append("</ul>");
@@ -205,7 +205,7 @@ namespace Blog.Helpers
             {
                 content.AppendFormat(
                     "<li>{0}</li>",
-                    helper.RenderedActionLink(tagSummary.Tag, "ArchiveByTag", "ViewPost", new { Tag = tagSummary.Tag }, new { title = tagSummary.NumberOfPosts + " Posts" })
+                    helper.RenderedActionLink(tagSummary.Tag, "ArchiveByTag", "ViewPost", new { tagSummary.Tag }, new { title = tagSummary.NumberOfPosts + " Posts" })
                 );
             }
             content.Append("</ul>");
@@ -216,7 +216,7 @@ namespace Blog.Helpers
         /// <summary>
 		/// Update any markdown links where the target is of the form "Post{0}" to replace with the real url
 		/// </summary>
-		private static string HandlePostLinks(IHtmlHelper helper, string content, IRetrievePostSlugs postSlugRetriever)
+		private static async Task<string> HandlePostLinks(IHtmlHelper helper, string content, IRetrievePostSlugs postSlugRetriever)
 		{
 			if (helper == null)
 				throw new ArgumentNullException("helper");
@@ -225,19 +225,21 @@ namespace Blog.Helpers
 			if (postSlugRetriever == null)
 				throw new ArgumentNullException("postSlugRetriever");
 
-			return Regex.Replace(
-				content,
-				@"\]\(Post(\d+)\)",
-				match =>
-				{
-					var id = int.Parse(match.Groups[1].Value);
-					return string.Format(
-						"]({0})",
-						helper.RenderedActionLink("ArchiveBySlug", "ViewPost", new { Slug = postSlugRetriever.GetSlug(id) })
-					);
-				},
-				RegexOptions.Multiline
-			);
+			var rewrittenContent = new StringBuilder();
+			var lastIndex = 0;
+			foreach (Match match in Regex.Matches(content, @"\[(.*?)\]\(Post(\d+)\)", RegexOptions.Multiline))
+			{
+				var text = match.Groups[1].Value;
+				var id = int.Parse(match.Groups[2].Value);
+
+				rewrittenContent
+					.Append(content, lastIndex, match.Index - lastIndex)
+					.Append(helper.RenderedActionLink(text, "ArchiveBySlug", "ViewPost", new { Slug = await postSlugRetriever.GetSlug(id) }));
+
+				lastIndex = match.Index + match.Length;
+			}
+			rewrittenContent.Append(content, lastIndex, content.Length - lastIndex);
+			return rewrittenContent.ToString();
 		}
 
 		private static void MakeUrlsAbsolute(HtmlDocument doc, string tagName, string attributeName, string scheme, HostString host)
