@@ -130,6 +130,8 @@ One downside to this is that it puts constraints on how the **ThreadPool** can a
 
 \* *(I'm not actually sure which of these two options happens in real world use but it feels like the sort of thing that is an implementation detail of the framework and it would be best to not presume that it would be one or the other)*
 
+**Update (Jan 2021):** [Stephen Cleary](https://blog.stephencleary.com/) pointed out in a comment that actually the situation is not quite as bad as indicated with the pre-Core ASP.NET as it has some tricks up its sleeve regarding its synchronization context - the context can actually change threads, allowing it to fully release its current thread when it is awaiting something. This means that the impact on the ThreadPool is not as bad. I have, however, still encountered deadlocks in pre-Core ASP.NET and so it makes the issue less likely but not impossible. We're only talking about pre-Core ASP.NET here because ASP.NET on .NET Core doesn't have a synchronization context to worry about - see the section "Approach Five" further down in this post.
+
 There is another downside, though, which is that it's quite easy to get into bother if you try to call async code from a *non*-async method - as I'm about to show you!
 
 ### The classic deadlock (aka. "why has my application hung?")
