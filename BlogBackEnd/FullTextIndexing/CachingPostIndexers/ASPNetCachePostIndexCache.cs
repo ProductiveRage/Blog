@@ -11,7 +11,7 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 		public ConcurrentDictionaryPostIndexCache(TimeSpan cacheDuration)
 		{
 			if (cacheDuration.Ticks <= 0)
-				throw new ArgumentOutOfRangeException("cacheDuration", "cacheDuration must be > 0");
+				throw new ArgumentOutOfRangeException(nameof(cacheDuration), "cacheDuration must be > 0");
 
 			_cache = new ConcurrentDictionaryCache(cacheDuration);
 		}
@@ -26,12 +26,9 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 		/// </summary>
 		public void Store(CachedPostIndexContent data)
 		{
-			if (data == null)
-				throw new ArgumentNullException("data");
-
-			// Ensure that any existing entry is removed before adding a new one (for cases where existing content contains expired data)
-			_cache.Remove(CacheKey);
-			_cache[CacheKey] = data;
+            // Ensure that any existing entry is removed before adding a new one (for cases where existing content contains expired data)
+            _cache.Remove(CacheKey);
+			_cache[CacheKey] = data ?? throw new ArgumentNullException(nameof(data));
 		}
 	}
 }

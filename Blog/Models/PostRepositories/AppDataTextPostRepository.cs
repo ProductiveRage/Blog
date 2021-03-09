@@ -6,15 +6,12 @@ using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
-    public class AppDataTextPostRepository : IPostRepository
+    public sealed class AppDataTextPostRepository : IPostRepository
 	{
-		private ISingleFolderPostRetriever _postRetriever;
+		private readonly ISingleFolderPostRetriever _postRetriever;
 		public AppDataTextPostRepository(ISingleFolderPostRetriever postRetriever)
 		{
-			if (postRetriever == null)
-				throw new ArgumentNullException("postRetriever");
-
-			_postRetriever = postRetriever;
+            _postRetriever = postRetriever ?? throw new ArgumentNullException(nameof(postRetriever));
 		}
 
 		public Task<NonNullImmutableList<Post>> GetAll()
@@ -42,7 +39,7 @@ namespace Blog.Models
 		public async Task<NonNullImmutableList<Post>> GetByDateRange(DateTime min, DateTime max)
 		{
 			if (min > max)
-				throw new ArgumentOutOfRangeException("min", "must be <= max");
+				throw new ArgumentOutOfRangeException(nameof(min), "must be <= max");
 
 			return new NonNullImmutableList<Post>(
 				(await _postRetriever.Get()).Where(p => p.Posted >= min && p.Posted <= max).OrderByDescending(p => p.Posted)
@@ -52,7 +49,7 @@ namespace Blog.Models
 		public async Task<NonNullImmutableList<Post>> GetByIds(ImmutableList<int> ids)
 		{
 			if (ids == null)
-				throw new ArgumentNullException("ids");
+				throw new ArgumentNullException(nameof(ids));
 
 			return new NonNullImmutableList<Post>(
 				(await _postRetriever.Get()).Where(p => ids.Contains(p.Id)).OrderByDescending(p => p.Posted)
@@ -114,7 +111,7 @@ namespace Blog.Models
 		public async Task<NonNullImmutableList<PostStub>> GetMostRecentStubs(int count)
 		{
 			if (count < 0)
-				throw new ArgumentOutOfRangeException("count", "must be >= 0");
+				throw new ArgumentOutOfRangeException(nameof(count), "must be >= 0");
 			return new NonNullImmutableList<PostStub>(
 				(await _postRetriever.Get()).OrderByDescending(p => p.Posted).Take(count)
 			);

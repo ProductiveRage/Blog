@@ -6,15 +6,12 @@ using Microsoft.Extensions.FileProviders;
 
 namespace Blog.Factories
 {
-    public class PostIndexerFactory
+    public sealed class PostIndexerFactory
 	{
 		private readonly IFileProvider _fileProvider;
 		public PostIndexerFactory(IFileProvider fileProvider)
 		{
-			if (fileProvider == null)
-				throw new ArgumentNullException("fileProvider");
-
-			_fileProvider = fileProvider;
+            _fileProvider = fileProvider ?? throw new ArgumentNullException(nameof(fileProvider));
 		}
 
 		public IPostIndexer Get()

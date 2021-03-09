@@ -9,18 +9,13 @@ using FullTextIndexer.Core.TokenBreaking;
 namespace BlogBackEnd.FullTextIndexing
 {
     [Serializable]
-	public class PostIndexContent : ISerializable
+	public sealed class PostIndexContent : ISerializable
 	{
 		private readonly IIndexData<int> _searchIndex;
 		public PostIndexContent(IIndexData<int> searchIndex, NonNullOrEmptyStringList autoCompleteContent)
 		{
-			if (searchIndex == null)
-				throw new ArgumentNullException("searchIndex");
-			if (autoCompleteContent == null)
-				throw new ArgumentNullException("autoCompleteContent");
-
-			_searchIndex = searchIndex;
-			AutoCompleteContent = autoCompleteContent;
+            _searchIndex = searchIndex ?? throw new ArgumentNullException(nameof(searchIndex));
+			AutoCompleteContent = autoCompleteContent ?? throw new ArgumentNullException(nameof(autoCompleteContent));
 		}
 
 		private const string SearchIndexIsCustomSerialisedName = "BlogBackEnd.FullTextIndexing:SearchIndexIsCustomSerialised";
@@ -29,16 +24,14 @@ namespace BlogBackEnd.FullTextIndexing
 		protected PostIndexContent(SerializationInfo info, StreamingContext context)
 		{
 			if (info == null)
-				throw new ArgumentNullException("info");
+				throw new ArgumentNullException(nameof(info));
 
 			var searchIndexData = (byte[])info.GetValue(SearchIndexName, typeof(byte[]));
 			if (info.GetBoolean(SearchIndexIsCustomSerialisedName))
 			{
-				using (var memoryStream = new MemoryStream(searchIndexData))
-				{
-					_searchIndex = IndexDataSerialiser<int>.Deserialise(memoryStream);
-				}
-			}
+                using var memoryStream = new MemoryStream(searchIndexData);
+                _searchIndex = IndexDataSerialiser<int>.Deserialise(memoryStream);
+            }
 			else
 				_searchIndex = Deserialise<IIndexData<int>>(searchIndexData);
 
@@ -50,25 +43,22 @@ namespace BlogBackEnd.FullTextIndexing
 		void ISerializable.GetObjectData(SerializationInfo info, StreamingContext context)
 		{
 			if (info == null)
-				throw new ArgumentNullException("info");
+				throw new ArgumentNullException(nameof(info));
 
-			var customSerialisableIndexData = _searchIndex as IndexData<int>;
-			if (customSerialisableIndexData == null)
-			{
-				info.AddValue(SearchIndexIsCustomSerialisedName, false);
-				info.AddValue(SearchIndexName, Serialise(_searchIndex));
-			}
-			else
-			{
-				info.AddValue(SearchIndexIsCustomSerialisedName, true);
-				using (var memoryStream = new MemoryStream())
-				{
-					IndexDataSerialiser<int>.Serialise(customSerialisableIndexData, memoryStream);
-					info.AddValue(SearchIndexName, memoryStream.ToArray());
-				}
-			}
+            if (_searchIndex is not IndexData<int> customSerialisableIndexData)
+            {
+                info.AddValue(SearchIndexIsCustomSerialisedName, false);
+                info.AddValue(SearchIndexName, Serialise(_searchIndex));
+            }
+            else
+            {
+                info.AddValue(SearchIndexIsCustomSerialisedName, true);
+                using var memoryStream = new MemoryStream();
+                IndexDataSerialiser<int>.Serialise(customSerialisableIndexData, memoryStream);
+                info.AddValue(SearchIndexName, memoryStream.ToArray());
+            }
 
-			info.AddValue(AutoCompleteContentName, Serialise(AutoCompleteContent));
+            info.AddValue(AutoCompleteContentName, Serialise(AutoCompleteContent));
 		}
 
 		/// <summary>
@@ -93,27 +83,23 @@ namespace BlogBackEnd.FullTextIndexing
 		/// </summary>
 		public NonNullOrEmptyStringList AutoCompleteContent { get; private set; }
 
-		private byte[] Serialise(object data)
+		private static byte[] Serialise(object data)
 		{
 			if (data == null)
-				throw new ArgumentNullException("data");
+				throw new ArgumentNullException(nameof(data));
 
-			using (var memoryStream = new MemoryStream())
-			{
-				new BinaryFormatter().Serialize(memoryStream, data);
-				return memoryStream.ToArray();
-			}
-		}
+            using var memoryStream = new MemoryStream();
+            new BinaryFormatter().Serialize(memoryStream, data);
+            return memoryStream.ToArray();
+        }
 
-		private T Deserialise<T>(byte[] data)
+		private static T Deserialise<T>(byte[] data)
 		{
 			if (data == null)
-				throw new ArgumentNullException("data");
+				throw new ArgumentNullException(nameof(data));
 
-			using (var memoryStream = new MemoryStream(data))
-			{
-				return (T)new BinaryFormatter().Deserialize(memoryStream);
-			}
-		}
+            using var memoryStream = new MemoryStream(data);
+            return (T)new BinaryFormatter().Deserialize(memoryStream);
+        }
 	}
 }

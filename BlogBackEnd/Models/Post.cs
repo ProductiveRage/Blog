@@ -1,10 +1,9 @@
 ﻿using System;
-using System.Linq;
 using FullTextIndexer.Common.Lists;
 
 namespace BlogBackEnd.Models
 {
-	[Serializable]
+    [Serializable]
 	public class Post : PostStub
 	{
 		public Post(
@@ -20,19 +19,13 @@ namespace BlogBackEnd.Models
 			NonNullImmutableList<TagSummary> tags)
 			: base(id, posted, lastModified, slug, title, isHighlight)
 		{
-			if (redirectFromSlugs == null)
-				throw new ArgumentNullException("redirectFromSlugs");
-			if (string.IsNullOrWhiteSpace(markdownContent))
+            if (string.IsNullOrWhiteSpace(markdownContent))
 				throw new ArgumentException("Null/blank markdownContent content");
-			if (relatedPosts == null)
-				throw new ArgumentNullException("relatedPostIds");
-			if (tags == null)
-				throw new ArgumentNullException("tags");
 
-			RedirectFromSlugs = redirectFromSlugs;
+            RedirectFromSlugs = redirectFromSlugs ?? throw new ArgumentNullException(nameof(redirectFromSlugs));
 			MarkdownContent = markdownContent;
-			RelatedPosts = relatedPosts;
-			Tags = tags;
+			RelatedPosts = relatedPosts ?? throw new ArgumentNullException(nameof(relatedPosts));
+			Tags = tags ?? throw new ArgumentNullException(nameof(tags));
 		}
 
 		/// <summary>

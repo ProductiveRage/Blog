@@ -16,7 +16,7 @@ namespace BlogBackEnd.Models
 		public static string ToHtml(string markdown)
 		{
 			if (markdown == null)
-				throw new ArgumentNullException("text");
+				throw new ArgumentNullException(nameof(markdown));
 
 			return Markdown.ToHtml(markdown, _markdigPipeline);
 		}

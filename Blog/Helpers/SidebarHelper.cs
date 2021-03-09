@@ -23,7 +23,7 @@ namespace Blog.Helpers
             bool renderEmptyContainer)
         {
             if (posts == null)
-                throw new ArgumentNullException("posts");
+                throw new ArgumentNullException(nameof(posts));
 
             title = (title ?? "").Trim();
             if (title == "")
@@ -66,7 +66,7 @@ namespace Blog.Helpers
         public static HtmlString RenderArchiveLinkList(this IHtmlHelper helper, string title, string containerClassName, NonNullImmutableList<ArchiveMonthLink> archiveLinks, bool renderEmptyContainer)
         {
             if (archiveLinks == null)
-                throw new ArgumentNullException("archiveLinks");
+                throw new ArgumentNullException(nameof(archiveLinks));
 
             title = (title ?? "").Trim();
             if (title == "")

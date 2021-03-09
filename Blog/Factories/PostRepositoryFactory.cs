@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 
 namespace Blog.Factories
 {
-    public class PostRepositoryFactory
+    public sealed class PostRepositoryFactory
 	{
 		private static readonly ICache _longTermCache = new ConcurrentDictionaryCache(TimeSpan.FromDays(1));
 		private static readonly ICache _shortTermCache = new ConcurrentDictionaryCache(TimeSpan.FromSeconds(5));
@@ -14,10 +14,7 @@ namespace Blog.Factories
 		private readonly IWebHostEnvironment _hostingEnvironment;
 		public PostRepositoryFactory(IWebHostEnvironment hostingEnvironment)
 		{
-			if (hostingEnvironment == null)
-				throw new ArgumentNullException("hostingEnvironment");
-
-			_hostingEnvironment = hostingEnvironment;
+            _hostingEnvironment = hostingEnvironment ?? throw new ArgumentNullException(nameof(hostingEnvironment));
 		}
 
 		public IPostRepository Get()

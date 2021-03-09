@@ -9,23 +9,18 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.Controllers
 {
-    public class RSSController : Controller
+    public sealed class RSSController : Controller
 	{
 		private readonly IPostRepository _postRepository;
 		private readonly int _maximumNumberOfPostsToPublish;
 		private readonly ICache _postContentCache;
 		public RSSController(IPostRepository postRepository, SiteConfiguration siteConfiguration, ICache postContentCache)
 		{
-			if (postRepository == null)
-				throw new ArgumentNullException("postRepository");
-			if (siteConfiguration == null)
-				throw new ArgumentNullException("siteConfiguration");
-			if (postContentCache == null)
-				throw new ArgumentNullException("postContentCache");
-
-			_postRepository = postRepository;
+            if (siteConfiguration == null)
+				throw new ArgumentNullException(nameof(siteConfiguration));
+            _postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
 			_maximumNumberOfPostsToPublish = siteConfiguration.MaximumNumberOfPostsToPublishInRssFeed;
-			_postContentCache = postContentCache;
+			_postContentCache = postContentCache ?? throw new ArgumentNullException(nameof(postContentCache));
 		}
 
 		public async Task<IActionResult> Feed()
@@ -66,10 +61,7 @@ namespace Blog.Controllers
 			private readonly NonNullImmutableList<Post> _posts;
 			public PostSlugRetriever(NonNullImmutableList<Post> posts)
 			{
-				if (posts == null)
-					throw new ArgumentNullException("posts");
-
-				_posts = posts;
+                _posts = posts ?? throw new ArgumentNullException(nameof(posts));
 			}
 
 			/// <summary>

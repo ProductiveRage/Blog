@@ -2,7 +2,7 @@
 
 namespace Blog.Controllers
 {
-    public class StaticContentController : Controller
+    public sealed class StaticContentController : Controller
 	{
 		public IActionResult About() => View();
 

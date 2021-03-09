@@ -11,7 +11,7 @@ namespace BlogBackEnd.Caching
 		public ConcurrentDictionaryCache(TimeSpan cacheDuration)
 		{
 			if (cacheDuration.Ticks <= 0)
-				throw new ArgumentOutOfRangeException("cacheDuration", "cacheDuration must be > 0");
+				throw new ArgumentOutOfRangeException(nameof(cacheDuration), "cacheDuration must be > 0");
 
 			_cacheDuration = cacheDuration;
 		}

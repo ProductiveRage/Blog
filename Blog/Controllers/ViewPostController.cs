@@ -10,25 +10,18 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.Controllers
 {
-    public class ViewPostController : Controller
+    public sealed class ViewPostController : Controller
 	{
 		private readonly IPostRepository _postRepository;
 		private readonly SiteConfiguration _siteConfiguration;
 		private readonly ICache _postContentCache;
 		public ViewPostController(IPostRepository postRepository, SiteConfiguration siteConfiguration, ICache postContentCache)
 		{
-			if (postRepository == null)
-				throw new ArgumentNullException("postRepository");
-			if (siteConfiguration == null)
-				throw new ArgumentNullException("siteConfiguration");
-			if (postContentCache == null)
-				throw new ArgumentNullException("postContentCache");
-
-			_postRepository = postRepository;
-			_siteConfiguration = siteConfiguration;
+            _postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
+			_siteConfiguration = siteConfiguration ?? throw new ArgumentNullException(nameof(siteConfiguration));
 			if (IsLocalHost())
 				_siteConfiguration = _siteConfiguration.RemoveGoogleAnalyticsId();
-			_postContentCache = postContentCache;
+			_postContentCache = postContentCache ?? throw new ArgumentNullException(nameof(postContentCache));
 		}
 
 		public async Task<IActionResult> ArchiveById(int? id)
@@ -230,7 +223,7 @@ namespace Blog.Controllers
 		private async Task<PostWithRelatedPostStubs> GetPostWithRelatedPostStubs(Post post)
 		{
 			if (post == null)
-				throw new ArgumentNullException("post");
+				throw new ArgumentNullException(nameof(post));
 			
 			return new PostWithRelatedPostStubs(
 				post.Id,
@@ -249,7 +242,7 @@ namespace Blog.Controllers
 		private async Task<NonNullImmutableList<PostWithRelatedPostStubs>> GetPostsWithRelatedPostStubs(IEnumerable<Post> posts)
 		{
 			if (posts == null)
-				throw new ArgumentNullException("posts");
+				throw new ArgumentNullException(nameof(posts));
 
 			return (await Task.WhenAll(posts.Select(p => GetPostWithRelatedPostStubs(p)))).ToNonNullImmutableList();
 		}
@@ -259,10 +252,7 @@ namespace Blog.Controllers
 			private readonly IPostRepository _postRepository;
 			public PostSlugRetriever(IPostRepository postRepository)
 			{
-				if (postRepository == null)
-					throw new ArgumentNullException("postRepository");
-
-				_postRepository = postRepository;
+                _postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
 			}
 
 			/// <summary>

@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.Controllers
 {
-    public class SearchController : AbstractContentDeliveringController
+    public sealed class SearchController : AbstractContentDeliveringController
     {
 		private readonly IPostRepository _postRepository;
 		private readonly IPostIndexer _postIndexer;
@@ -18,19 +18,10 @@ namespace Blog.Controllers
 		private readonly ICache _postContentCache;
 		public SearchController(IPostRepository postRepository, IPostIndexer postIndexer, SiteConfiguration siteConfiguration, ICache postContentCache)
 		{
-			if (postRepository == null)
-				throw new ArgumentNullException("postRepository");
-			if (postIndexer == null)
-				throw new ArgumentNullException("postIndexer");
-			if (siteConfiguration == null)
-				throw new ArgumentNullException("siteConfiguration");
-			if (postContentCache == null)
-				throw new ArgumentNullException("postContentCache");
-
-			_postRepository = postRepository;
-			_postIndexer = postIndexer;
-			_siteConfiguration = siteConfiguration;
-			_postContentCache = postContentCache;
+            _postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
+			_postIndexer = postIndexer ?? throw new ArgumentNullException(nameof(postIndexer));
+			_siteConfiguration = siteConfiguration ?? throw new ArgumentNullException(nameof(siteConfiguration));
+			_postContentCache = postContentCache ?? throw new ArgumentNullException(nameof(postContentCache));
 		}
 
 		public async Task<IActionResult> Search(string term)

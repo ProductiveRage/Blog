@@ -1,10 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace BlogBackEnd.Models
 {
-	[Serializable]
+    [Serializable]
 	public class PostStub
 	{
 		public PostStub(int id, DateTime posted, DateTime lastModified, string slug, string title, bool isHighlight)

@@ -2,7 +2,7 @@
 
 namespace Blog.Models
 {
-	public class ArchiveMonthLink
+    public sealed class ArchiveMonthLink
 	{
 		public ArchiveMonthLink(string displayText, int month, int year, int postCount)
 		{
@@ -10,11 +10,11 @@ namespace Blog.Models
 			if (displayText == "")
 				throw new ArgumentException("Null/blank displayText specified");
 			if ((month < 1) || (month > 12))
-				throw new ArgumentOutOfRangeException("month");
+				throw new ArgumentOutOfRangeException(nameof(month));
 			if ((year < 1990) || (year > 2100))
-				throw new ArgumentOutOfRangeException("year");
+				throw new ArgumentOutOfRangeException(nameof(year));
 			if (postCount <= 0)
-				throw new ArgumentOutOfRangeException("postCount");
+				throw new ArgumentOutOfRangeException(nameof(postCount));
 
 			DisplayText = displayText;
 			Month = month;

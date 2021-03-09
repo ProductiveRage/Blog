@@ -6,20 +6,18 @@ using FullTextIndexer.Core.Indexes;
 namespace Blog.Models
 {
     [Serializable]
-	public class SearchResult
+	public sealed class SearchResult
 	{
 		public SearchResult(Post post, float weight, NonNullImmutableList<SourceFieldLocation> sourceLocations)
 		{
-			if (post == null)
-				throw new ArgumentNullException("post");
-			if (weight <= 0)
-				throw new ArgumentOutOfRangeException("weight");
+            if (weight <= 0)
+				throw new ArgumentOutOfRangeException(nameof(weight));
 			if (sourceLocations == null)
-				throw new ArgumentNullException("sourceLocations");
+				throw new ArgumentNullException(nameof(sourceLocations));
 			if (!sourceLocations.Any())
 				throw new ArgumentException("Empty sourceLocations set specified - invalid");
 
-			Post = post;
+			Post = post ?? throw new ArgumentNullException(nameof(post));
 			Weight = weight;
 			SourceLocations = sourceLocations;
 		}

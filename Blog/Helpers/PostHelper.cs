@@ -24,9 +24,9 @@ namespace Blog.Helpers
         public static HtmlString RenderPostTitleSummary(this IHtmlHelper helper, PostWithRelatedPostStubs post)
         {
             if (helper == null)
-                throw new ArgumentNullException("helper");
+                throw new ArgumentNullException(nameof(helper));
             if (post == null)
-                throw new ArgumentNullException("post");
+                throw new ArgumentNullException(nameof(post));
 
             var content = new StringBuilder();
             content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
@@ -44,13 +44,13 @@ namespace Blog.Helpers
             ICache cache)
         {
             if (helper == null)
-                throw new ArgumentNullException("helper");
+                throw new ArgumentNullException(nameof(helper));
             if (post == null)
-                throw new ArgumentNullException("post");
+                throw new ArgumentNullException(nameof(post));
             if (postSlugRetriever == null)
-                throw new ArgumentNullException("postSlugRetriever");
+                throw new ArgumentNullException(nameof(postSlugRetriever));
             if (cache == null)
-                throw new ArgumentNullException("cache");
+                throw new ArgumentNullException(nameof(cache));
 
             var cacheKey = string.Format(
                 "PostHelper-RenderPost-{0}-{1}-{2}",
@@ -61,8 +61,7 @@ namespace Blog.Helpers
             var cachedData = cache[cacheKey];
             if (cachedData != null)
             {
-                var cachedPostContent = cachedData as CachablePostContent;
-                if ((cachedPostContent != null) && (cachedPostContent.LastModified >= post.LastModified))
+                if ((cachedData is CachablePostContent cachedPostContent) && (cachedPostContent.LastModified >= post.LastModified))
                     return new HtmlString(cachedPostContent.RenderableContent);
                 cache.Remove(cacheKey);
             }
@@ -75,24 +74,23 @@ namespace Blog.Helpers
         public static async Task<string> RenderPostForRSS(this IHtmlHelper helper, PostWithRelatedPostStubs post, string scheme, HostString host, IRetrievePostSlugs postSlugRetriever, ICache cache)
         {
             if (helper == null)
-                throw new ArgumentNullException("helper");
+                throw new ArgumentNullException(nameof(helper));
             if (post == null)
-                throw new ArgumentNullException("post");
+                throw new ArgumentNullException(nameof(post));
 			if (string.IsNullOrWhiteSpace(scheme))
 				throw new ArgumentException("Null/blank/whitespace-only scheme");
 			if (!host.HasValue)
 				throw new ArgumentException("No host value");
 			if (postSlugRetriever == null)
-                throw new ArgumentNullException("postSlugRetriever");
+                throw new ArgumentNullException(nameof(postSlugRetriever));
             if (cache == null)
-                throw new ArgumentNullException("cache");
+                throw new ArgumentNullException(nameof(cache));
 
             var cacheKey = "PostHelper-RenderPostForRSS-" + post.Id;
             var cachedData = cache[cacheKey];
             if (cachedData != null)
             {
-                var cachedPostContent = cachedData as CachablePostContent;
-                if ((cachedPostContent != null) && (cachedPostContent.LastModified >= post.LastModified))
+                if ((cachedData is CachablePostContent cachedPostContent) && (cachedPostContent.LastModified >= post.LastModified))
                     return cachedPostContent.RenderableContent;
                 cache.Remove(cacheKey);
             }
@@ -123,11 +121,11 @@ namespace Blog.Helpers
             IRetrievePostSlugs postSlugRetriever)
         {
             if (helper == null)
-                throw new ArgumentNullException("helper");
+                throw new ArgumentNullException(nameof(helper));
             if (post == null)
-                throw new ArgumentNullException("post");
+                throw new ArgumentNullException(nameof(post));
             if (postSlugRetriever == null)
-                throw new ArgumentNullException("postSlugRetriever");
+                throw new ArgumentNullException(nameof(postSlugRetriever));
 
             var markdownContent = await HandlePostLinks(
                 helper,
@@ -160,7 +158,7 @@ namespace Blog.Helpers
                     content.Append("<div class=\"Next\">");
                     content.Append("<h3>Next:</h3>");
                     content.Append(
-						helper.RenderedActionLink(nextPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { Slug = nextPostIfAny.Slug }, new { @class = "Next" })
+						helper.RenderedActionLink(nextPostIfAny.Title, "ArchiveBySlug", "ViewPost", new { nextPostIfAny.Slug }, new { @class = "Next" })
 					);
                     content.Append("</div>");
                 }
@@ -189,9 +187,9 @@ namespace Blog.Helpers
         private static string GetTagLinksContent(IHtmlHelper helper, NonNullImmutableList<TagSummary> tags)
         {
             if (helper == null)
-                throw new ArgumentNullException("helper");
+                throw new ArgumentNullException(nameof(helper));
             if (tags == null)
-                throw new ArgumentNullException("tags");
+                throw new ArgumentNullException(nameof(tags));
 
             var tagsToDisplay = tags.Where(t => t.NumberOfPosts > 1); // There's no point rendering a tag unless other Posts have the same tag
             if (!tagsToDisplay.Any())
@@ -219,11 +217,11 @@ namespace Blog.Helpers
 		private static async Task<string> HandlePostLinks(IHtmlHelper helper, string content, IRetrievePostSlugs postSlugRetriever)
 		{
 			if (helper == null)
-				throw new ArgumentNullException("helper");
+				throw new ArgumentNullException(nameof(helper));
 			if (string.IsNullOrEmpty(content))
 				return content;
 			if (postSlugRetriever == null)
-				throw new ArgumentNullException("postSlugRetriever");
+				throw new ArgumentNullException(nameof(postSlugRetriever));
 
 			var rewrittenContent = new StringBuilder();
 			var lastIndex = 0;
@@ -245,7 +243,7 @@ namespace Blog.Helpers
 		private static void MakeUrlsAbsolute(HtmlDocument doc, string tagName, string attributeName, string scheme, HostString host)
 		{
 			if (doc == null)
-				throw new ArgumentNullException("doc");
+				throw new ArgumentNullException(nameof(doc));
 			if (string.IsNullOrWhiteSpace(tagName))
 				throw new ArgumentException("Null/blank tagName specified");
 			if (string.IsNullOrWhiteSpace(attributeName))
@@ -295,17 +293,17 @@ namespace Blog.Helpers
 			ICache cache)
 		{
 			if (post == null)
-				throw new ArgumentNullException("post");
+				throw new ArgumentNullException(nameof(post));
 			if (cache == null)
-				throw new ArgumentNullException("cache");
+				throw new ArgumentNullException(nameof(cache));
 			if (sourceLocations == null)
-				throw new ArgumentNullException("sourceLocations");
+				throw new ArgumentNullException(nameof(sourceLocations));
 			if (!sourceLocations.Any())
 				throw new ArgumentException("Empty sourceLocations set specified - invalid");
 			if (maxLength <= 0)
-				throw new ArgumentOutOfRangeException("maxLength");
+				throw new ArgumentOutOfRangeException(nameof(maxLength));
 			if (cache == null)
-				throw new ArgumentNullException("cache");
+				throw new ArgumentNullException(nameof(cache));
 
 			// Only consider source locations that come from the Post Content (not Title or Tags), since that is all that can be highlighted (the first
 			// Content Retriever is responsible for extracting content from this field so the Source Locations for the Post Content will always have
@@ -346,7 +344,7 @@ namespace Blog.Helpers
 			{
 				if (matchToHighlight.Index > endIndexOfLastSection)
 				{
-					var unhighlightedContentToAdd = plainTextPostContent.Substring(endIndexOfLastSection, matchToHighlight.Index - endIndexOfLastSection);
+					var unhighlightedContentToAdd = plainTextPostContent[endIndexOfLastSection..matchToHighlight.Index];
 					highlightedContentBuilder.Append(
 						HttpUtility.HtmlEncode(unhighlightedContentToAdd)
 					);
@@ -397,9 +395,9 @@ namespace Blog.Helpers
 			public int Compare(NonNullImmutableList<SourceFieldLocation> x, NonNullImmutableList<SourceFieldLocation> y)
 			{
 				if (x == null)
-					throw new ArgumentNullException("x");
+					throw new ArgumentNullException(nameof(x));
 				if (y == null)
-					throw new ArgumentNullException("y");
+					throw new ArgumentNullException(nameof(y));
 
 				var combinedWeightComparisonResult = y.Sum(s => s.MatchWeightContribution).CompareTo(x.Sum(s => s.MatchWeightContribution));
 				if (combinedWeightComparisonResult != 0)
@@ -416,16 +414,15 @@ namespace Blog.Helpers
 		private static string GetPostAsPlainText(Post post, ICache cache)
 		{
 			if (post == null)
-				throw new ArgumentNullException("post");
+				throw new ArgumentNullException(nameof(post));
 			if (cache == null)
-				throw new ArgumentNullException("cache");
+				throw new ArgumentNullException(nameof(cache));
 
 			var cacheKey = "PostHelper-RenderPostAsPlainText-" + post.Id;
-			var cachedData = cache[cacheKey] as CachablePostContent;
-			if ((cachedData != null) && (cachedData.LastModified >= post.LastModified))
-				return cachedData.RenderableContent;
+            if ((cache[cacheKey] is CachablePostContent cachedData) && (cachedData.LastModified >= post.LastModified))
+                return cachedData.RenderableContent;
 
-			var content = post.GetContentAsPlainText();
+            var content = post.GetContentAsPlainText();
 			cache[cacheKey] = new CachablePostContent(content, post.LastModified);
 			return content;
 		}
@@ -438,7 +435,7 @@ namespace Blog.Helpers
 		private static async Task<string> ReplaceFirstLineHashHeaderWithPostLink(Post post, IRetrievePostSlugs postSlugRetriever)
 		{
 			if (post == null)
-				throw new ArgumentNullException("post");
+				throw new ArgumentNullException(nameof(post));
 
 			var slug = await postSlugRetriever.GetSlug(post.Id);
 			return Regex.Replace(
@@ -478,10 +475,7 @@ namespace Blog.Helpers
 		{
 			public CachablePostContent(string renderableContent, DateTime lastModified)
 			{
-				if (renderableContent == null)
-					throw new ArgumentNullException("renderableContent");
-
-				RenderableContent = renderableContent;
+                RenderableContent = renderableContent ?? throw new ArgumentNullException(nameof(renderableContent));
 				LastModified = lastModified;
 			}
 

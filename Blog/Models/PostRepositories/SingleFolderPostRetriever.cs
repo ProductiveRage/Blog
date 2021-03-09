@@ -10,15 +10,12 @@ using Microsoft.Extensions.FileProviders;
 
 namespace Blog.Models
 {
-    public class SingleFolderPostRetriever : ISingleFolderPostRetriever
+    public sealed class SingleFolderPostRetriever : ISingleFolderPostRetriever
 	{
 		private readonly IDirectoryContents _folder;
 		public SingleFolderPostRetriever(IDirectoryContents folder)
 		{
-			if (folder == null)
-				throw new ArgumentNullException("folder");
-			
-			_folder = folder;
+            _folder = folder ?? throw new ArgumentNullException(nameof(folder));
 		}
 
 		/// <summary>
@@ -34,7 +31,7 @@ namespace Blog.Models
 				redirects = new List<Tuple<string, string>>();
 			else
 			{
-				redirects = (await readFileContents(redirectsFile))
+				redirects = (await ReadFileContents(redirectsFile))
 					.Replace("\r\n", "\n")
 					.Replace("\r", "\n")
 					.Split('\n')
@@ -53,7 +50,7 @@ namespace Blog.Models
 				relatedPostRelationships = new List<Tuple<int, ImmutableList<int>>>();
 			else
 			{
-				relatedPostRelationships = (await readFileContents(relatedPostsFile))
+				relatedPostRelationships = (await ReadFileContents(relatedPostsFile))
 					.Replace("\r\n", "\n")
 					.Replace("\r", "\n")
 					.Split('\n')
@@ -61,15 +58,10 @@ namespace Blog.Models
 					.Where(entry => (entry != "") && !entry.StartsWith("#") && entry.Contains(":"))
 					.Select(entry =>
 					{
-						int sourcePostId;
-						if (!int.TryParse(entry.Split(':').First(), out sourcePostId))
-							return null;
-						var relatedPostIds = entry.Split(':').Skip(1).First().Split(',')
-							.Select(commaSeparatedValue =>
-							{
-								int relatedPostId;
-								return int.TryParse(commaSeparatedValue, out relatedPostId) ? (int?)relatedPostId : null;
-							})
+                        if (!int.TryParse(entry.Split(':').First(), out int sourcePostId))
+                            return null;
+                        var relatedPostIds = entry.Split(':').Skip(1).First().Split(',')
+							.Select(commaSeparatedValue => int.TryParse(commaSeparatedValue, out int relatedPostId) ? (int?)relatedPostId : null)
 							.Where(id => id != null)
 							.Select(id => id.Value)
 							.ToImmutableList();
@@ -88,11 +80,11 @@ namespace Blog.Models
 				if (file.Name.Equals(redirectsFilename, StringComparison.InvariantCultureIgnoreCase))
 					continue;
 
-				var fileSummary = tryToGetFileSummaryEntry(file.Name);
+				var fileSummary = TryToGetFileSummaryEntry(file.Name);
 				if (fileSummary != null)
 				{
-					var fileContents = await readFileContents(file);
-					var title = tryToGetTitle(fileContents);
+					var fileContents = await ReadFileContents(file);
+					var title = TryToGetTitle(fileContents);
 					if (title != null)
 					{
 						// 2014-09-17 DWR: Titles such as "C# State Machines" were being converted into "c-state-machines" which isn't as descriptive as
@@ -145,20 +137,20 @@ namespace Blog.Models
 			));
 		}
 
-		private async Task<string> readFileContents(IFileInfo file)
+		private static async Task<string> ReadFileContents(IFileInfo file)
 		{
 			if (file == null)
-				throw new ArgumentNullException("file");
+				throw new ArgumentNullException(nameof(file));
 
             using var stm = file.CreateReadStream();
 			using var reader = new StreamReader(stm);
             return await reader.ReadToEndAsync();
         }
 
-		private string tryToGetTitle(string fileContents)
+		private static string TryToGetTitle(string fileContents)
 		{
 			if (fileContents == null)
-				throw new ArgumentNullException("fileContent");
+				throw new ArgumentNullException(nameof(fileContents));
 
 			fileContents = fileContents.Trim();
 			if (fileContents == "")
@@ -171,7 +163,7 @@ namespace Blog.Models
 			return fileContents;
 		}
 
-		private FileSummaryEntry tryToGetFileSummaryEntry(string filename)
+		private static FileSummaryEntry TryToGetFileSummaryEntry(string filename)
 		{
 			filename = (filename ?? "").Trim();
 			if (filename == "")
@@ -180,26 +172,24 @@ namespace Blog.Models
 			if (!filename.EndsWith(".txt", StringComparison.InvariantCultureIgnoreCase))
 				return null;
 
-			filename = filename.Substring(0, filename.Length - 4);
+			filename = filename[0..^4];
 			var segments = filename.Split(',');
 			if (segments.Length < 8)
 				return null;
 
-			int id, year, month, date, hour, minute, second;
-			if (!int.TryParse(segments[0], out id)
-			|| !int.TryParse(segments[1], out year)
-			|| !int.TryParse(segments[2], out month)
-			|| !int.TryParse(segments[3], out date)
-			|| !int.TryParse(segments[4], out hour)
-			|| !int.TryParse(segments[5], out minute)
-			|| !int.TryParse(segments[6], out second))
-				return null;
+            if (!int.TryParse(segments[0], out int id)
+            || !int.TryParse(segments[1], out int year)
+            || !int.TryParse(segments[2], out int month)
+            || !int.TryParse(segments[3], out int date)
+            || !int.TryParse(segments[4], out int hour)
+            || !int.TryParse(segments[5], out int minute)
+            || !int.TryParse(segments[6], out int second))
+                return null;
 
-			DateTime postDate;
-			if (!DateTime.TryParse(String.Format("{0}-{1}-{2} {3}:{4}:{5}", year, month, date, hour, minute, second), out postDate))
-				return null;
+            if (!DateTime.TryParse(String.Format("{0}-{1}-{2} {3}:{4}:{5}", year, month, date, hour, minute, second), out DateTime postDate))
+                return null;
 
-			bool isHighlight;
+            bool isHighlight;
 			if (segments[7] == "0")
 				isHighlight = false;
 			else if (segments[7] == "1")
@@ -222,7 +212,7 @@ namespace Blog.Models
 			public FileSummaryEntry(int id, DateTime postDate, bool isHighlight, NonNullOrEmptyStringList tags)
 			{
 				if (tags == null)
-					throw new ArgumentNullException("tags");
+					throw new ArgumentNullException(nameof(tags));
 				if (tags.Any(t => t.Trim() == ""))
 					throw new ArgumentException("Blank tag specified");
 

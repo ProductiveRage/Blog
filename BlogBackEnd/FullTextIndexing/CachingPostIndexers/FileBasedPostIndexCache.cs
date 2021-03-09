@@ -5,15 +5,12 @@ using System.Runtime.Serialization.Formatters.Binary;
 
 namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 {
-    public class FileBasedPostIndexCache : IPostIndexCache
+    public sealed class FileBasedPostIndexCache : IPostIndexCache
 	{
 		private readonly FileInfo _dataFile;
 		public FileBasedPostIndexCache(FileInfo dataFile)
 		{
-			if (dataFile == null)
-				throw new ArgumentNullException("dataFile");
-
-			_dataFile = dataFile;
+            _dataFile = dataFile ?? throw new ArgumentNullException(nameof(dataFile));
 		}
 
 		/// <summary>
@@ -44,7 +41,7 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 		public void Store(CachedPostIndexContent data)
 		{
 			if (data == null)
-				throw new ArgumentNullException("data");
+				throw new ArgumentNullException(nameof(data));
 
 			try
 			{

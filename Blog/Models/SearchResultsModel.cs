@@ -5,7 +5,7 @@ using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
-	public class SearchResultsModel : ICommonSiteConfigModel, ISideBarContentModel
+    public sealed class SearchResultsModel : ICommonSiteConfigModel, ISideBarContentModel
 	{
 		public SearchResultsModel(
 			string searchTerm,
@@ -18,26 +18,21 @@ namespace Blog.Models
 			ICache postContentCache)
 		{
 			if (searchTerm == null)
-				throw new ArgumentNullException("searchTerm");
+				throw new ArgumentNullException(nameof(searchTerm));
 			if (results == null)
-				throw new ArgumentNullException("results");
+				throw new ArgumentNullException(nameof(results));
 			if (recent == null)
-				throw new ArgumentNullException("recent");
-			if (highlights == null)
-				throw new ArgumentNullException("highlights");
-			if (archiveLinks == null)
-				throw new ArgumentNullException("archiveLinks");
-			if (postContentCache == null)
-				throw new ArgumentNullException("cache");
-
-			SearchTerm = searchTerm.Trim();
+				throw new ArgumentNullException(nameof(recent));
+            if (archiveLinks == null)
+				throw new ArgumentNullException(nameof(archiveLinks));
+            SearchTerm = searchTerm.Trim();
 			Results = results.Sort((x, y) => -x.Weight.CompareTo(y.Weight));
 			MostRecent = recent.Sort((x, y) => -x.Posted.CompareTo(y.Posted));
-			Highlights = highlights;
+			Highlights = highlights ?? throw new ArgumentNullException(nameof(highlights));
 			ArchiveLinks = archiveLinks.Sort((x, y) => -(new DateTime(x.Year, x.Month, 1)).CompareTo(new DateTime(y.Year, y.Month, 1)));
 			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
-			PostContentCache = postContentCache;
+			PostContentCache = postContentCache ?? throw new ArgumentNullException(nameof(postContentCache));
 		}
 
 		/// <summary>

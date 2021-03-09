@@ -13,7 +13,7 @@ namespace Blog.Controllers
 			int maximumNumberOfPostsToPublishInRssFeed)
 		{
 			if (maximumNumberOfPostsToPublishInRssFeed <= 0)
-				throw new ArgumentOutOfRangeException("maximumNumberOfPostsToPublishInRssFeed", "must be greater than zero");
+				throw new ArgumentOutOfRangeException(nameof(maximumNumberOfPostsToPublishInRssFeed), "must be greater than zero");
 
 			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();

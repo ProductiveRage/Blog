@@ -5,26 +5,20 @@ using FullTextIndexer.Common.Lists;
 
 namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 {
-	[Serializable]
-	public class CachedPostIndexContent
+    [Serializable]
+	public sealed class CachedPostIndexContent
 	{
 		private readonly Dictionary<int, DateTime> _sourcePostSummary;
 		public CachedPostIndexContent(PostIndexContent index, NonNullImmutableList<Post> posts)
 		{
-			if (index == null)
-				throw new ArgumentNullException("index");
-			if (posts == null)
-				throw new ArgumentNullException("post");
-
 			_sourcePostSummary = new Dictionary<int, DateTime>();
-			foreach (var post in posts)
+			foreach (var post in posts ?? throw new ArgumentNullException(nameof(posts)))
 			{
 				if (_sourcePostSummary.ContainsKey(post.Id))
 					throw new ArgumentException("Duplicate Post Id encountered: " + post.Id);
 				_sourcePostSummary.Add(post.Id, post.LastModified);
 			}
-
-			Index = index;
+			Index = index ?? throw new ArgumentNullException(nameof(index));
 		}
 
 		/// <summary>
@@ -37,10 +31,7 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 		/// </summary>
 		public bool IsValidForPostsData(NonNullImmutableList<Post> posts)
 		{
-			if (posts == null)
-				throw new ArgumentNullException("post");
-
-			foreach (var post in posts)
+			foreach (var post in posts ?? throw new ArgumentNullException(nameof(posts)))
 			{
 				if (!_sourcePostSummary.ContainsKey(post.Id))
 					return false;

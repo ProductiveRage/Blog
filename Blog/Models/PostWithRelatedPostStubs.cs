@@ -5,7 +5,7 @@ using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
-	public class PostWithRelatedPostStubs : Post
+    public sealed class PostWithRelatedPostStubs : Post
 	{
 		public PostWithRelatedPostStubs(
 			int id,
@@ -30,10 +30,7 @@ namespace Blog.Models
 				(relatedPosts ?? NonNullImmutableList<PostStub>.Empty).Select(p => p.Id).ToImmutableList(),
 				tags)
 		{
-			if (relatedPosts == null)
-				throw new ArgumentNullException("relatedPosts");
-
-			RelatedPosts = relatedPosts;
+            RelatedPosts = relatedPosts ?? throw new ArgumentNullException(nameof(relatedPosts));
 		}
 
 		/// <summary>

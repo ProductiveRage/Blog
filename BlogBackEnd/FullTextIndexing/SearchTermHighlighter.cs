@@ -23,15 +23,15 @@ namespace BlogBackEnd.FullTextIndexing
 			IComparer<NonNullImmutableList<SourceFieldLocation>> bestMatchDeterminer)
 		{
 			if (content == null)
-				throw new ArgumentNullException("content");
+				throw new ArgumentNullException(nameof(content));
 			if (maxLengthForHighlightedContent <= 0)
-				throw new ArgumentOutOfRangeException("maxLengthForHighlightedContent", "must be greater than zero");
+				throw new ArgumentOutOfRangeException(nameof(maxLengthForHighlightedContent), "must be greater than zero");
 			if (sourceLocations == null)
-				throw new ArgumentNullException("sourceLocations");
+				throw new ArgumentNullException(nameof(sourceLocations));
 			if (sourceLocations.Select(s => s.SourceFieldIndex).Distinct().Count() > 1)
 				throw new ArgumentException("All sourceLocations must have the same SourceFieldIndex");
 			if (bestMatchDeterminer == null)
-				throw new ArgumentNullException("bestMatchDeterminer");
+				throw new ArgumentNullException(nameof(bestMatchDeterminer));
 
 			// If there are no source locations there there is nothing to highlight
 			if (!sourceLocations.Any())
@@ -85,9 +85,9 @@ namespace BlogBackEnd.FullTextIndexing
 		private static NonNullImmutableList<StringSegment> ToStringSegments(NonNullImmutableList<SourceFieldLocation> sourceLocations)
 		{
 			if (sourceLocations == null)
-				throw new ArgumentNullException("sourceLocations");
+				throw new ArgumentNullException(nameof(sourceLocations));
 			if (!sourceLocations.Any())
-				throw new ArgumentException("must not be empty", "sourceLocations");
+				throw new ArgumentException("must not be empty", nameof(sourceLocations));
 
 			var stringSegments = NonNullImmutableList<StringSegment>.Empty;
 			var sourceLocationsToCombine = NonNullImmutableList<SourceFieldLocation>.Empty;
@@ -114,14 +114,14 @@ namespace BlogBackEnd.FullTextIndexing
 			return stringSegments;
 		}
 
-		public class StringSegment
+		public sealed class StringSegment
 		{
 			public StringSegment(NonNullImmutableList<SourceFieldLocation> sourceLocations)
 			{
 				if (sourceLocations == null)
-					throw new ArgumentNullException("sourceLocations");
+					throw new ArgumentNullException(nameof(sourceLocations));
 				if (!sourceLocations.Any())
-					throw new ArgumentException("must not be empty", "sourceLocations");
+					throw new ArgumentException("must not be empty", nameof(sourceLocations));
 				if (sourceLocations.Select(s => s.SourceFieldIndex).Distinct().Count() > 1)
 					throw new ArgumentException("All sourceLocations must have the same SourceFieldIndex");
 

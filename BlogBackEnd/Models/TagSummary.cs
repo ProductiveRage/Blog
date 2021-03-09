@@ -2,15 +2,15 @@
 
 namespace BlogBackEnd.Models
 {
-	[Serializable]
-	public class TagSummary
+    [Serializable]
+	public sealed class TagSummary
 	{
 		public TagSummary(string tag, int numberOfPosts)
 		{
 			if (string.IsNullOrWhiteSpace(tag))
 				throw new ArgumentException("Null/blank tag specified");
 			if (numberOfPosts <= 0)
-				throw new ArgumentOutOfRangeException("numberOfPosts");
+				throw new ArgumentOutOfRangeException(nameof(numberOfPosts));
 
 			Tag = tag.Trim();
 			NumberOfPosts = numberOfPosts;

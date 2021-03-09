@@ -13,15 +13,12 @@ using Microsoft.Net.Http.Headers;
 
 namespace Blog.Controllers
 {
-    public class CSSController : Controller
+    public sealed class CSSController : Controller
 	{
 		private readonly IFileProvider _contentRootFileProvider;
 		public CSSController(IFileProvider contentRootFileProvider)
 		{
-			if (contentRootFileProvider == null)
-				throw new ArgumentNullException("contentRootFileProvider");
-
-			_contentRootFileProvider = contentRootFileProvider;
+            _contentRootFileProvider = contentRootFileProvider ?? throw new ArgumentNullException(nameof(contentRootFileProvider));
 		}
 
 		public IActionResult Process()
@@ -70,9 +67,9 @@ namespace Blog.Controllers
 			if (string.IsNullOrWhiteSpace(relativePath))
 				throw new ArgumentException("Null/blank relativePath specified");
 			if (memoryCache == null)
-				throw new ArgumentNullException("memoryCache");
+				throw new ArgumentNullException(nameof(memoryCache));
 			if (relativePathMapper == null)
-				throw new ArgumentNullException("relativePathMapper");
+				throw new ArgumentNullException(nameof(relativePathMapper));
 
 			// Using the SingleFolderLastModifiedDateRetriever means that we can determine whether cached content (either in the ASP.Net cache or in the browser cache)
 			// is up to date without having to perform the complete import flattening process. It may lead to some unnecessary work if an unrelated file in the folder
@@ -168,10 +165,7 @@ namespace Blog.Controllers
 			private readonly IFileProvider _contentRootFileProvider;
 			public ContentRootPathMapper(IFileProvider contentRootFileProvider)
 			{
-				if (contentRootFileProvider == null)
-					throw new ArgumentNullException("contentRootFileProvider");
-
-				_contentRootFileProvider = contentRootFileProvider;
+                _contentRootFileProvider = contentRootFileProvider ?? throw new ArgumentNullException(nameof(contentRootFileProvider));
 			}
 
 			public string MapPath(string relativePath)
@@ -202,13 +196,12 @@ namespace Blog.Controllers
 					if (cachedData == null)
 						return null;
 
-					var cachedTextFileContentsData = cachedData as TextFileContents;
-					if (cachedTextFileContentsData != null)
-						return cachedTextFileContentsData;
-				
-					// If something's inserted invalid data into the cache then remove it, since whatever's call this getter will probably want to insert its own data
-					// after it does the work to generate it (and the Add method won't overwrite data already in the cache)
-					Remove(cacheKey);
+                    if (cachedData is TextFileContents cachedTextFileContentsData)
+                        return cachedTextFileContentsData;
+
+                    // If something's inserted invalid data into the cache then remove it, since whatever's call this getter will probably want to insert its own data
+                    // after it does the work to generate it (and the Add method won't overwrite data already in the cache)
+                    Remove(cacheKey);
 					return null;
 				}
 			}
@@ -221,7 +214,7 @@ namespace Blog.Controllers
 				if (string.IsNullOrWhiteSpace(cacheKey))
 					throw new ArgumentException("Null/blank cacheKeys specified");
 				if (value == null)
-					throw new ArgumentNullException("value");
+					throw new ArgumentNullException(nameof(value));
 
 				// Since the CSSController will push cached data in with a LastModifiedDate and then replace those cache items (with a Remove followed by Add) then we can
 				// use DateTime.MaxValue for AbsoluteExpiration and effectively disable time-based expiration

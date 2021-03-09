@@ -10,7 +10,7 @@ namespace BlogBackEnd.Caching
 		public LayeredCache(params ICache[] caches)
 		{
 			if (caches == null)
-				throw new ArgumentNullException("caches");
+				throw new ArgumentNullException(nameof(caches));
 
 			_caches = caches.ToList().AsReadOnly();
 			if (_caches.Any(cache => cache == null))

@@ -6,22 +6,17 @@ using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
-    public class CachedSingleFolderPostRetriever : ISingleFolderPostRetriever
+    public sealed class CachedSingleFolderPostRetriever : ISingleFolderPostRetriever
 	{
 		private readonly ISingleFolderPostRetriever _singleFolderPostRetriever;
 		private readonly ICache _cache;
 		private readonly string _cacheKey;
 		public CachedSingleFolderPostRetriever(ISingleFolderPostRetriever singleFolderPostRetriever, string folderName, ICache cache)
 		{
-			if (singleFolderPostRetriever == null)
-				throw new ArgumentNullException("singleFolderPostRetriever");
-			if (string.IsNullOrWhiteSpace(folderName))
+            if (string.IsNullOrWhiteSpace(folderName))
 				throw new ArgumentException("Null/blank/whitespace-only folderName specified");
-			if (cache == null)
-				throw new ArgumentNullException("cache");
-
-			_singleFolderPostRetriever = singleFolderPostRetriever;
-			_cache = cache;
+            _singleFolderPostRetriever = singleFolderPostRetriever ?? throw new ArgumentNullException(nameof(singleFolderPostRetriever));
+			_cache = cache ?? throw new ArgumentNullException(nameof(cache));
 			_cacheKey = "CachedSingleFolderPostRetriever-" + folderName;
 		}
 
@@ -30,11 +25,10 @@ namespace Blog.Models
 		/// </summary>
 		public async Task<NonNullImmutableList<Post>> Get()
 		{
-			var cachedData = _cache[_cacheKey] as NonNullImmutableList<Post>;
-			if (cachedData != null)
-				return cachedData;
+            if (_cache[_cacheKey] is NonNullImmutableList<Post> cachedData)
+                return cachedData;
 
-			var liveData = await _singleFolderPostRetriever.Get();
+            var liveData = await _singleFolderPostRetriever.Get();
 			_cache[_cacheKey] = liveData;
 			return liveData;
 		}

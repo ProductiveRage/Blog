@@ -5,20 +5,15 @@ using FullTextIndexer.Core.Indexes.TernarySearchTree;
 
 namespace BlogBackEnd.FullTextIndexing.LanguageLookups
 {
-	public class TextFileBasedTSTWordLookup : IWordLookup
+    public sealed class TextFileBasedTSTWordLookup : IWordLookup
 	{
-		private FileInfo _file;
-		private IStringNormaliser _stringNormaliser;
-		private Lazy<TernarySearchTreeDictionary<bool>> _data;
+		private readonly FileInfo _file;
+		private readonly IStringNormaliser _stringNormaliser;
+		private readonly Lazy<TernarySearchTreeDictionary<bool>> _data;
 		public TextFileBasedTSTWordLookup(FileInfo file, IStringNormaliser stringNormaliser)
 		{
-			if (file == null)
-				throw new ArgumentNullException("file");
-			if (stringNormaliser == null)
-				throw new ArgumentNullException("stringNormaliser");
-
-			_file = file;
-			_stringNormaliser = stringNormaliser;
+            _file = file ?? throw new ArgumentNullException(nameof(file));
+			_stringNormaliser = stringNormaliser ?? throw new ArgumentNullException(nameof(stringNormaliser));
 			_data = new Lazy<TernarySearchTreeDictionary<bool>>(
 				GenerateLookup,
 				true // isThreadSafe
@@ -28,11 +23,10 @@ namespace BlogBackEnd.FullTextIndexing.LanguageLookups
 		public bool IsValid(string word)
 		{
 			if (word == null)
-				throw new ArgumentNullException("word");
+				throw new ArgumentNullException(nameof(word));
 
-			bool value;
-			return _data.Value.TryGetValue(word, out value);
-		}
+            return _data.Value.TryGetValue(word, out bool _);
+        }
 
 		private TernarySearchTreeDictionary<bool> GenerateLookup()
 		{

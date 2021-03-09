@@ -21,10 +21,7 @@ namespace Blog
 		private readonly IWebHostEnvironment _environment;
 		public Startup(IWebHostEnvironment environment)
 		{
-			if (environment == null)
-				throw new ArgumentNullException("environment");
-
-			_environment = environment;
+            _environment = environment ?? throw new ArgumentNullException(nameof(environment));
 		}
 
 		public void ConfigureServices(IServiceCollection services)

@@ -10,7 +10,7 @@ namespace Blog.Models
 		public static async Task<NonNullImmutableList<ArchiveMonthLink>> GetArchiveLinks(this IPostRepository repo)
 		{
 			if (repo == null)
-				throw new ArgumentNullException("repo");
+				throw new ArgumentNullException(nameof(repo));
 
 			var months = NonNullImmutableList<ArchiveMonthLink>.Empty;
 			var min = await repo.GetMinPostDate();

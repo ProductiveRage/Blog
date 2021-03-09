@@ -1,6 +1,6 @@
 ﻿namespace Blog.Misc
 {
-	public class Constants
+    public sealed class Constants
 	{
 		/// <summary>
 		/// This is optional (and so may be null or blank), if not specified then Google Analytics functionality will be disabled

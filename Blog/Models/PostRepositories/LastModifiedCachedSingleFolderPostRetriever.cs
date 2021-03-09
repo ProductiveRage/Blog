@@ -8,7 +8,7 @@ using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
-    public class LastModifiedCachedSingleFolderPostRetriever : ISingleFolderPostRetriever
+    public sealed class LastModifiedCachedSingleFolderPostRetriever : ISingleFolderPostRetriever
 	{
 		private readonly ISingleFolderPostRetriever _singleFolderPostRetriever;
 		private readonly DirectoryInfo _folder;
@@ -16,16 +16,9 @@ namespace Blog.Models
 		private readonly string _cacheKey;
 		public LastModifiedCachedSingleFolderPostRetriever(ISingleFolderPostRetriever singleFolderPostRetriever, DirectoryInfo folder, ICache cache)
 		{
-			if (singleFolderPostRetriever == null)
-				throw new ArgumentNullException("singleFolderPostRetriever");
-			if (folder == null)
-				throw new ArgumentNullException("folder");
-			if (cache == null)
-				throw new ArgumentNullException("cache");
-
-			_singleFolderPostRetriever = singleFolderPostRetriever;
-			_folder = folder;
-			_cache = cache;
+            _singleFolderPostRetriever = singleFolderPostRetriever ?? throw new ArgumentNullException(nameof(singleFolderPostRetriever));
+			_folder = folder ?? throw new ArgumentNullException(nameof(folder));
+			_cache = cache ?? throw new ArgumentNullException(nameof(cache));
 			_cacheKey = "LastModifiedCachedSingleFolderPostRetriever-" + folder.FullName;
 		}
 
@@ -41,11 +34,10 @@ namespace Blog.Models
 				return NonNullImmutableList<Post>.Empty;
 
 			var lastModified = _folder.EnumerateFiles().Max(f => f.LastWriteTimeUtc);
-			var cachedData = _cache[_cacheKey] as CachedResult;
-			if ((cachedData != null) && (cachedData.LastModifiedUtc >= lastModified))
-				return cachedData.Posts;
+            if ((_cache[_cacheKey] is CachedResult cachedData) && (cachedData.LastModifiedUtc >= lastModified))
+                return cachedData.Posts;
 
-			var liveData = await _singleFolderPostRetriever.Get();
+            var liveData = await _singleFolderPostRetriever.Get();
 			_cache[_cacheKey] = new CachedResult(liveData, lastModified);
 			return liveData;
 		}
@@ -55,10 +47,7 @@ namespace Blog.Models
 		{
 			public CachedResult(NonNullImmutableList<Post> posts, DateTime lastModifiedUtc)
 			{
-				if (posts == null)
-					throw new ArgumentNullException("post");
-
-				Posts = posts;
+                Posts = posts ?? throw new ArgumentNullException(nameof(posts));
 				LastModifiedUtc = lastModifiedUtc;
 			}
 

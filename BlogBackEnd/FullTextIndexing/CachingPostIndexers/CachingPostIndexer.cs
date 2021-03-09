@@ -4,19 +4,14 @@ using FullTextIndexer.Common.Lists;
 
 namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 {
-    public class CachingPostIndexer :  IPostIndexer
+    public sealed class CachingPostIndexer :  IPostIndexer
 	{
-		private IPostIndexCache _cache;
-		private IPostIndexer _postIndexer;
+		private readonly IPostIndexCache _cache;
+		private readonly IPostIndexer _postIndexer;
 		public CachingPostIndexer(IPostIndexer postIndexer, IPostIndexCache cache)
 		{
-			if (cache == null)
-				throw new ArgumentNullException("cache");
-			if (postIndexer == null)
-				throw new ArgumentNullException("postIndexer");
-
-			_cache = cache;
-			_postIndexer = postIndexer;
+            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+			_postIndexer = postIndexer ?? throw new ArgumentNullException(nameof(postIndexer));
 		}
 
 		/// <summary>
@@ -25,7 +20,7 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 		public PostIndexContent GenerateIndexContent(NonNullImmutableList<Post> posts)
 		{
 			if (posts == null)
-				throw new ArgumentNullException("posts");
+				throw new ArgumentNullException(nameof(posts));
 
 			return GetData(posts).Index;
 		}
@@ -33,7 +28,7 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 		private CachedPostIndexContent GetData(NonNullImmutableList<Post> posts)
 		{
 			if (posts == null)
-				throw new ArgumentNullException("posts");
+				throw new ArgumentNullException(nameof(posts));
 
 			var cachedData = _cache.TryToRetrieve();
 			if ((cachedData != null) && cachedData.IsValidForPostsData(posts))

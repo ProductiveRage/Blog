@@ -3,16 +3,14 @@ using BlogBackEnd.Models;
 
 namespace Blog.Models
 {
-	public class PostMatchDetails
+    public sealed class PostMatchDetails
 	{
 		public PostMatchDetails(Post post, Post previousPostIfAny, Post nextPostIfAny, PostMatchTypeOptions postMatchType)
 		{
-			if (post == null)
-				throw new ArgumentNullException("post");
-			if (!Enum.IsDefined(typeof(PostMatchTypeOptions), postMatchType))
-				throw new ArgumentOutOfRangeException("postMatchType");
+            if (!Enum.IsDefined(typeof(PostMatchTypeOptions), postMatchType))
+				throw new ArgumentOutOfRangeException(nameof(postMatchType));
 
-			Post = post;
+			Post = post ?? throw new ArgumentNullException(nameof(post));
 			PreviousPostIfAny = previousPostIfAny;
 			NextPostIfAny = nextPostIfAny;
 			PostMatchType = postMatchType;

@@ -17,13 +17,13 @@ namespace BlogBackEnd.Models
 		public static string GetContentAsPlainText(this Post source)
 		{
 			if (source == null)
-				throw new ArgumentNullException("source");
+				throw new ArgumentNullException(nameof(source));
 
 			var doc = new HtmlDocument();
 			doc.LoadHtml(
 				MarkdownTransformations.ToHtml(source.MarkdownContent)
 			);
-			var segments = doc.DocumentNode.DescendantNodesAndSelf()
+			var segments = doc.DocumentNode.DescendantsAndSelf()
 				.Where(node => node.NodeType == HtmlNodeType.Text)
 				.Select(node => node.InnerText);
 
@@ -37,7 +37,7 @@ namespace BlogBackEnd.Models
 				{
 					if (!lastCharacterWasWhitespace)
 					{
-						whitespaceNormalisedContentBuilder.Append(" ");
+						whitespaceNormalisedContentBuilder.Append(' ');
 						lastCharacterWasWhitespace = true;
 					}
 					continue;
@@ -50,7 +50,7 @@ namespace BlogBackEnd.Models
 			// content only), so it needs removing if this is the case
 			var content = whitespaceNormalisedContentBuilder.ToString();
 			if (content.StartsWith(source.Title.Trim()))
-				content = content.Substring(source.Title.Trim().Length).Trim();
+				content = content[source.Title.Trim().Length..].Trim();
 
 			return content;
 		}
@@ -66,7 +66,7 @@ namespace BlogBackEnd.Models
 		public static string TryToGetFirstParagraphContentAsPlainText(this Post source, int maxLength = int.MaxValue)
 		{
 			if (source == null)
-				throw new ArgumentNullException("source");
+				throw new ArgumentNullException(nameof(source));
 			if (maxLength < 3)
 				throw new ArgumentException("Maximum length must be AT LEAST 3 because we'll add two '..' characters to any string that is trimmed, which would leave only a single character from the input!");
 

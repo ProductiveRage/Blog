@@ -5,7 +5,7 @@ using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
-	public class PostListModel : ICommonSiteConfigModel, ISideBarContentModel
+    public sealed class PostListModel : ICommonSiteConfigModel, ISideBarContentModel
 	{
 		public PostListModel(
 			string title,
@@ -25,35 +25,26 @@ namespace Blog.Models
 		{
 			if (string.IsNullOrWhiteSpace(title))
 				throw new ArgumentException("Null/blank title specified");
-			if (posts == null)
-				throw new ArgumentNullException("posts");
-			if (recent == null)
-				throw new ArgumentNullException("recent");
-			if (highlights == null)
-				throw new ArgumentNullException("highlights");
-			if (archiveLinks == null)
-				throw new ArgumentNullException("archiveLinks");
+            if (recent == null)
+				throw new ArgumentNullException(nameof(recent));
+            if (archiveLinks == null)
+				throw new ArgumentNullException(nameof(archiveLinks));
 			if (!Enum.IsDefined(typeof(PostListDisplayOptions), postListDisplay))
-				throw new ArgumentOutOfRangeException("postListDisplay");
-			if (postSlugRetriever == null)
-				throw new ArgumentNullException("postSlugRetriever");
-			if (postContentCache == null)
-				throw new ArgumentNullException("cache");
-
-			Title = title.Trim();
-			Posts = posts;
+				throw new ArgumentOutOfRangeException(nameof(postListDisplay));
+            Title = title.Trim();
+			Posts = posts ?? throw new ArgumentNullException(nameof(posts));
 			PreviousPostIfAny = previousPostIfAny;
 			NextPostIfAny = nextPostIfAny;
 			MostRecent = recent.Sort((x, y) => -x.Posted.CompareTo(y.Posted));
-			Highlights = highlights;
+			Highlights = highlights ?? throw new ArgumentNullException(nameof(highlights));
 			ArchiveLinks = archiveLinks.Sort((x, y) => -(new DateTime(x.Year, x.Month, 1)).CompareTo(new DateTime(y.Year, y.Month, 1)));
 			PostListDisplay = postListDisplay;
 			OptionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
 			OptionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
 			OptionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
 			OptionalTwitterCardDetails = optionalTwitterCardDetails;
-			PostSlugRetriever = postSlugRetriever;
-			PostContentCache = postContentCache;
+			PostSlugRetriever = postSlugRetriever ?? throw new ArgumentNullException(nameof(postSlugRetriever));
+			PostContentCache = postContentCache ?? throw new ArgumentNullException(nameof(postContentCache));
 		}
 
 		/// <summary>

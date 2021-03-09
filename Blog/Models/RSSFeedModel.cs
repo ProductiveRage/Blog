@@ -1,27 +1,22 @@
 ﻿using System;
-using System.Linq;
 using BlogBackEnd.Caching;
 using BlogBackEnd.Models;
 using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
-	public class RSSFeedModel
+    public sealed class RSSFeedModel
 	{
 		public RSSFeedModel(NonNullImmutableList<PostWithRelatedPostStubs> posts, IRetrievePostSlugs postSlugRetriever, ICache postContentCache)
 		{
 			if (posts == null)
-				throw new ArgumentNullException("posts");
+				throw new ArgumentNullException(nameof(posts));
 			if (!posts.Any())
 				throw new ArgumentException("posts may not be an empty list");
-			if (postSlugRetriever == null)
-				throw new ArgumentNullException("postSlugRetriever");
-			if (postContentCache == null)
-				throw new ArgumentNullException("postContentCache");
 
-			Posts = posts;
-			PostSlugRetriever = postSlugRetriever;
-			PostContentCache = postContentCache;
+            Posts = posts;
+			PostSlugRetriever = postSlugRetriever ?? throw new ArgumentNullException(nameof(postSlugRetriever));
+			PostContentCache = postContentCache ?? throw new ArgumentNullException(nameof(postContentCache));
 		}
 
 		/// <summary>
