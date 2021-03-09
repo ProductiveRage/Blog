@@ -1,42 +1,39 @@
 ﻿using System;
 using System.IO;
-using System.Web;
 using Blog.Models;
 using BlogBackEnd.Caching;
+using Microsoft.AspNetCore.Hosting;
 
 namespace Blog.Factories
 {
-	public class PostRepositoryFactory
+    public class PostRepositoryFactory
 	{
-		private HttpContextBase _httpContext;
-		public PostRepositoryFactory(HttpContextBase httpContext)
-		{
-			if (httpContext == null)
-				throw new ArgumentNullException("httpContext");
+		private static readonly ICache _longTermCache = new ConcurrentDictionaryCache(TimeSpan.FromDays(1));
+		private static readonly ICache _shortTermCache = new ConcurrentDictionaryCache(TimeSpan.FromSeconds(5));
 
-			_httpContext = httpContext;
+		private readonly IWebHostEnvironment _hostingEnvironment;
+		public PostRepositoryFactory(IWebHostEnvironment hostingEnvironment)
+		{
+			if (hostingEnvironment == null)
+				throw new ArgumentNullException("hostingEnvironment");
+
+			_hostingEnvironment = hostingEnvironment;
 		}
 
 		public IPostRepository Get()
 		{
-			var postsFolder = new DirectoryInfo(_httpContext.Server.MapPath("~/App_Data/Posts"));
-			var longTermCache = new ASPNetCacheCache(
-				_httpContext.Cache,
-				TimeSpan.FromDays(1)
-			);
-			var shortTermCache = new ASPNetCacheCache(
-				_httpContext.Cache,
-				TimeSpan.FromSeconds(5)
-			);
+			const string postsFolderPath = "App_Data/Posts";
+			var postsFolder = _hostingEnvironment.ContentRootFileProvider.GetDirectoryContents(postsFolderPath);
+			var postsFolderFullPath = _hostingEnvironment.ContentRootFileProvider.GetFileInfo(postsFolderPath).PhysicalPath;
 			return new AppDataTextPostRepository(
 				new CachedSingleFolderPostRetriever(
 					new LastModifiedCachedSingleFolderPostRetriever(
 						new SingleFolderPostRetriever(postsFolder),
-						postsFolder,
-						longTermCache
+						new DirectoryInfo(postsFolderFullPath),
+						_longTermCache
 					),
-					postsFolder,
-					shortTermCache
+					_hostingEnvironment.ContentRootPath,
+					_shortTermCache
 				)
 			);
 		}

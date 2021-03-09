@@ -1,34 +1,39 @@
 ﻿@model Blog.Models.SearchResultsModel
-@using Blog.Helpers.Posts;
+@using Blog.Helpers;
 
 @{
     ViewBag.Title = string.IsNullOrWhiteSpace(Model.SearchTerm) ? "Search" : Model.SearchTerm;
-	Layout = "~/Views/Shared/SiteMasterWithSearchOnlySidebar.cshtml";
+    Layout = "~/Views/Shared/SiteMasterWithSearchOnlySidebar.cshtml";
 }
 
-				<div class="Content">
-					<h2>Search Results</h2>
-@if (!Model.Results.Any()) {
-	if (Model.SearchTerm == "") {
-					<p class="NoResults">
-						No search term entered..
-					</p>
-	}
-	else {
-					<p class="NoResults">
-						No results for: @Model.SearchTerm
-					</p>
-	}
-}
-else {
-	foreach (var result in Model.Results) {
-					<h3>
-						@Html.ActionLink(result.Post.Title, "ArchiveBySlug", "ViewPost", new { Slug = result.Post.Slug }, new { })
-					</h3>
-					<p class="SearchResultContent">
-						@Html.RenderPostAsPlainTextWithSearchTermsHighlighted(result.Post, result.SourceLocations, 350, Model.PostContentCache)
-					</p>
-	}
-}
-					<a href="/">Back to the home page..</a>
-				</div>
+<div class="Content">
+    <h2>Search Results</h2>
+    @if (!Model.Results.Any())
+    {
+        if (Model.SearchTerm == "")
+        {
+            <p class="NoResults">
+                No search term entered..
+            </p>
+        }
+        else
+        {
+            <p class="NoResults">
+                No results for: @Model.SearchTerm
+            </p>
+        }
+    }
+    else
+    {
+        foreach (var result in Model.Results)
+        {
+            <h3>
+                @Html.Raw(Html.RenderedActionLink(result.Post.Title, "ArchiveBySlug", "ViewPost", new { Slug = result.Post.Slug }))
+            </h3>
+            <p class="SearchResultContent">
+                @PostHelper.RenderPostAsPlainTextWithSearchTermsHighlighted(result.Post, result.SourceLocations, 350, Model.PostContentCache)
+            </p>
+        }
+    }
+    <a href="/">Back to the home page..</a>
+</div>

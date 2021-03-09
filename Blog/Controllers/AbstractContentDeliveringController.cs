@@ -1,52 +1,42 @@
 ﻿using System;
-using System.IO.Compression;
 using System.Linq;
-using System.Web.Mvc;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Net.Http.Headers;
 
 namespace Blog.Controllers
 {
-	public abstract class AbstractContentDeliveringController : AbstractErrorLoggingController
+    public abstract class AbstractContentDeliveringController : Controller
     {
 		/// <summary>
 		/// Try to get the If-Modified-Since HttpHeader value - if not present or not valid (ie. not interpretable as a date) then null will be returned
 		/// </summary>
 		protected DateTime? TryToGetIfModifiedSinceDateFromRequest()
 		{
-			var lastModifiedDateRaw = Request.Headers["If-Modified-Since"];
+			var lastModifiedDateRaw = Request.Headers["If-Modified-Since"].FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 			if (lastModifiedDateRaw == null)
 				return null;
 
-			DateTime lastModifiedDate;
-			if (DateTime.TryParse(lastModifiedDateRaw, out lastModifiedDate))
-				return lastModifiedDate;
+            if (DateTime.TryParse(lastModifiedDateRaw, out DateTime lastModifiedDate))
+                return lastModifiedDate;
 
-			return null;
+            return null;
 		}
 
 		/// <summary>
-		/// Mark the response as being cacheable and implement content-encoding requests such that gzip is used if supported by requester
+		/// Mark the response as being cacheable
 		/// </summary>
 		protected void SetResponseCacheHeadersForSuccess(DateTime lastModifiedDateOfLiveData)
 		{
 			// Mark the response as cacheable
-			// - Specify "Vary" "Content-Encoding" header to ensure that if cached by proxies that different versions are stored for different encodings
-			//   (eg. gzip'd vs non-gzip'd)
-			Response.Cache.SetCacheability(System.Web.HttpCacheability.Public);
-			Response.Cache.SetLastModified(lastModifiedDateOfLiveData);
-			Response.AppendHeader("Vary", "Content-Encoding");
+			// - Specify "Vary" "Content-Encoding" header to ensure that if cached by proxies that different versions are stored for different encodings (eg. gzip'd vs non-gzip'd)
 
-			// Handle requested content-encoding method
-			var encodingsAccepted = (Request.Headers["Accept-Encoding"] ?? "").Split(',').Select(e => e.Trim().ToLower()).ToArray();
-			if (encodingsAccepted.Contains("gzip"))
-			{
-				Response.AppendHeader("Content-encoding", "gzip");
-				Response.Filter = new GZipStream(Response.Filter, CompressionMode.Compress);
-			}
-			else if (encodingsAccepted.Contains("deflate"))
-			{
-				Response.AppendHeader("Content-encoding", "deflate");
-				Response.Filter = new DeflateStream(Response.Filter, CompressionMode.Compress);
-			}
+			Response.Headers.Add(HeaderNames.CacheControl, "Public");
+			Response.Headers.Add(HeaderNames.Vary, "Content-Encoding");
+
+			Response.Headers.Add(HeaderNames.LastModified, lastModifiedDateOfLiveData.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+
+			// As suggested at https://andrewlock.net/adding-cache-control-headers-to-static-files-in-asp-net-core/#cache-busting-for-file-changes
+			Response.Headers.Add(HeaderNames.ETag, Convert.ToString(lastModifiedDateOfLiveData.ToFileTime(), 16)); 
 		}
 	}
 }

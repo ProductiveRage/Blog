@@ -1,43 +1,43 @@
 ﻿@using System.Linq;
-@using Blog.Helpers.Posts;
+@using Blog.Helpers;
 @model Blog.Models.RSSFeedModel
 <?xml version="1.0" encoding="UTF-8"?>
 <?xml-stylesheet href="/Content/RSS.xslt" type="text/xsl" media="screen"?>
-<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+<rss xmlns:dc="https://purl.org/dc/elements/1.1/" xmlns:atom="https://www.w3.org/2005/Atom" version="2.0">
 
-	<channel>
-		
-		<title>Productive Rage</title>
-		<link>http://www.productiverage.com/</link>
-		<atom:link href="http://www.productiverage.com/feed" rel="self" type="application/rss+xml"/>
-		<description>Dan's techie ramblings</description>
-		<language>en-gb</language>
+    <channel>
 
-		<lastBuildDate>@Model.Posts.Max(p => p.Posted).ToString("ddd, dd MMM yyyy HH:mm:ss") GMT</lastBuildDate>
-		<docs>http://blogs.law.harvard.edu/tech/rss</docs>
-		
-		<image>
-			<title>Productive Rage</title>
-			<url>http://www.productiverage.com/Content/Images/Grouch.jpg</url>
-			<width>142</width>
-			<height>142</height>
-			<link>http://www.productiverage.com/</link>
-		</image>
+        <title>Productive Rage</title>
+        <link>https://www.productiverage.com/</link>
+        <atom:link href="https://www.productiverage.com/feed" rel="self" type="application/rss+xml" />
+        <description>Dan's techie ramblings</description>
+        <language>en-gb</language>
 
-		<xhtml:meta xmlns:xhtml="http://www.w3.org/1999/xhtml" name="robots" content="noindex" /> 
+        <lastBuildDate>@Model.Posts.Max(p => p.Posted).ToString("ddd, dd MMM yyyy HH:mm:ss") GMT</lastBuildDate>
+        <docs>https://blogs.law.harvard.edu/tech/rss</docs>
 
-@foreach (var post in Model.Posts)
-{
-		<item>
-			<title>@post.Title</title>
-            @Html.Raw("<link>" + Url.Action("ArchiveBySlug", "ViewPost", new { Slug = post.Slug }, Request.Url.Scheme) + "</link>")
-			<guid>@Url.Action("ArchiveBySlug", "ViewPost", new { Slug = post.Slug }, Request.Url.Scheme)</guid>
-			<description>@Html.Encode(Html.RenderPostForRSS(post, Request.Url, Model.PostSlugRetriever, Model.PostContentCache))</description>
-			<pubDate>@post.Posted.ToString("ddd, dd MMM yyyy HH:mm:ss") GMT</pubDate>
-		</item>
-	
-}
+        <image>
+            <title>Productive Rage</title>
+            <url>https://www.productiverage.com/Content/Images/Grouch.jpg</url>
+            <width>142</width>
+            <height>142</height>
+            <link>https://www.productiverage.com/</link>
+        </image>
 
-	</channel>
+        <xhtml:meta xmlns:xhtml="https://www.w3.org/1999/xhtml" name="robots" content="noindex" />
+
+        @foreach (var post in Model.Posts)
+        {
+            <item>
+                <title>@post.Title</title>
+                @Html.Raw("<link>" + Url.Action("ArchiveBySlug", "ViewPost", new { Slug = post.Slug }, Context.Request.Scheme) + "</link>")
+                <guid>@Url.Action("ArchiveBySlug", "ViewPost", new { Slug = post.Slug }, Context.Request.Scheme)</guid>
+                <description>@await Html.RenderPostForRSS(post, Context.Request.Scheme, Context.Request.Host, Model.PostSlugRetriever, Model.PostContentCache)</description>
+                <pubDate>@post.Posted.ToString("ddd, dd MMM yyyy HH:mm:ss") GMT</pubDate>
+            </item>
+
+        }
+
+    </channel>
 
 </rss>

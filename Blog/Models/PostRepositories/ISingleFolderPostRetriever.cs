@@ -1,13 +1,14 @@
-﻿using BlogBackEnd.Models;
+﻿using System.Threading.Tasks;
+using BlogBackEnd.Models;
 using FullTextIndexer.Common.Lists;
 
 namespace Blog.Models
 {
-	public interface ISingleFolderPostRetriever
+    public interface ISingleFolderPostRetriever
 	{
 		/// <summary>
 		/// This will never return null nor contain any null entries
 		/// </summary>
-		NonNullImmutableList<Post> Get();
+		Task<NonNullImmutableList<Post>> Get();
 	}
 }

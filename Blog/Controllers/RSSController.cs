@@ -1,48 +1,45 @@
 ﻿using System;
 using System.Linq;
-using System.Web;
-using System.Web.Mvc;
-using Blog.Helpers.Timing;
+using System.Threading.Tasks;
 using Blog.Models;
 using BlogBackEnd.Caching;
-using FullTextIndexer.Common.Lists;
 using BlogBackEnd.Models;
+using FullTextIndexer.Common.Lists;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.Controllers
 {
-	public class RSSController : AbstractErrorLoggingController
+    public class RSSController : Controller
 	{
 		private readonly IPostRepository _postRepository;
 		private readonly int _maximumNumberOfPostsToPublish;
 		private readonly ICache _postContentCache;
-		public RSSController(IPostRepository postRepository, int maximumNumberOfPostsToPublish, ICache postContentCache)
+		public RSSController(IPostRepository postRepository, SiteConfiguration siteConfiguration, ICache postContentCache)
 		{
 			if (postRepository == null)
 				throw new ArgumentNullException("postRepository");
-			if (maximumNumberOfPostsToPublish <= 0)
-				throw new ArgumentOutOfRangeException("maximumNumberOfPostsToPublish", "must be greater than zero");
+			if (siteConfiguration == null)
+				throw new ArgumentNullException("siteConfiguration");
 			if (postContentCache == null)
 				throw new ArgumentNullException("postContentCache");
 
 			_postRepository = postRepository;
-			_maximumNumberOfPostsToPublish = maximumNumberOfPostsToPublish;
+			_maximumNumberOfPostsToPublish = siteConfiguration.MaximumNumberOfPostsToPublishInRssFeed;
 			_postContentCache = postContentCache;
 		}
 
-		[Stopwatch]
-		public ActionResult Feed()
+		public async Task<IActionResult> Feed()
 		{
-			var posts = _postRepository.GetAll();
+			var posts = await _postRepository.GetAll();
 			if (!posts.Any())
-				return new HttpNotFoundResult();
+				return NotFound();
 
 			Response.ContentType = "text/xml";
-			return View(
-				new RSSFeedModel(
-					posts
-						.Sort((x, y) => -x.Posted.CompareTo(y.Posted))
-						.Take(_maximumNumberOfPostsToPublish)
-						.Select(post => new PostWithRelatedPostStubs(
+			var postsForFeed = await Task.WhenAll(
+				posts
+					.Sort((x, y) => -x.Posted.CompareTo(y.Posted))
+					.Take(_maximumNumberOfPostsToPublish)
+					.Select(async post => new PostWithRelatedPostStubs(
 							post.Id,
 							post.Posted,
 							post.LastModified,
@@ -51,10 +48,13 @@ namespace Blog.Controllers
 							post.Title,
 							post.IsHighlight,
 							post.MarkdownContent,
-							_postRepository.GetByIds(post.RelatedPosts).Cast<PostStub>().ToNonNullImmutableList(),
+							(await _postRepository.GetByIds(post.RelatedPosts)).Cast<PostStub>().ToNonNullImmutableList(),
 							post.Tags
 						))
-						.ToNonNullImmutableList(),
+			);
+			return View(
+				new RSSFeedModel(
+					postsForFeed.ToNonNullImmutableList(),
 					new PostSlugRetriever(posts),
 					_postContentCache
 				)
@@ -75,12 +75,12 @@ namespace Blog.Controllers
 			/// <summary>
 			/// This will never return null or blank, it will raise an exception if the id is invalid or if otherwise unable to satisfy the request
 			/// </summary>
-			public string GetSlug(int postId)
+			public Task<string> GetSlug(int postId)
 			{
 				var post = _posts.FirstOrDefault(p => p.Id == postId);
 				if (post == null)
 					throw new ArgumentException("Invalid postId: " + postId);
-				return post.Slug;
+				return Task.FromResult(post.Slug);
 			}
 		}
 	}

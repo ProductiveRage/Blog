@@ -2,7 +2,7 @@
 	var $search = $("input.SiteSearch");
 	if ($search.length > 0) {
 		$.ajax({
-			url: "/AutoComplete.json", // TODO: need a better way to reference this file since moving this script out of the master page
+			url: "/AutoComplete.json",
 			dataType: 'json',
 			success: function (data) {
 				$search.autocomplete(data);

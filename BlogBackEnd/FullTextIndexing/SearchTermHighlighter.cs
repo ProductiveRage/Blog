@@ -6,7 +6,7 @@ using FullTextIndexer.Core.Indexes;
 
 namespace BlogBackEnd.FullTextIndexing
 {
-	public static class SearchTermHighlighter
+    public static class SearchTermHighlighter
 	{
 		/// <summary>
 		/// Given a content string and a set of source locations all indicate matches within that content, return a set of string segments (each having an Index and Length
@@ -35,7 +35,7 @@ namespace BlogBackEnd.FullTextIndexing
 
 			// If there are no source locations there there is nothing to highlight
 			if (!sourceLocations.Any())
-				return new NonNullImmutableList<StringSegment>();
+				return NonNullImmutableList<StringSegment>.Empty;
 
 			// Sort sourceLocations by index and then length
 			sourceLocations = sourceLocations.Sort((x, y) =>
@@ -54,10 +54,10 @@ namespace BlogBackEnd.FullTextIndexing
 			});
 
 			// Identify all combinations of source locations that can be shown at once without exceeding the maxLengthForHighlightedContent restraint
-			var sourceLocationChains = new NonNullImmutableList<NonNullImmutableList<SourceFieldLocation>>();
+			var sourceLocationChains = NonNullImmutableList<NonNullImmutableList<SourceFieldLocation>>.Empty;
 			for (var indexOfFirstSourceLocationInChain = 0; indexOfFirstSourceLocationInChain < sourceLocations.Count; indexOfFirstSourceLocationInChain++)
 			{
-				var sourceLocationChain = new NonNullImmutableList<SourceFieldLocation>();
+				var sourceLocationChain = NonNullImmutableList<SourceFieldLocation>.Empty;
 				for (var indexOfLastSourceLocationInChain = indexOfFirstSourceLocationInChain; indexOfLastSourceLocationInChain < sourceLocations.Count; indexOfLastSourceLocationInChain++)
 				{
 					var startPoint = sourceLocations[indexOfFirstSourceLocationInChain].SourceIndex;
@@ -72,32 +72,9 @@ namespace BlogBackEnd.FullTextIndexing
 
 			// Get the best source location chain, if any (if not, return an empty set) and translate into a StringSegment set
 			if (!sourceLocationChains.Any())
-				return new NonNullImmutableList<StringSegment>();
+				return NonNullImmutableList<StringSegment>.Empty;
 			return ToStringSegments(
 				sourceLocationChains.Sort(bestMatchDeterminer).First()
-			);
-		}
-
-		/// <summary>
-		/// This alternative method signature accepts source locations returned from calls to GetPartialMatches (which return SourceFieldLocationWithTerm instances
-		/// rather than SourceFieldLocation instances)
-		/// </summary>
-		public static NonNullImmutableList<StringSegment> IdentifySearchTermsToHighlight(
-			string content,
-			int maxLengthForHighlightedContent,
-			NonNullImmutableList<IndexData_Extensions_PartialMatches.SourceFieldLocationWithTerm> sourceLocations,
-			IComparer<NonNullImmutableList<SourceFieldLocation>> bestMatchDeterminer)
-		{
-			if (sourceLocations == null)
-				throw new ArgumentNullException("sourceLocations");
-
-			return IdentifySearchTermsToHighlight(
-				content,
-				maxLengthForHighlightedContent,
-				sourceLocations
-					.Select(s => new SourceFieldLocation(s.SourceFieldIndex, s.TokenIndex, s.SourceIndex, s.SourceTokenLength, s.MatchWeightContribution))
-					.ToNonNullImmutableList(),
-				bestMatchDeterminer
 			);
 		}
 
@@ -112,8 +89,8 @@ namespace BlogBackEnd.FullTextIndexing
 			if (!sourceLocations.Any())
 				throw new ArgumentException("must not be empty", "sourceLocations");
 
-			var stringSegments = new NonNullImmutableList<StringSegment>();
-			var sourceLocationsToCombine = new NonNullImmutableList<SourceFieldLocation>();
+			var stringSegments = NonNullImmutableList<StringSegment>.Empty;
+			var sourceLocationsToCombine = NonNullImmutableList<SourceFieldLocation>.Empty;
 			foreach (var sourceLocation in sourceLocations.Sort((x, y) => x.SourceIndex.CompareTo(y.SourceIndex)))
 			{
 				// If the current sourceLocation overlaps with the previous one (or adjoins it) then they should be combined together (if there

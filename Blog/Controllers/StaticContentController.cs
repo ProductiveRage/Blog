@@ -1,25 +1,14 @@
-﻿using System;
-using System.Web.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+
 namespace Blog.Controllers
 {
-	public class StaticContentController : AbstractErrorLoggingController
+    public class StaticContentController : Controller
 	{
-		public ActionResult About()
-		{
-			return View();
-		}
+		public IActionResult About() => View();
 
-		public ActionResult ComingSoon()
-		{
-			return View("ComingSoon");
-		}
+		public IActionResult ErrorPage() => View("Error");
 
-		public ActionResult ErrorPage()
-		{
-			return View("Error");
-		}
-
-		public ActionResult ErrorPage404()
+		public IActionResult ErrorPage404()
 		{
 			HttpContext.Response.StatusCode = 404;
 			return ErrorPage();

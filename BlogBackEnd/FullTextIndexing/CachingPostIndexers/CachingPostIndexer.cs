@@ -4,7 +4,7 @@ using FullTextIndexer.Common.Lists;
 
 namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 {
-	public class CachingPostIndexer :  IPostIndexer
+    public class CachingPostIndexer :  IPostIndexer
 	{
 		private IPostIndexCache _cache;
 		private IPostIndexer _postIndexer;

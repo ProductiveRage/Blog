@@ -1,79 +1,70 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web.Mvc;
-using Blog.Helpers.Timing;
+using System.Threading.Tasks;
 using Blog.Models;
 using BlogBackEnd.Caching;
 using BlogBackEnd.Models;
 using FullTextIndexer.Common.Lists;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.Controllers
 {
-	public class ViewPostController : AbstractErrorLoggingController
+    public class ViewPostController : Controller
 	{
 		private readonly IPostRepository _postRepository;
-		private readonly string _optionalCanonicalLinkBase, _optionalGoogleAnalyticsId, _optionalDisqusShortName, _optionalTwitterUserName, _optionalTwitterImage;
+		private readonly SiteConfiguration _siteConfiguration;
 		private readonly ICache _postContentCache;
-		public ViewPostController(
-			IPostRepository postRepository,
-			string optionalCanonicalLinkBase,
-			string optionalGoogleAnalyticsId,
-			string optionalDisqusShortName,
-			string optionalTwitterUserName,
-			string optionalTwitterImage,
-			ICache postContentCache)
+		public ViewPostController(IPostRepository postRepository, SiteConfiguration siteConfiguration, ICache postContentCache)
 		{
 			if (postRepository == null)
 				throw new ArgumentNullException("postRepository");
+			if (siteConfiguration == null)
+				throw new ArgumentNullException("siteConfiguration");
 			if (postContentCache == null)
 				throw new ArgumentNullException("postContentCache");
 
 			_postRepository = postRepository;
-			_optionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
-			_optionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
-			_optionalDisqusShortName = string.IsNullOrWhiteSpace(optionalDisqusShortName) ? null : optionalDisqusShortName.Trim();
-			_optionalTwitterUserName = string.IsNullOrWhiteSpace(optionalTwitterUserName) ? null : optionalTwitterUserName.Trim();
-			_optionalTwitterImage = string.IsNullOrWhiteSpace(optionalTwitterImage) ? null : optionalTwitterImage.Trim();
+			_siteConfiguration = siteConfiguration;
+			if (IsLocalHost())
+				_siteConfiguration = _siteConfiguration.RemoveGoogleAnalyticsId();
 			_postContentCache = postContentCache;
 		}
 
-		[Stopwatch]
-		public ActionResult ArchiveById(int? id)
+		public async Task<IActionResult> ArchiveById(int? id)
 		{
 			if (id == null)
-				return new HttpNotFoundResult();
+				return NotFound();
 
-			var post = _postRepository.GetByIds(new[] { id.Value }.ToImmutableList()).FirstOrDefault();
+			var post = (await _postRepository.GetByIds(new ImmutableList<int>(id.Value))).FirstOrDefault();
 			if (post == null)
-				return new HttpNotFoundResult();
+				return NotFound();
 
 			return RedirectToActionPermanent(
 				"ArchiveBySlug",
-				new { Slug = post.Slug }
+				new { post.Slug }
 			);
 		}
 
-		[Stopwatch]
-		public ActionResult ArchiveBySlug(string slug)
+		public async Task<IActionResult> ArchiveBySlug(string slug)
 		{
 			if (string.IsNullOrWhiteSpace(slug))
-				return new HttpNotFoundResult();
+				return NotFound();
 
-			var postMatch = _postRepository.GetBySlug(slug);
+			var postMatch = await _postRepository.GetBySlug(slug);
 			if (postMatch == null)
-				return new HttpNotFoundResult();
+				return NotFound();
 
 			if (postMatch.PostMatchType == PostMatchDetails.PostMatchTypeOptions.Alias)
 			{
 				return RedirectToActionPermanent(
 					"ArchiveBySlug",
-					new { Slug = postMatch.Post.Slug }
+					new { postMatch.Post.Slug }
 				);
 			}
 
 			TwitterCardDetails twitterCardDetails;
-			if ((_optionalTwitterUserName == null) || (_optionalTwitterImage == null))
+			if ((_siteConfiguration.OptionalTwitterUserName == null) || (_siteConfiguration.OptionalTwitterImage == null))
 				twitterCardDetails = null;
 			else
 			{
@@ -90,23 +81,23 @@ namespace Blog.Controllers
 					else if (description == "")
 						description = "No preview content available";
 				}
-				twitterCardDetails = new TwitterCardDetails(_optionalTwitterUserName, postMatch.Post.Title, _optionalTwitterImage, description);
+				twitterCardDetails = new TwitterCardDetails(_siteConfiguration.OptionalTwitterUserName, postMatch.Post.Title, _siteConfiguration.OptionalTwitterImage, description);
 			}
 
 			return View(
 				"Index",
 				new PostListModel(
 					postMatch.Post.Title,
-					GetPostsWithRelatedPostStubs(new[] { postMatch.Post }),
+					await GetPostsWithRelatedPostStubs(new[] { postMatch.Post }),
 					postMatch.PreviousPostIfAny,
 					postMatch.NextPostIfAny,
-					_postRepository.GetMostRecentStubs(5),
-					_postRepository.GetStubs(null, null, true),
-					_postRepository.GetArchiveLinks(),
+					await _postRepository.GetMostRecentStubs(5),
+					await _postRepository.GetStubs(null, null, true),
+					await _postRepository.GetArchiveLinks(),
 					PostListDisplayOptions.SinglePost,
-					_optionalCanonicalLinkBase,
-					_optionalGoogleAnalyticsId,
-					_optionalDisqusShortName,
+					_siteConfiguration.OptionalCanonicalLinkBase,
+					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.OptionalDisqusShortName,
 					twitterCardDetails,
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
@@ -114,30 +105,29 @@ namespace Blog.Controllers
 			);
 		}
 
-		[Stopwatch]
-		public ActionResult ArchiveByTag(string tag)
+		public async Task<IActionResult> ArchiveByTag(string tag)
 		{
 			if (string.IsNullOrWhiteSpace(tag))
-				return new HttpNotFoundResult();
+				return NotFound();
 
-			var postsToDisplay = _postRepository.GetByTag(tag);
+			var postsToDisplay = await _postRepository.GetByTag(tag);
 			if (!postsToDisplay.Any())
-				return new HttpNotFoundResult();
+				return NotFound();
 
 			return View(
 				"Index",
 				new PostListModel(
 					tag.Trim(),
-					GetPostsWithRelatedPostStubs(postsToDisplay),
+					await GetPostsWithRelatedPostStubs(postsToDisplay),
 					null, // previousPostIfAny,
 					null, // nextPostIfAny
-					_postRepository.GetMostRecentStubs(5),
-					_postRepository.GetStubs(null, null, true),
-					_postRepository.GetArchiveLinks(),
+					await _postRepository.GetMostRecentStubs(5),
+					await _postRepository.GetStubs(null, null, true),
+					await _postRepository.GetArchiveLinks(),
 					PostListDisplayOptions.ArchiveByTag,
-					_optionalCanonicalLinkBase,
-					_optionalGoogleAnalyticsId,
-					_optionalDisqusShortName,
+					_siteConfiguration.OptionalCanonicalLinkBase,
+					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.OptionalDisqusShortName,
 					null, // optionalTwitterCardDetails
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
@@ -145,32 +135,31 @@ namespace Blog.Controllers
 			);
 		}
 
-		[Stopwatch]
-		public ActionResult ArchiveByMonth(int? month, int? year)
+		public async Task<IActionResult> ArchiveByMonth(int? month, int? year)
 		{
-			var valid = ((month != null) && (month.Value >= 1) && (month.Value <= 12) && (year != null));
+			var valid = (month != null) && (month.Value >= 1) && (month.Value <= 12) && (year != null);
 			if (!valid)
-				return new HttpNotFoundResult();
+				return NotFound();
 
 			var startDate = new DateTime(year.Value, month.Value, 1);
-			var posts = _postRepository.GetByDateRange(startDate, startDate.AddMonths(1));
-			if (posts.Count() == 0)
-				return new HttpNotFoundResult();
+			var posts = await _postRepository.GetByDateRange(startDate, startDate.AddMonths(1));
+			if (!posts.Any())
+				return NotFound();
 
 			return View(
 				"Index",
 				new PostListModel(
 					new DateTime(year.Value, month.Value, 1).ToString("MMMM yyyy"),
-					GetPostsWithRelatedPostStubs(posts),
+					await GetPostsWithRelatedPostStubs(posts),
 					null, // previousPostIfAny,
 					null, // nextPostIfAny
-					_postRepository.GetMostRecentStubs(5),
-					_postRepository.GetStubs(null, null, true),
-					_postRepository.GetArchiveLinks(),
+					await _postRepository.GetMostRecentStubs(5),
+					await _postRepository.GetStubs(null, null, true),
+					await _postRepository.GetArchiveLinks(),
 					PostListDisplayOptions.ArchiveByMonth,
-					_optionalCanonicalLinkBase,
-					_optionalGoogleAnalyticsId,
-					_optionalDisqusShortName,
+					_siteConfiguration.OptionalCanonicalLinkBase,
+					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.OptionalDisqusShortName,
 					null, // optionalTwitterCardDetails
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
@@ -178,12 +167,11 @@ namespace Blog.Controllers
 			);
 		}
 
-		[Stopwatch]
-		public ActionResult ArchiveByTitle()
+		public async Task<IActionResult> ArchiveByTitle()
 		{
-			var posts = _postRepository.GetAll();
-			if (posts.Count() == 0)
-				return new HttpNotFoundResult();
+			var posts = await _postRepository.GetAll();
+			if (!posts.Any())
+				return NotFound();
 
 			return View(
 				"PostsByTitle",
@@ -199,37 +187,47 @@ namespace Blog.Controllers
 							post.Title,
 							post.IsHighlight,
 							post.MarkdownContent,
-							new NonNullImmutableList<PostStub>(),
+							NonNullImmutableList<PostStub>.Empty,
 							post.Tags
 						))
 						.OrderByDescending(post => post.Posted)
 						.ToNonNullImmutableList(),
-					null, // previousPostIfAny,
-					null, // nextPostIfAny
-					_postRepository.GetMostRecentStubs(5),
-					_postRepository.GetStubs(null, null, true),
-					_postRepository.GetArchiveLinks(),
+					previousPostIfAny: null,
+					nextPostIfAny: null,
+					await _postRepository.GetMostRecentStubs(5),
+					await _postRepository.GetStubs(null, null, true),
+					await _postRepository.GetArchiveLinks(),
 					PostListDisplayOptions.ArchiveByEveryTitle,
-					_optionalCanonicalLinkBase,
-					_optionalGoogleAnalyticsId,
-					_optionalDisqusShortName,
-					null, // optionalTwitterCardDetails
+					_siteConfiguration.OptionalCanonicalLinkBase,
+					_siteConfiguration.OptionalGoogleAnalyticsId,
+					_siteConfiguration.OptionalDisqusShortName,
+					optionalTwitterCardDetails: null,
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
 				)
 			);
 		}
 
-		[Stopwatch]
-		public ActionResult ArchiveByMonthMostRecent()
+		public async Task<IActionResult> ArchiveByMonthMostRecent()
 		{
-			var mostRecentPostDate = _postRepository.GetMaxPostDate();
+			var mostRecentPostDate = await _postRepository.GetMaxPostDate();
 			if (mostRecentPostDate == null)
-				return new HttpNotFoundResult();
-			return ArchiveByMonth(mostRecentPostDate.Value.Month, mostRecentPostDate.Value.Year);
+				return NotFound();
+			return await ArchiveByMonth(mostRecentPostDate.Value.Month, mostRecentPostDate.Value.Year);
 		}
 
-		private PostWithRelatedPostStubs GetPostWithRelatedPostStubs(Post post)
+		private bool IsLocalHost()
+		{
+#if !DEBUG
+				return false; // Return false so that the real analytics username is inserted into the content when in release mode, for publishing to GitHub Pages
+#else
+			if (Request == null)
+				return false;
+			return "localhost".Equals(Request.Host.Host, StringComparison.OrdinalIgnoreCase);
+#endif
+		}
+
+		private async Task<PostWithRelatedPostStubs> GetPostWithRelatedPostStubs(Post post)
 		{
 			if (post == null)
 				throw new ArgumentNullException("post");
@@ -243,17 +241,17 @@ namespace Blog.Controllers
 				post.Title,
 				post.IsHighlight,
 				post.MarkdownContent,
-				_postRepository.GetByIds(post.RelatedPosts).Cast<PostStub>().ToNonNullImmutableList(),
+				(await _postRepository.GetByIds(post.RelatedPosts)).Cast<PostStub>().ToNonNullImmutableList(),
 				post.Tags
 			);
 		}
 
-		private NonNullImmutableList<PostWithRelatedPostStubs> GetPostsWithRelatedPostStubs(IEnumerable<Post> posts)
+		private async Task<NonNullImmutableList<PostWithRelatedPostStubs>> GetPostsWithRelatedPostStubs(IEnumerable<Post> posts)
 		{
 			if (posts == null)
 				throw new ArgumentNullException("posts");
 
-			return posts.Select(p => GetPostWithRelatedPostStubs(p)).ToNonNullImmutableList();
+			return (await Task.WhenAll(posts.Select(p => GetPostWithRelatedPostStubs(p)))).ToNonNullImmutableList();
 		}
 
 		private class PostSlugRetriever : IRetrievePostSlugs
@@ -270,9 +268,9 @@ namespace Blog.Controllers
 			/// <summary>
 			/// This will never return null or blank, it will raise an exception if the id is invalid or if otherwise unable to satisfy the request
 			/// </summary>
-			public string GetSlug(int postId)
+			public async Task<string> GetSlug(int postId)
 			{
-				var post = _postRepository.GetByIds(new[] { postId }.ToImmutableList()).FirstOrDefault(p => p.Id == postId);
+				var post = (await _postRepository.GetByIds(new ImmutableList<int>(postId))).FirstOrDefault(p => p.Id == postId);
 				if (post == null)
 					throw new ArgumentException("Invalid postId: " + postId);
 				return post.Slug;

@@ -27,7 +27,7 @@ namespace Blog.Models
 				title,
 				isHighlight,
 				markdownContent,
-				(relatedPosts ?? new NonNullImmutableList<PostStub>()).Select(p => p.Id).ToImmutableList(),
+				(relatedPosts ?? NonNullImmutableList<PostStub>.Empty).Select(p => p.Id).ToImmutableList(),
 				tags)
 		{
 			if (relatedPosts == null)

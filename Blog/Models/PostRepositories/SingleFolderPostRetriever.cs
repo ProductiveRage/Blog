@@ -2,36 +2,39 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using BlogBackEnd.Models;
 using FullTextIndexer.Common.Lists;
 using FullTextIndexer.Core.Indexes.TernarySearchTree;
+using Microsoft.Extensions.FileProviders;
 
 namespace Blog.Models
 {
-	public class SingleFolderPostRetriever : ISingleFolderPostRetriever
+    public class SingleFolderPostRetriever : ISingleFolderPostRetriever
 	{
-		private DirectoryInfo _folder;
-		public SingleFolderPostRetriever(DirectoryInfo folder)
+		private readonly IDirectoryContents _folder;
+		public SingleFolderPostRetriever(IDirectoryContents folder)
 		{
 			if (folder == null)
 				throw new ArgumentNullException("folder");
+			
 			_folder = folder;
 		}
 
 		/// <summary>
 		/// This will never return null nor contain any null entries
 		/// </summary>
-		public NonNullImmutableList<Post> Get()
+		public async Task<NonNullImmutableList<Post>> Get()
 		{
 			// The redirects set contains tuples From, To slugs (blank lines and those starting with a "#" are ignored, as are any that don't have any whitespace)
 			const string redirectsFilename = "Redirects.txt";
-			var redirectsFile = _folder.GetFiles(redirectsFilename).FirstOrDefault();
+			var redirectsFile = _folder.FirstOrDefault(file => file.Name.Equals(redirectsFilename, StringComparison.OrdinalIgnoreCase));
 			IEnumerable<Tuple<string, string>> redirects;
 			if (redirectsFile == null)
 				redirects = new List<Tuple<string, string>>();
 			else
 			{
-				redirects = readFileContents(redirectsFile)
+				redirects = (await readFileContents(redirectsFile))
 					.Replace("\r\n", "\n")
 					.Replace("\r", "\n")
 					.Split('\n')
@@ -44,13 +47,13 @@ namespace Blog.Models
 
 			// The relatedPostRelationships set contains tuples of Post Id to Ids of related Posts (in the order that they should appear)
 			const string relatedPostsFilename = "RelatedPosts.txt";
-			var relatedPostsFile = _folder.GetFiles(relatedPostsFilename).FirstOrDefault();
+			var relatedPostsFile = _folder.FirstOrDefault(file => file.Name.Equals(relatedPostsFilename, StringComparison.OrdinalIgnoreCase));
 			IEnumerable<Tuple<int, ImmutableList<int>>> relatedPostRelationships;
 			if (relatedPostsFile == null)
 				relatedPostRelationships = new List<Tuple<int, ImmutableList<int>>>();
 			else
 			{
-				relatedPostRelationships = readFileContents(relatedPostsFile)
+				relatedPostRelationships = (await readFileContents(relatedPostsFile))
 					.Replace("\r\n", "\n")
 					.Replace("\r", "\n")
 					.Split('\n')
@@ -78,9 +81,9 @@ namespace Blog.Models
 
 			// We can use this functionality from the FullTextIndexer to generate the Post slug (it will replace accented characters, normalise whitespace,
 			// remove punctuation and lower case the content - all we need to do then is replace spaces with hypens)
-			var stringNormaliser = new DefaultStringNormaliser();
+			var stringNormaliser = DefaultStringNormaliser.Instance;
 			var posts = new List<Post>();
-			foreach (var file in _folder.EnumerateFiles("*.txt", SearchOption.TopDirectoryOnly))
+			foreach (var file in _folder.Where(file => file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)))
 			{
 				if (file.Name.Equals(redirectsFilename, StringComparison.InvariantCultureIgnoreCase))
 					continue;
@@ -88,7 +91,7 @@ namespace Blog.Models
 				var fileSummary = tryToGetFileSummaryEntry(file.Name);
 				if (fileSummary != null)
 				{
-					var fileContents = readFileContents(file);
+					var fileContents = await readFileContents(file);
 					var title = tryToGetTitle(fileContents);
 					if (title != null)
 					{
@@ -106,7 +109,7 @@ namespace Blog.Models
 						posts.Add(new Post(
 							fileSummary.Id,
 							fileSummary.PostDate,
-							file.LastWriteTime,
+							file.LastModified.DateTime,
 							slug,
 							redirectsForPost,
 							title,
@@ -142,16 +145,15 @@ namespace Blog.Models
 			));
 		}
 
-		private string readFileContents(FileInfo file)
+		private async Task<string> readFileContents(IFileInfo file)
 		{
 			if (file == null)
 				throw new ArgumentNullException("file");
 
-			using (var stm = file.OpenText())
-			{
-				return stm.ReadToEnd();
-			}
-		}
+            using var stm = file.CreateReadStream();
+			using var reader = new StreamReader(stm);
+            return await reader.ReadToEndAsync();
+        }
 
 		private string tryToGetTitle(string fileContents)
 		{
@@ -162,12 +164,9 @@ namespace Blog.Models
 			if (fileContents == "")
 				return null;
 
-			var breakPoint = fileContents.IndexOf("\n");
+			var breakPoint = fileContents.IndexOfAny(new[] { '\r', '\n' });
 			if (breakPoint != -1)
-				fileContents = fileContents.Substring(0, breakPoint - 1).Trim();
-
-			while (fileContents.StartsWith("#"))
-				fileContents = fileContents.Substring(1);
+				fileContents = fileContents.Substring(0, breakPoint).Trim().TrimStart('#').Trim();
 
 			return fileContents;
 		}

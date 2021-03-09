@@ -2,12 +2,11 @@
 using System.Linq;
 using System.Text;
 using System.Web;
-using HeyRed.MarkdownSharp;
 using HtmlAgilityPack;
 
 namespace BlogBackEnd.Models
 {
-	public static class Post_Extensions
+    public static class Post_Extensions
 	{
 		/// <summary>
 		/// This will transform the MarkdownContent into html and then transform it down to plain text. Any html-encoded content will no longer be html-encoded; it
@@ -22,7 +21,7 @@ namespace BlogBackEnd.Models
 
 			var doc = new HtmlDocument();
 			doc.LoadHtml(
-				(new Markdown()).Transform(source.MarkdownContent)
+				MarkdownTransformations.ToHtml(source.MarkdownContent)
 			);
 			var segments = doc.DocumentNode.DescendantNodesAndSelf()
 				.Where(node => node.NodeType == HtmlNodeType.Text)
@@ -56,6 +55,8 @@ namespace BlogBackEnd.Models
 			return content;
 		}
 
+		private static readonly char[] _allWhitespaceCharacters = Enumerable.Range(char.MinValue, char.MaxValue).Select(value => (char)value).Where(char.IsWhiteSpace).ToArray();
+
 		/// <summary>
 		/// Try to return plain text from the first paragraph element that exists in a Post's MarkdownContent. The length may optionally be limited (if the content
 		/// must be reduced to meet this requirement then ellipses characters will be appended to the end). If there is no paragraph element (as a direct child node
@@ -71,7 +72,7 @@ namespace BlogBackEnd.Models
 
 			var doc = new HtmlDocument();
 			doc.LoadHtml(
-				(new Markdown()).Transform(source.MarkdownContent)
+				MarkdownTransformations.ToHtml(source.MarkdownContent)
 			);
 			var firstParagraph = doc.DocumentNode.ChildNodes.FindFirst("p");
 			if (firstParagraph == null)
@@ -89,7 +90,5 @@ namespace BlogBackEnd.Models
 				return text.Substring(0, whiteSpaceBreak) + "..";
 			return text.Substring(0, maxLength - 2) + "..";
 		}
-
-		private static readonly char[] _allWhitespaceCharacters = Enumerable.Range(char.MinValue, char.MaxValue).Select(value => (char)value).Where(char.IsWhiteSpace).ToArray();
 	}
 }

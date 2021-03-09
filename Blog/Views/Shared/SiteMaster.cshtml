@@ -1,4 +1,5 @@
-﻿@using System.Web.Script.Serialization;
+﻿@using System.Text.Json
+@using Microsoft.AspNetCore.Html 
 @model Blog.Models.ICommonSiteConfigModel
 @{
 	Layout = null;
@@ -21,16 +22,16 @@
 }
 @if ((Model != null) && (Model.OptionalCanonicalLinkBase != null) && !Model.MarkPageAsFollowNoIndex)
 {
-	<link rel="canonical" href="@Html.AttributeEncode(Model.OptionalCanonicalLinkBase + Request.Url.PathAndQuery)" />
+	<link rel="canonical" href="@Html.Encode(Model.OptionalCanonicalLinkBase + Context.Request.Path + Context.Request.QueryString.Value)" />
 }
 	<link rel="shortcut icon" href="/favicon.ico" />
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-	<link rel="alternate" type="application/rss+xml" title="RSS" href="@Url.Action("Feed", "RSS", null, Request.Url.Scheme)" />
+	<link rel="alternate" type="application/rss+xml" title="RSS" href="@Url.Action("Feed", "RSS", null, Context.Request.Scheme)" />
 @if ((Model != null) && (Model.OptionalGoogleAnalyticsId != null))
 {
 	<script type="text/javascript">
 		var _gaq = _gaq || [];
-		_gaq.push(['_setAccount', @(new HtmlString(new JavaScriptSerializer().Serialize(Model.OptionalGoogleAnalyticsId)))]);
+		_gaq.push(['_setAccount', @(new HtmlString(JsonSerializer.Serialize(Model.OptionalGoogleAnalyticsId)))]);
 		_gaq.push(['_setSiteSpeedSampleRate', 100]);
 		_gaq.push(['_trackPageview']);
 		(function () {

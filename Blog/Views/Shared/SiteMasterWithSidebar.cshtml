@@ -1,5 +1,5 @@
 ﻿@model Blog.Models.ISideBarContentModel
-@using Blog.Helpers.Sidebar;
+@using Blog.Helpers;
 @{
 	Layout = "~/Views/Shared/SiteMaster.cshtml";
 }
@@ -17,16 +17,14 @@
 					<p>In the last few minutes he seems to have taken to referring to himself in the third person. He's quite enjoying it.</p>
 					<p><a href="mailto:dangger36@gmail.com" class="Email">dangger36@@gmail.com</a></p>
 					@{
-						//<%: Html.ActionLink("Read More", "About", "StaticContent") %>
+						//<%: Html.RenderedActionLink("Read More", "About", "StaticContent") %>
 					}
 				</div>
 				<div class="Search">
 					@using (Html.BeginForm("Search", "Search", FormMethod.Get))
 					{
 						<div>
-							<input type="text" class="SiteSearch" name="term" value="@Html.Raw(((Model is Blog.Models.SearchResultsModel)
-																					? Html.AttributeEncode(  ((Blog.Models.SearchResultsModel)Model).SearchTerm )
-																					: ""))" />
+							<input type="text" class="SiteSearch" name="term" value="@Html.Raw(((Model is Blog.Models.SearchResultsModel) ? Html.Encode(((Blog.Models.SearchResultsModel)Model).SearchTerm) : ""))" />
 							<input type="submit" class="SiteSearchSubmit" value="Search" />
 						</div>
 					}

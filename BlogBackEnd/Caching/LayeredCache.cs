@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace BlogBackEnd.Caching
 {
-	public sealed class LayeredCache : ICache
+    public sealed class LayeredCache : ICache
 	{
 		private readonly IEnumerable<ICache> _caches;
 		public LayeredCache(params ICache[] caches)
@@ -65,12 +65,6 @@ namespace BlogBackEnd.Caching
 			
 			foreach (var cache in _caches)
 				cache.Remove(key);
-		}
-
-		public void RemoveAll()
-		{
-			foreach (var cache in _caches)
-				cache.RemoveAll();
 		}
 	}
 }

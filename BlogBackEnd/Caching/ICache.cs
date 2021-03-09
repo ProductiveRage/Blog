@@ -1,6 +1,6 @@
 ﻿namespace BlogBackEnd.Caching
 {
-	public interface ICache
+    public interface ICache
 	{
 		/// <summary>
 		/// The getter will return null if there is no cached data matching the specified key. The setter will only write the data if the key is not already present in the data
@@ -14,7 +14,5 @@
 		/// This will do nothing if the key is not present in the cache. It will throw an exception for an null or empty key.
 		/// </summary>
 		void Remove(string key);
-
-		void RemoveAll();
 	}
 }

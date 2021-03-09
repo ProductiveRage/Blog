@@ -1,100 +1,107 @@
 ﻿@model Blog.Models.PostListModel
-@using Blog.Helpers.Posts;
-@using System.Linq;
+@using Blog.Helpers;
+@using System.Text.Json;
 
 @{
-	ViewBag.Title = Model.Title;
-	Layout = "~/Views/Shared/SiteMasterWithSidebar.cshtml";
+    ViewBag.Title = Model.Title;
+    Layout = "~/Views/Shared/SiteMasterWithSidebar.cshtml";
 }
 
 @if (Model.Posts.Any())
 {
-	if (Model.OptionalDisqusShortName != null)
-	{
-		<script type="text/javascript">
-					var disqus_shortname = "@Html.Raw(HttpUtility.JavaScriptStringEncode(Model.OptionalDisqusShortName))";
-					function executeWhen(fncAction, fncConditional, intDelayBetweenRetries) {
-						if (fncConditional()) { fncAction(); return; }
-						setTimeout(function () { executeWhen(fncAction, fncConditional, intDelayBetweenRetries); }, intDelayBetweenRetries);
-					}
-					function whenjQueryIsAvailable(fncAction) {
-					    executeWhen(
-							fncAction,
-							function () { return (typeof ($) !== "undefined") },
-							10
-						);
-					}
-					(function () {
-					    whenjQueryIsAvailable(
-							function () { $("div.Content p.Comments").show(); }
-						);
-					}());
-		</script>
-	}
+    if (!string.IsNullOrWhiteSpace(Model.OptionalDisqusShortName))
+    {
+        <script type="text/javascript">
+			var disqus_shortname = @Html.Raw(JsonSerializer.Serialize(Model.OptionalDisqusShortName));
+			function executeWhen(fncAction, fncConditional, intDelayBetweenRetries) {
+				if (fncConditional()) { fncAction(); return; }
+				setTimeout(function () { executeWhen(fncAction, fncConditional, intDelayBetweenRetries); }, intDelayBetweenRetries);
+			}
+			function whenjQueryIsAvailable(fncAction) {
+				executeWhen(
+					fncAction,
+					function () { return (typeof ($) !== "undefined") },
+					10
+				);
+			}
+			(function () {
+				whenjQueryIsAvailable(
+					function () { $("div.Content p.Comments").show(); }
+				);
+			}());
+        </script>
+    }
 }
 
 @foreach (var post in Model.Posts)
 {
-	<div class="Content @Model.PostListDisplay">
-		@Html.RenderPost(post, Model.PreviousPostIfAny, Model.NextPostIfAny, Model.PostSlugRetriever, Model.PostContentCache)
-		@if (Model.PostListDisplay == Blog.Models.PostListDisplayOptions.SinglePost)
-		{
-			<div id="disqus_thread"></div>
-						<script type="text/javascript">
-							var disqus_identifier = "@post.Id";
-							var disqus_title = "@Html.Raw(HttpUtility.JavaScriptStringEncode(post.Title.Trim()))";
-							(function () {
-							    whenjQueryIsAvailable(
-									function () {
-									    $(function () {
-											loadCommentsIfHalfwayDownAndNotAlreadyLoaded();
-											$(window).scroll(loadCommentsIfHalfwayDownAndNotAlreadyLoaded);
-										});
-									}
-								);
+    <div class="Content @Model.PostListDisplay">
+        @await Html.RenderPost(post, Model.PreviousPostIfAny, Model.NextPostIfAny, Model.PostSlugRetriever, Model.PostContentCache)
+        @if (Model.PostListDisplay == Blog.Models.PostListDisplayOptions.SinglePost)
+        {
+            @if (!string.IsNullOrWhiteSpace(Model.OptionalDisqusShortName))
+            {
+                <div id="disqus_thread"></div>
+                <script type="text/javascript">
+					var disqus_identifier = "@post.Id";
+					var disqus_title = @Html.Raw(JsonSerializer.Serialize(post.Title.Trim()));
+					(function () {
+						whenjQueryIsAvailable(
+							function () {
+								$(function () {
+									loadCommentsIfHalfwayDownAndNotAlreadyLoaded();
+									$(window).scroll(loadCommentsIfHalfwayDownAndNotAlreadyLoaded);
+								});
+							}
+						);
 
-								var bStartedLoadingComments = false;
-								function loadCommentsIfHalfwayDownAndNotAlreadyLoaded() {
-								    if (bStartedLoadingComments) {
-								        return;
-								    }
-								    var $post = $("div.Content.SinglePost");
-								    var bottomOfPost = $post.position().top + $post.height();
-								    var $window = $(window);
-								    if (($window.scrollTop() + $window.height()) >= (bottomOfPost / 2)) {
-										bStartedLoadingComments = true;
-										loadComments();
-									}
-								}
+						var bStartedLoadingComments = false;
+						function loadCommentsIfHalfwayDownAndNotAlreadyLoaded() {
+							if (bStartedLoadingComments) {
+								return;
+							}
+							var $post = $("div.Content.SinglePost");
+							var bottomOfPost = $post.position().top + $post.height();
+							var $window = $(window);
+							if (($window.scrollTop() + $window.height()) >= (bottomOfPost / 2)) {
+								bStartedLoadingComments = true;
+								loadComments();
+							}
+						}
 
-								function loadComments() {
-								    var dsq = document.createElement("script");
-									dsq.type = "text/javascript";
-									dsq.async = true;
-									dsq.src = "https://" + disqus_shortname + ".disqus.com/embed.js";
-									(document.getElementsByTagName("head")[0] || document.getElementsByTagName("body")[0]).appendChild(dsq);
-								}
-							}());
-						</script>
-		}
-		else
-		{
-			<p class="Comments">
-				<a href="/@post.Slug#disqus_thread" data-disqus-identifier="@post.Id">Comments</a>
-			</p>
-		}
-	</div>
+						function loadComments() {
+							var dsq = document.createElement("script");
+							dsq.type = "text/javascript";
+							dsq.async = true;
+							dsq.src = "https://" + disqus_shortname + ".disqus.com/embed.js";
+							(document.getElementsByTagName("head")[0] || document.getElementsByTagName("body")[0]).appendChild(dsq);
+						}
+					}());
+                </script>
+            }
+        }
+
+        else
+        {
+            <p class="Comments">
+                <a href="/@post.Slug#disqus_thread" data-disqus-identifier="@post.Id">Comments</a>
+            </p>
+        }
+    </div>
 }
 
 @if (Model.PostListDisplay != Blog.Models.PostListDisplayOptions.SinglePost)
 {
-	<script type="text/javascript">
-					(function () {
-						var s = document.createElement("script");
-						s.type = "text/javascript";
-						s.async = true;
-						s.src = "https://" + disqus_shortname + ".disqus.com/count.js";
-						(document.getElementsByTagName("HEAD")[0] || document.getElementsByTagName("BODY")[0]).appendChild(s);
-					} ());
-	</script>
+    @if (!string.IsNullOrWhiteSpace(Model.OptionalDisqusShortName))
+    {
+        <script type="text/javascript">
+            (function () {
+                var s = document.createElement("script");
+                s.type = "text/javascript";
+                s.async = true;
+                s.src = "https://" + disqus_shortname + ".disqus.com/count.js";
+                (document.getElementsByTagName("HEAD")[0] || document.getElementsByTagName("BODY")[0]).appendChild(s);
+            }());
+        </script>
+    }
 }

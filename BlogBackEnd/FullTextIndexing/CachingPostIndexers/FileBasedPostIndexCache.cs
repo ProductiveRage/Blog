@@ -5,9 +5,9 @@ using System.Runtime.Serialization.Formatters.Binary;
 
 namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 {
-	public class FileBasedPostIndexCache : IPostIndexCache
+    public class FileBasedPostIndexCache : IPostIndexCache
 	{
-		private FileInfo _dataFile;
+		private readonly FileInfo _dataFile;
 		public FileBasedPostIndexCache(FileInfo dataFile)
 		{
 			if (dataFile == null)
@@ -27,14 +27,10 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 				if (!_dataFile.Exists)
 					return null;
 
-				using (var stream = File.Open(_dataFile.FullName, FileMode.Open, FileAccess.Read, FileShare.Read))
-				{
-					using (var decompressedStream = new GZipStream(stream, CompressionMode.Decompress))
-					{
-						return new BinaryFormatter().Deserialize(decompressedStream) as CachedPostIndexContent;
-					}
-				}
-			}
+                using var stream = File.Open(_dataFile.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var decompressedStream = new GZipStream(stream, CompressionMode.Decompress);
+                return new BinaryFormatter().Deserialize(decompressedStream) as CachedPostIndexContent;
+            }
 			catch
 			{
 				// Ignore any errors - if access is denied then there's nothing we can do, just return null
@@ -52,19 +48,15 @@ namespace BlogBackEnd.FullTextIndexing.CachingPostIndexers
 
 			try
 			{
-				using (var memoryStream = new MemoryStream())
-				{
-					using (var compressedStream = new GZipStream(memoryStream, CompressionMode.Compress))
-					{
-						new BinaryFormatter().Serialize(compressedStream, data);
-					}
-					var serialisedData = memoryStream.ToArray();
-					using (var fileStream = File.Open(_dataFile.FullName, FileMode.Create))
-					{
-						fileStream.Write(serialisedData, 0, serialisedData.Length);
-					}
-				}
-			}
+                using var memoryStream = new MemoryStream();
+                using (var compressedStream = new GZipStream(memoryStream, CompressionMode.Compress))
+                {
+                    new BinaryFormatter().Serialize(compressedStream, data);
+                }
+                var serialisedData = memoryStream.ToArray();
+                using var fileStream = File.Open(_dataFile.FullName, FileMode.Create);
+                fileStream.Write(serialisedData, 0, serialisedData.Length);
+            }
 			catch
 			{
 				// Ignore any errors - if access is denied then there's nothing we can do, just push on

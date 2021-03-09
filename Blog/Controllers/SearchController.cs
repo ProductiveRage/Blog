@@ -1,51 +1,50 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web.Mvc;
-using Blog.Helpers.Timing;
+using System.Threading.Tasks;
 using Blog.Models;
 using BlogBackEnd.Caching;
 using BlogBackEnd.FullTextIndexing;
 using FullTextIndexer.Common.Lists;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.Controllers
 {
-	public class SearchController : AbstractContentDeliveringController
+    public class SearchController : AbstractContentDeliveringController
     {
 		private readonly IPostRepository _postRepository;
 		private readonly IPostIndexer _postIndexer;
-		private readonly string _optionalCanonicalLinkBase, _optionalGoogleAnalyticsId;
+		private readonly SiteConfiguration _siteConfiguration;
 		private readonly ICache _postContentCache;
-		public SearchController(IPostRepository postRepository, IPostIndexer postIndexer, string optionalCanonicalLinkBase, string optionalGoogleAnalyticsId, ICache postContentCache)
+		public SearchController(IPostRepository postRepository, IPostIndexer postIndexer, SiteConfiguration siteConfiguration, ICache postContentCache)
 		{
 			if (postRepository == null)
 				throw new ArgumentNullException("postRepository");
 			if (postIndexer == null)
 				throw new ArgumentNullException("postIndexer");
+			if (siteConfiguration == null)
+				throw new ArgumentNullException("siteConfiguration");
 			if (postContentCache == null)
 				throw new ArgumentNullException("postContentCache");
 
 			_postRepository = postRepository;
 			_postIndexer = postIndexer;
-			_optionalGoogleAnalyticsId = string.IsNullOrWhiteSpace(optionalGoogleAnalyticsId) ? null : optionalGoogleAnalyticsId.Trim();
-			_optionalCanonicalLinkBase = string.IsNullOrWhiteSpace(optionalCanonicalLinkBase) ? null : optionalCanonicalLinkBase.Trim();
+			_siteConfiguration = siteConfiguration;
 			_postContentCache = postContentCache;
 		}
 
-		[ValidateInput(false)]
-		[Stopwatch]
-		public ActionResult Search(string term)
+		public async Task<IActionResult> Search(string term)
 		{
 			term = (term ?? "").Trim();
 
 			IEnumerable<SearchResult> results;
 			if (term == "")
-				results = new SearchResult[0];
+				results = Array.Empty<SearchResult>();
 			else
 			{
-				var allPosts = _postRepository.GetAll();
+				var allPosts = await _postRepository.GetAll();
 				results = _postIndexer.GenerateIndexContent(allPosts).Search(term).Select(
-					m => new SearchResult(allPosts.First(p => p.Id == m.Key), m.Weight, m.SourceLocations)
+					m => new SearchResult(allPosts.First(p => p.Id == m.Key), m.Weight, m.SourceLocationsIfRecorded)
 				);
 			}
 
@@ -54,20 +53,19 @@ namespace Blog.Controllers
 				new SearchResultsModel(
 					term,
 					results.ToNonNullImmutableList(),
-					_postRepository.GetMostRecentStubs(5),
-					_postRepository.GetStubs(null, null, true),
-					_postRepository.GetArchiveLinks(),
-					_optionalCanonicalLinkBase,
-					_optionalGoogleAnalyticsId,
+					await _postRepository.GetMostRecentStubs(5),
+					await _postRepository.GetStubs(null, null, true),
+					await _postRepository.GetArchiveLinks(),
+					_siteConfiguration.OptionalCanonicalLinkBase,
+					_siteConfiguration.OptionalGoogleAnalyticsId,
 					_postContentCache
 				)
 			);
 		}
 
-		[Stopwatch]
-		public ActionResult GetAutoCompleteContent()
+		public async Task<IActionResult> GetAutoCompleteContent()
 		{
-			var posts = _postRepository.GetAll();
+			var posts = await _postRepository.GetAll();
 			var lastModifiedDateOfData = posts.Any() ? posts.Max(p => p.LastModified) : DateTime.MinValue;
 			var lastModifiedDateFromRequest = base.TryToGetIfModifiedSinceDateFromRequest();
 			if ((lastModifiedDateFromRequest != null) && (Math.Abs(lastModifiedDateFromRequest.Value.Subtract(lastModifiedDateOfData).TotalSeconds) < 2))
@@ -75,15 +73,11 @@ namespace Blog.Controllers
 				// Add a small grace period to the comparison (if only because lastModifiedDateOfLiveData is granular to milliseconds while lastModifiedDate only
 				// considers seconds and so will nearly always be between zero and one seconds older)
 				Response.StatusCode = 304;
-				Response.StatusDescription = "Not Modified";
-				return Json(null, JsonRequestBehavior.AllowGet);
+				return Json("{ \"Result\": \"Not Modified\" }");
 			}
 
 			base.SetResponseCacheHeadersForSuccess(lastModifiedDateOfData);
-			return Json(
-				_postIndexer.GenerateIndexContent(posts).AutoCompleteContent,
-				JsonRequestBehavior.AllowGet
-			);
+			return Json(_postIndexer.GenerateIndexContent(posts).AutoCompleteContent);
 		}
 	}
 }

@@ -1,34 +1,34 @@
 ﻿using System;
 using System.IO;
-using System.Web;
 using BlogBackEnd.FullTextIndexing;
 using BlogBackEnd.FullTextIndexing.CachingPostIndexers;
+using Microsoft.Extensions.FileProviders;
 
 namespace Blog.Factories
 {
-	public class PostIndexerFactory
+    public class PostIndexerFactory
 	{
-		private HttpContextBase _httpContext;
-		public PostIndexerFactory(HttpContextBase httpContext)
+		private readonly IFileProvider _fileProvider;
+		public PostIndexerFactory(IFileProvider fileProvider)
 		{
-			if (httpContext == null)
-				throw new ArgumentNullException("httpContext");
+			if (fileProvider == null)
+				throw new ArgumentNullException("fileProvider");
 
-			_httpContext = httpContext;
+			_fileProvider = fileProvider;
 		}
 
 		public IPostIndexer Get()
 		{
-			// Return a PostIndexer wrapped in ASP.Net Cache and File-based caching layers (cached data will be expired if there 
+			// Return a PostIndexer wrapped in an in-memory cache and File-based caching layers
 			var fileCachedPostIndex = new CachingPostIndexer(
 				new PostIndexer(),
 				new FileBasedPostIndexCache(
-					new FileInfo(_httpContext.Server.MapPath("~/App_Data/SearchIndex.dat"))
+					new FileInfo(_fileProvider.GetFileInfo("/App_Data/SearchIndex.dat").PhysicalPath)
 				)
 			);
 			return new CachingPostIndexer(
 				fileCachedPostIndex,
-				new ASPNetCachePostIndexCache(HttpContext.Current.Cache, TimeSpan.FromHours(24))
+				new ConcurrentDictionaryPostIndexCache(TimeSpan.FromHours(24))
 			);
 		}
 	}

@@ -1,31 +1,38 @@
 ﻿using System;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Web;
-using System.Web.Caching;
-using System.Web.Mvc;
+using System.Runtime.Caching;
 using CSSMinifier.Caching;
 using CSSMinifier.FileLoaders;
 using CSSMinifier.FileLoaders.Factories;
 using CSSMinifier.FileLoaders.LastModifiedDateRetrievers;
-using CSSMinifier.Logging;
 using CSSMinifier.PathMapping;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Net.Http.Headers;
 
 namespace Blog.Controllers
 {
-	public class CSSController : Controller
+    public class CSSController : Controller
 	{
-		public ActionResult Process()
+		private readonly IFileProvider _contentRootFileProvider;
+		public CSSController(IFileProvider contentRootFileProvider)
 		{
-			var relativePathMapper = new ServerUtilityPathMapper(Server);
-			var relativePath = Request.FilePath;
+			if (contentRootFileProvider == null)
+				throw new ArgumentNullException("contentRootFileProvider");
+
+			_contentRootFileProvider = contentRootFileProvider;
+		}
+
+		public IActionResult Process()
+		{
+			var relativePathMapper = new ContentRootPathMapper(_contentRootFileProvider);
+			var relativePath = Request.Path;
 			var fullPath = relativePathMapper.MapPath(relativePath);
 			var file = new FileInfo(fullPath);
 			if (!file.Exists)
 			{
 				Response.StatusCode = 404;
-				Response.StatusDescription = "Not Found";
 				return Content("File not found: " + relativePath, "text/css");
 			}
 
@@ -34,14 +41,13 @@ namespace Blog.Controllers
 				return Process(
 					relativePath,
 					relativePathMapper,
-					new NonExpiringASPNetCacheCache(HttpContext.Cache),
+					new NonExpiringASPNetCacheCache(),
 					TryToGetIfModifiedSinceDateFromRequest()
 				);
 			}
 			catch (Exception e)
 			{
 				Response.StatusCode = 500;
-				Response.StatusDescription = "Internal Server Error";
 				return Content("Error: " + e.Message);
 			}
 		}
@@ -76,15 +82,14 @@ namespace Blog.Controllers
 			if ((lastModifiedDateFromRequest != null) && AreDatesApproximatelyEqual(lastModifiedDateFromRequest.Value, lastModifiedDate))
 			{
 				Response.StatusCode = 304;
-				Response.StatusDescription = "Not Modified";
-				return Content("", "text/css");
+				return Content("Not changed since last request", "text/css");
 			}
 
 			var cssLoader = (new EnhancedNonCachedLessCssLoaderFactory(
 				relativePathMapper,
 				SourceMappingMarkerInjectionOptions.Inject,
 				ErrorBehaviourOptions.LogAndRaiseException,
-				new NullLogger()
+				new CSSMinifier.Logging.NullLogger()
 			)).Get();
 
 			// Ignore any errors from the DiskCachingTextFileLoader - if the file contents become invalid then allow them to be deleted and rebuilt instead of blowing
@@ -96,7 +101,7 @@ namespace Blog.Controllers
 					lastModifiedDateRetriever,
 					DiskCachingTextFileLoader.InvalidContentBehaviourOptions.Delete,
 					ErrorBehaviourOptions.LogAndContinue,
-					new NullLogger()
+					new CSSMinifier.Logging.NullLogger()
 				),
 				lastModifiedDateRetriever,
 				memoryCache
@@ -108,8 +113,7 @@ namespace Blog.Controllers
 			if ((lastModifiedDateFromRequest != null) && AreDatesApproximatelyEqual(lastModifiedDateFromRequest.Value, lastModifiedDate))
 			{
 				Response.StatusCode = 304;
-				Response.StatusDescription = "Not Modified";
-				return Content("", "text/css");
+				return Content("Not changed since last request", "text/css");
 			}
 			SetResponseCacheHeadersForSuccess(content.LastModified);
 			return Content(content.Content, "text/css");
@@ -120,22 +124,21 @@ namespace Blog.Controllers
 		/// </summary>
 		private DateTime? TryToGetIfModifiedSinceDateFromRequest()
 		{
-			var lastModifiedDateRaw = Request.Headers["If-Modified-Since"];
+			var lastModifiedDateRaw = Request.Headers["If-Modified-Since"].FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 			if (lastModifiedDateRaw == null)
 				return null;
 
-			DateTime lastModifiedDate;
-			if (DateTime.TryParse(lastModifiedDateRaw, out lastModifiedDate))
-				return lastModifiedDate;
+            if (DateTime.TryParse(lastModifiedDateRaw, out DateTime lastModifiedDate))
+                return lastModifiedDate;
 
-			return null;
+            return null;
 		}
 
 		/// <summary>
 		/// Dates from HTTP If-Modified-Since headers are only precise to whole seconds while files' LastWriteTime are granular to milliseconds, so when
 		/// comparing them a small grace period is required
 		/// </summary>
-		private bool AreDatesApproximatelyEqual(DateTime d1, DateTime d2)
+		private static bool AreDatesApproximatelyEqual(DateTime d1, DateTime d2)
 		{
 			return Math.Abs(d1.Subtract(d2).TotalSeconds) < 1;
 		}
@@ -146,41 +149,29 @@ namespace Blog.Controllers
 		private void SetResponseCacheHeadersForSuccess(DateTime lastModifiedDateOfLiveData)
 		{
 			// Mark the response as cacheable
-			// - Specify "Vary" "Content-Encoding" header to ensure that if cached by proxiesthat different versions are stored for different encodings
-			//  (eg. gzip'd vs non-gzip'd)
-			Response.Cache.SetCacheability(System.Web.HttpCacheability.Public);
-			Response.Cache.SetLastModified(lastModifiedDateOfLiveData);
-			Response.AppendHeader("Vary", "Content-Encoding");
+			// - Specify "Vary" "Content-Encoding" header to ensure that if cached by proxiesthat different versions are stored for different encodings (eg. gzip'd vs non-gzip'd)
 
-			// Handle requested content-encoding method
-			var encodingsAccepted = (Request.Headers["Accept-Encoding"] ?? "")
-				.Split(',')
-				.Select(e => e.Trim().ToLower())
-				.ToArray();
-			if (encodingsAccepted.Contains("gzip"))
-			{
-				Response.AppendHeader("Content-encoding", "gzip");
-				Response.Filter = new GZipStream(Response.Filter, CompressionMode.Compress);
-			}
-			else if (encodingsAccepted.Contains("deflate"))
-			{
-				Response.AppendHeader("Content-encoding", "deflate");
-				Response.Filter = new DeflateStream(Response.Filter, CompressionMode.Compress);
-			}
+			Response.Headers.Add(HeaderNames.CacheControl, "Public");
+			Response.Headers.Add(HeaderNames.Vary, "Content-Encoding");
+
+			Response.Headers.Add(HeaderNames.LastModified, lastModifiedDateOfLiveData.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+
+			// As suggested at https://andrewlock.net/adding-cache-control-headers-to-static-files-in-asp-net-core/#cache-busting-for-file-changes
+			Response.Headers.Add(HeaderNames.ETag, Convert.ToString(lastModifiedDateOfLiveData.ToFileTime(), 16));
 		}
 
 		/// <summary>
 		/// This will throw an exception for null or empty input, it will never return null
 		/// </summary>
-		private class ServerUtilityPathMapper : IRelativePathMapper
+		private class ContentRootPathMapper : IRelativePathMapper
 		{
-			private HttpServerUtilityBase _server;
-			public ServerUtilityPathMapper(HttpServerUtilityBase server)
+			private readonly IFileProvider _contentRootFileProvider;
+			public ContentRootPathMapper(IFileProvider contentRootFileProvider)
 			{
-				if (server == null)
-					throw new ArgumentNullException("server");
+				if (contentRootFileProvider == null)
+					throw new ArgumentNullException("contentRootFileProvider");
 
-				_server = server;
+				_contentRootFileProvider = contentRootFileProvider;
 			}
 
 			public string MapPath(string relativePath)
@@ -188,20 +179,13 @@ namespace Blog.Controllers
 				if (string.IsNullOrWhiteSpace(relativePath))
 					throw new ArgumentException("Null/blank relativePath specified");
 
-				return _server.MapPath(relativePath);
+				return _contentRootFileProvider.GetFileInfo(relativePath).PhysicalPath;
 			}
 		}
 
 		private class NonExpiringASPNetCacheCache : ICacheThingsWithModifiedDates<TextFileContents>
 		{
-			private Cache _cache;
-			public NonExpiringASPNetCacheCache(Cache cache)
-			{
-				if (cache == null)
-					throw new ArgumentNullException("cache");
-
-				_cache = cache;
-			}
+			private static readonly MemoryCache _cache = new MemoryCache("CssCache");
 
 			/// <summary>
 			/// This will return null if the entry is not present in the cache. It will throw an exception for null or blank cacheKey. If data was found in the cache for the
@@ -214,7 +198,7 @@ namespace Blog.Controllers
 					if (string.IsNullOrWhiteSpace(cacheKey))
 						throw new ArgumentException("Null/blank cacheKeys specified");
 
-					var cachedData = _cache[cacheKey];
+					var cachedData = _cache.Get(cacheKey);
 					if (cachedData == null)
 						return null;
 
@@ -241,15 +225,7 @@ namespace Blog.Controllers
 
 				// Since the CSSController will push cached data in with a LastModifiedDate and then replace those cache items (with a Remove followed by Add) then we can
 				// use DateTime.MaxValue for AbsoluteExpiration and effectively disable time-based expiration
-				_cache.Add(
-					cacheKey,
-					value,
-					null,
-					DateTime.MaxValue,
-					Cache.NoSlidingExpiration,
-					CacheItemPriority.Normal,
-					null
-				);
+				_cache.Set(cacheKey, value, DateTimeOffset.MaxValue);
 			}
 
 			/// <summary>

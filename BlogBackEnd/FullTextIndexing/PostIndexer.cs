@@ -11,7 +11,7 @@ using FullTextIndexer.Core.TokenBreaking;
 
 namespace BlogBackEnd.FullTextIndexing
 {
-	public class PostIndexer : IPostIndexer
+    public class PostIndexer : IPostIndexer
 	{
 		/// <summary>
 		/// This will never return null, it will throw an exception for null input.
@@ -39,7 +39,7 @@ namespace BlogBackEnd.FullTextIndexing
 			var defaultIndexDataForSearching = GenerateIndexData(
 				posts,
 				new EnglishPluralityStringNormaliser(
-					new DefaultStringNormaliser(),
+					DefaultStringNormaliser.Instance,
 					EnglishPluralityStringNormaliser.PreNormaliserWorkOptions.PreNormaliserLowerCases
 					| EnglishPluralityStringNormaliser.PreNormaliserWorkOptions.PreNormaliserTrims
 				),
@@ -101,6 +101,7 @@ namespace BlogBackEnd.FullTextIndexing
 				sourceStringComparer,
 				tokenBreaker,
 				weightedValues => weightedValues.Sum(),
+				captureSourceLocations: true,
 				new NullLogger()
 			).Generate(posts.ToNonNullImmutableList());
 		}
