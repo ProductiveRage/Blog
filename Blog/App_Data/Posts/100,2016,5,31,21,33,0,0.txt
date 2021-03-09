@@ -1,6 +1,6 @@
 ## A static type system is a wonderful message to the present and future
 
-Last week, I read the article "[My time with Rails is up](http://solnic.eu/2016/05/22/my-time-with-rails-is-up.html)" (by [Piotr Solnica](https://twitter.com/_solnic_)) which resulted in me reading some of [DHH](https://medium.com/@dhh)'s latest posts and re-reading some of his  older ones.
+Last week, I read the article "[My time with Rails is up](http://solnic.eu/2016/05/22/my-time-with-rails-is-up.html)" (by [Piotr Solnica](https://twitter.com/_solnic_)) which resulted in me reading some of [DHH](https://medium.com/@dhh)'s latest posts and re-reading some of his older ones.
 
 Some people write articles that I enjoy reading because they have similar ideas and feelings about development that I do, that they manage to express in a new or particularly articulate way that helps me clarify it in my own head or that helps me think about whether I really do still agree with the principle. Some people write articles that come from a completely different point of view and experience to me and these also can have a lot of benefit, in that they make me reconsider where I stand on things or inspire me to try something different to see how it feels. DHH is, almost without fail, interesting to read and I like his passion and conviction.. but he's definitely not in that first category of author. There was one thing in particular, though, that really stuck out for me in his post "[Provide sharp knives](https://m.signalvnoise.com/provide-sharp-knives-cc0a22bf7934#.yv2771vf7)" -
 
