@@ -167,7 +167,7 @@ namespace Blog.Helpers
             if (post.RelatedPosts.Any())
             {
                 content.Append("<div class=\"Related\">");
-                content.Append("<h3>You may also be interested in</h3>");
+                content.Append("<h3>You may also be interested in:</h3>");
                 content.Append("<ul>");
                 foreach (var relatedPost in post.RelatedPosts)
                 {

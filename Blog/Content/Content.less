@@ -26,6 +26,7 @@ body {
                 border-right: none;
                 border-bottom: none;
                 text-decoration: none;
+
                 // I want a nice translucent pale blue background with white text, but for browsers that don't support rgba a white background will
                 // suffice, with the default link / link-hover colour (text colour is conditionally set by the use of rgba; even though it isn't
                 // really translucent, defining it with rgba means that non-supporting browsers will ignore the rule)
@@ -127,19 +128,31 @@ body {
             > li { list-style-type: disc; }
         }
 
+        .RelatedPostItem() {
+            display: list-item;
+            list-style-type: disc;
+            list-style-position: outside;
+            margin: 0 0 0 2em;
+            line-height: 28px;
+        }
+
         div.PreviousAndNext {
             div.Previous, div.Next {
                 // Emulate the appearance of a list item so that it looks consistent with the "You may also be interested in" links
                 margin: 0 0 1em 0;
 
                 > a {
-                    display: list-item;
-                    list-style-type: disc;
-                    list-style-position: outside;
-                    margin: 0 0 0 2em;
-                    line-height: 28px;
+                    .RelatedPostItem();
                 }
             }
+        }
+
+        div.Related {
+            margin: 0 0 1em 0;
+
+            > ul > li {
+                .RelatedPostItem();
+             }
         }
 
         div.Tags {
