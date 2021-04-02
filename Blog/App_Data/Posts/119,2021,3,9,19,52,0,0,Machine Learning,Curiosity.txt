@@ -94,13 +94,6 @@ Add the following code immediately after the Console.WriteLine calls in the Main
     Console.WriteLine();
     Console.WriteLine($"Downloading/reading part-of-speech model for {doc.Language}..");
     var pipeline = await Pipeline.ForAsync(doc.Language);
-    pipeline.Add(
-        await AveragePerceptronEntityRecognizer.FromStoreAsync(
-            doc.Language,
-            Version.Latest,
-            tag: "WikiNER"
-        )
-    );
     pipeline.ProcessSingle(doc);
     foreach (var sentence in doc)
     {
