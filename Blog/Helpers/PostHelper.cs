@@ -225,7 +225,7 @@ namespace Blog.Helpers
 
 			var rewrittenContent = new StringBuilder();
 			var lastIndex = 0;
-			foreach (Match match in Regex.Matches(content, @"\[(.*?)\]\(Post(\d+)\)", RegexOptions.Multiline))
+			foreach (Match match in Regex.Matches(content, @"\[([^\]]*?)\]\(Post(\d+)\)", RegexOptions.Multiline))
 			{
 				var text = match.Groups[1].Value;
 				var id = int.Parse(match.Groups[2].Value);
