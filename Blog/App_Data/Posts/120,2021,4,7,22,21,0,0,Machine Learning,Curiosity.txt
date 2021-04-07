@@ -1,0 +1,359 @@
+## Automating "suggested / related posts" links for my blog posts
+
+### TL;DR
+
+Using the same open source .NET library as I did in my last post ([Language detection and words-in-sentence classification in C#](Post119)), I use some of its other machine learning capabilities to automatically generate "you may also be interested in" links to similar posts for any given post on this blog.
+
+### The current "You may also be interested in" functionality
+
+This site has always had a way for me to link related posts together - for example, if you scroll to the bottom of "[Learning F# via some Machine Learning: The Single Layer Perceptron](Post111)" then it suggests a link to "[Face or no face (finding faces in photos using C# and Accord.NET)](Post108)" on the basis that you might be super-excited into my fiddlings with computers being trained how to make decisions on their own. But there aren't many of these links because they're something that I have to maintain manually. Firstly, that means that I have to remember / consider every previous post and decide whether it might be worth linking to the new post that I've just finished writing and, secondly, I often just forget.
+
+There are models in the [Catalyst](https://github.com/curiosity-ai/catalyst) library\* that make this possible and so I thought that I would see whether I could train it with my blog post data and then incorporate the suggestions into the final content.
+
+\* *(Again, see my [last post](Post119) for more details on this library and a little blurb about my previous employers who are doing exciting things in the Enterprise Search space)*
+
+Specifically, I'll be using the [fastText](https://en.wikipedia.org/wiki/FastText) model that was published by [Facebook's AI Research lab](https://github.com/facebookresearch/fastText) in 2015 and then [rewritten in C#](https://github.com/curiosity-ai/catalyst/tree/master/Catalyst/src/Models/Embeddings/FastText) as part of the Catalyst library.
+
+### Getting my blog post articles
+
+When I first launched my blog (just over a decade ago), I initially hosted it somewhere as an ASP.NET MVC application. Largely because I wanted to try my hand at writing an MVC app from scratch and fiddling with various settings, I think.. and partly because it felt like the "natural" thing to do, seeing as I was employed as a .NET Developer at the time!
+
+To keep things simple, I had a single text file for each blog post and the filenames were of a particular format containing a unique post ID, date and time of publishing, whether it should appear in the "Highlights" column and any tags that should be associated with it. Like this:
+
+> 1,2011,3,14,20,14,2,0,Immutability.txt
+
+That's the very first post (it has ID 1), it was published on 2011-03-14 at 20:14:02 and it is not shown in the Highlights column (hence the final zero). It has a single tag of "Immutability". Although it has a ".txt" extension, it's actually markdown content, so ".md" would have been more logical (the reason why I chose ".txt" over ".md" will likely remain forever lost in the mists of time!)
+
+A couple of years later, I came across the project [neocities.org](https://neocities.org/) and thought that it was a cool idea and did some (perhaps slightly hacky) work to make things work as a static site (including pushing the search logic entirely to the client) as described in [The NeoCities Challenge!](Post58).
+
+Some _more_ years later, GitHub Pages started supporting custom domains over HTTPS (in May 2018 according to [this](https://github.blog/2018-05-01-github-pages-custom-domains-https/)) and so, having already moved web hosts once due to wildly inconsistent performance from the first provider, I decided to use this to-static-site logic and start publishing via GitHub Pages. 
+
+This is a long-winded way of saying that, although I publish my content these days as a static site, I write new content by running the original blog app locally and then turning it into static content later. Meaning that the original individual post files are available in the ASP.NET MVC Blog GitHub repo here:
+
+[github.com/ProductiveRage/Blog/tree/master/Blog/App_Data/Posts](https://github.com/ProductiveRage/Blog/tree/master/Blog/App_Data/Posts)
+
+Therefore, if you were sufficiently curious and wanted to play along at home, you can also access the original markdown files for my blog posts and see if you can reproduce my results.
+
+Following shortly is some code to do just that. GitHub has an API that allows you to query folder contents and so we can get a list of blog post files without having to do anything arduous like clone the entire repo or trying to scrape the information from the site or even creating an authenticated API access application because GitHub allows us rate-limited non-authenticated access for free! Once we have the list of files, each will have a "download_url" that we can retrieve the raw content from.
+
+To get the list of blog post files, you would call:
+
+[api.github.com/repos/ProductiveRage/Blog/contents/Blog/App_Data/Posts?ref=master](https://api.github.com/repos/ProductiveRage/Blog/contents/Blog/App_Data/Posts?ref=master)
+
+.. and get results that look like this:
+
+    [
+      {
+        "name": "1,2011,3,14,20,14,2,0,Immutability.txt",
+        "path": "Blog/App_Data/Posts/1,2011,3,14,20,14,2,0,Immutability.txt",
+        "sha": "b243ea15c891f73550485af27fa06dd1ccb8bf45",
+        "size": 18965,
+        "url": "https://api.github.com/repos/ProductiveRage/Blog/contents/Blog/App_Data/Posts/1,2011,3,14,20,14,2,0,Immutability.txt?ref=master",
+        "html_url": "https://github.com/ProductiveRage/Blog/blob/master/Blog/App_Data/Posts/1,2011,3,14,20,14,2,0,Immutability.txt",
+        "git_url": "https://api.github.com/repos/ProductiveRage/Blog/git/blobs/b243ea15c891f73550485af27fa06dd1ccb8bf45",
+        "download_url": "https://raw.githubusercontent.com/ProductiveRage/Blog/master/Blog/App_Data/Posts/1%2C2011%2C3%2C14%2C20%2C14%2C2%2C0%2CImmutability.txt",
+        "type": "file",
+        "_links": {
+          "self": "https://api.github.com/repos/ProductiveRage/Blog/contents/Blog/App_Data/Posts/1,2011,3,14,20,14,2,0,Immutability.txt?ref=master",
+          "git": "https://api.github.com/repos/ProductiveRage/Blog/git/blobs/b243ea15c891f73550485af27fa06dd1ccb8bf45",
+          "html": "https://github.com/ProductiveRage/Blog/blob/master/Blog/App_Data/Posts/1,2011,3,14,20,14,2,0,Immutability.txt"
+        }
+      },
+      {
+        "name": "10,2011,8,30,19,06,0,0,Mercurial.txt",
+        "path": "Blog/App_Data/Posts/10,2011,8,30,19,06,0,0,Mercurial.txt",
+        "sha": "ab6cf2fc360948212e29c64d9c886b3dbfe0d6fc",
+        "size": 3600,
+        "url": "https://api.github.com/repos/ProductiveRage/Blog/contents/Blog/App_Data/Posts/10,2011,8,30,19,06,0,0,Mercurial.txt?ref=master",
+        "html_url": "https://github.com/ProductiveRage/Blog/blob/master/Blog/App_Data/Posts/10,2011,8,30,19,06,0,0,Mercurial.txt",
+        "git_url": "https://api.github.com/repos/ProductiveRage/Blog/git/blobs/ab6cf2fc360948212e29c64d9c886b3dbfe0d6fc",
+        "download_url": "https://raw.githubusercontent.com/ProductiveRage/Blog/master/Blog/App_Data/Posts/10%2C2011%2C8%2C30%2C19%2C06%2C0%2C0%2CMercurial.txt",
+        "type": "file",
+        "_links": {
+          "self": "https://api.github.com/repos/ProductiveRage/Blog/contents/Blog/App_Data/Posts/10,2011,8,30,19,06,0,0,Mercurial.txt?ref=master",
+          "git": "https://api.github.com/repos/ProductiveRage/Blog/git/blobs/ab6cf2fc360948212e29c64d9c886b3dbfe0d6fc",
+          "html": "https://github.com/ProductiveRage/Blog/blob/master/Blog/App_Data/Posts/10,2011,8,30,19,06,0,0,Mercurial.txt"
+        }
+      },
+      ..
+      
+While the API is rate-limited, retrieving content via the "download_url" locations is not - so we can make a single API call for the list and then download all of the individual files that we want.
+
+Note that there are a couple of files in that folders that are NOT blog posts (such as the "RelatedPosts.txt" file, which is the way that I manually associate "You may also be interested in" post) and so each filename will have to be checked to ensure that it matches the format shown above.
+
+The title of the blog post is not in the file name, it is always the first line of the content in the file (to obtain it, we'll need to process the file as markdown content, convert it to plain text and then look at that first line).
+
+    private static async Task<IEnumerable<BlogPost>> GetBlogPosts()
+    {
+        // Note: The GitHub API is rate limited quite severely for non-authenticated apps, so we just
+        // call it once for the list of files and then retrieve them all further down via the Download
+        // URLs (which don't count as API calls). Still, if you run this code repeatedly and start
+        // getting 403 "rate limited" responses then you might have to hold off for a while.
+        string namesAndUrlsJson;
+        using (var client = new WebClient())
+        {
+            // The API refuses requests without a User Agent, so set one before calling (see
+            // https://docs.github.com/en/rest/overview/resources-in-the-rest-api#user-agent-required)
+            client.Headers.Add(HttpRequestHeader.UserAgent, "ProductiveRage Blog Post Example");
+            namesAndUrlsJson = await client.DownloadStringTaskAsync(new Uri(
+                "https://api.github.com/repos/ProductiveRage/Blog/contents/Blog/App_Data/Posts?ref=master"
+            ));
+        }
+
+        // Deserialise the response into an array of entries that have Name and Download_Url properties
+        var namesAndUrls = JsonConvert.DeserializeAnonymousType(
+            namesAndUrlsJson,
+            new[] { new { Name = "", Download_Url = (Uri)null } }
+        );
+
+        return await Task.WhenAll(namesAndUrls
+            .Select(entry =>
+            {
+                var fileNameSegments = Path.GetFileNameWithoutExtension(entry.Name).Split(",");
+                if (fileNameSegments.Length < 8)
+                    return default;
+                if (!int.TryParse(fileNameSegments[0], out var id))
+                    return default;
+                var dateContent = string.Join(",", fileNameSegments.Skip(1).Take(6));
+                if (!DateTime.TryParseExact(dateContent, "yyyy,M,d,H,m,s", default, default, out var date))
+                    return default;
+                return (PostID: id, PublishedAt: date, entry.Download_Url);
+            })
+            .Where(entry => entry != default)
+            .Select(async entry =>
+            {
+                // Read the file content as markdown and parse into plain text (the first line of which
+                // will be the title of the post)
+                string markdown;
+                using (var client = new WebClient())
+                {
+                    markdown = await client.DownloadStringTaskAsync(entry.Download_Url);
+                }
+                var plainText = Markdown.ToPlainText(markdown);
+                var title = plainText.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').First();
+                return new BlogPost(entry.PostID, title, plainText, entry.PublishedAt);
+            })
+        );
+    }
+    
+    private sealed class BlogPost
+    {
+        public BlogPost(int id, string title, string plainTextContent, DateTime publishedAt)
+        {
+            ID = id;
+            Title = !string.IsNullOrWhiteSpace(title)
+                ? title
+                : throw new ArgumentException("may not be null, blank or whitespace-only");
+            PlainTextContent = !string.IsNullOrWhiteSpace(plainTextContent)
+                ? plainTextContent
+                : throw new ArgumentException("may not be null, blank or whitespace-only");
+            PublishedAt = publishedAt;
+        }
+
+        public int ID{ get; }
+        public string Title { get; }
+        public string PlainTextContent { get; }
+        public DateTime PublishedAt { get; }
+    }    
+
+*(Note: I use the [Markdig](https://github.com/xoofx/markdig) library to process markdown)*
+
+### Training a FastText model
+
+This raw blog post content needs to transformed into Catalyst "documents", then tokenised (split into individual sentences and words), then fed into a FastText model trainer.
+
+Before getting to the code, I want to discuss a couple of oddities coming up. Firstly, Catalyst documents are required to train the FastText model and each document instance must be uniquely identified by a **UID128** value, which is fine because we can generate them from the Title text of each blog post using the "Hash128()" extension method in Catalyst. However, (as we'll see a bit further down), when you ask for vectors\* from the FastText model for the processed documents, each vector comes with a "Token" string that is the ID of the source document - so that has to be parsed *back* into a **UID128**. I'm not quite sure why the "Token" value isn't also a **UID128** but it's no massive deal.
+
+\* *(Vectors are just 1D arrays of floating point values - the FastText algorithm does magic to produce vectors that represent the text of the documents such that the distance between them can be compared; the length of these arrays is determined by the "Dimensions" option shown below and shorter distances between vectors suggest more similar content)*
+
+Next, there are the FastText settings that I've used. The [Catalyst README](https://github.com/curiosity-ai/catalyst) has some code near the bottom for training a FastText embedding model but I didn't have much luck with the default options. Firstly, when I used the "FastText.ModelType.CBow" option then I didn't get any vectors generated and so I tried changing it to "FastText.ModelType.PVDM" and things started looked promising. Then I fiddled with some of the other settings. Some of which I have a rough idea what they mean and some, erm.. not so much.
+
+The settings that I ended up using are these:
+
+    var fastText = new FastText(language, version: 0, tag: "");
+    fastText.Data.Type = FastText.ModelType.PVDM;
+    fastText.Data.Loss = FastText.LossType.NegativeSampling;
+    fastText.Data.IgnoreCase = true;
+    fastText.Data.Epoch = 50;
+    fastText.Data.Dimensions = 512;
+    fastText.Data.MinimumCount = 1;
+    fastText.Data.ContextWindow = 10;
+    fastText.Data.NegativeSamplingCount = 20;
+
+I already mentioned changing the Data.Type / ModelType and the LossType ("NegativeSampling") is the value shown in the README. Then I felt like an obvious one to change was IgnoreCase, since that defaults to false and I think that I want it to be true - I don't care about the casing in any words when it's parsing my posts' content.
+
+Now the others.. well, this library is built to work with systems with 10s or 100s of 1,000s of documents and that is a LOT more data than I have (currently around 120 blog posts) and so I made a few tweaks based on that. The "Epoch" count is the number of iterations that the training process will go through when constructing its model - by default, this is only 5 but I have limited data (meaning there's less for it to learn from but also that it's faster to complete each iteration) and so I bumped that up to 50. Then "Dimensions" is the size of the vectors generated - again, I figured that with limited data I would want a higher value and so I picked 512 (a nice round number if you're geeky enough) over the default 200. The "MinimumCount", I believe, relates to how often a word may appear and it defaults to 5 so I pulled it down to 1. The "ContextWindow" is (again, I *think*) how far to either side of any word that the process will look at in order to determine context - the larger the value, the more expensive the calculation; I bumped this from the default 5 up to 10. Then there's the "NegativeSamplingCount" value.. I have to just put my hands up and say that I have no idea what that actually does, only that I seemed to be getting better results with a value of 20 than I was with the default of 10.
+
+With machine learning, there is almost always going to be some value to tweaking options (the "hyperparameters", if we're being all fancy) like this when building a model. Depending upon the model and the library, the defaults can be good for the general case but my tiny data set is not really what this library was intended for. Of course, machine learning *experts* have more idea *what* they're tweaking and (sometimes, at least) hopefully what results they'll get.. but I'm happy enough with where I've ended up with these.
+
+This talk about what those machine learning experts do brings me on to the final thing that I wanted to talk about before showing the code; a little pre-processing / data-massaging. The better the data is that goes in, generally the better the results that come out will be. So another less glamorous part of the life of a Data Scientist is cleaning up data for training models.
+
+In my case, that only extended to noticing that a few terms didn't seem to be getting recognised as essentially being the same thing and so I wanted to give it a little hand - for example, a fair number of my posts are about my "Full Text Indexer" project and so it probably makes sense to replace any instances of that string with a single concatenated word "FullTextIndexer". And I have a range of posts about React but I didn't want it to get confused with the verb "react" and so I replaced any "React" occurrence with "ReactJS" (now, this probably means that some "React" verb occurrences were incorrectly changed but I made the replacements of this word in a case-sensitive manner and felt like I would have likely used it as the noun more often than a verb with a captial letter due to the nature of my posts).
+
+So I have a method to tidy up the plain text content a little:
+
+    private static string NormaliseSomeCommonTerms(string text) => text
+        .Replace(".NET", "NET", StringComparison.OrdinalIgnoreCase)
+        .Replace("Full Text Indexer", "FullTextIndexer", StringComparison.OrdinalIgnoreCase)
+        .Replace("Bridge.net", "BridgeNET", StringComparison.OrdinalIgnoreCase)
+        .Replace("React", "ReactJS");
+
+Now let's get training!
+
+    Console.WriteLine("Reading posts from GitHub repo..");
+    var posts = await GetBlogPosts();
+
+    Console.WriteLine("Parsing documents..");
+    Storage.Current = new OnlineRepositoryStorage(new DiskStorage("catalyst-models"));
+    var language = Language.English;
+    var pipeline = Pipeline.For(language);
+    var postsWithDocuments = posts
+        .Select(post =>
+        {
+            var document = new Document(NormaliseSomeCommonTerms(post.PlainTextContent), language)
+            {
+                UID = post.Title.Hash128()
+            };
+            pipeline.ProcessSingle(document);
+            return (Post: post, Document: document);
+        })
+        .ToArray(); // Call ToArray to force evaluation of the document processing now
+
+    Console.WriteLine("Training FastText model..");
+    var fastText = new FastText(language, version: 0, tag: "");
+    fastText.Data.Type = FastText.ModelType.PVDM;
+    fastText.Data.Loss = FastText.LossType.NegativeSampling;
+    fastText.Data.IgnoreCase = true;
+    fastText.Data.Epoch = 50;
+    fastText.Data.Dimensions = 512;
+    fastText.Data.MinimumCount = 1;
+    fastText.Data.ContextWindow = 10;
+    fastText.Data.NegativeSamplingCount = 20;
+    fastText.Train(
+        postsWithDocuments.Select(postsWithDocument => postsWithDocument.Document),
+        trainingStatus: update => Console.WriteLine($" Progress: {update.Progress}, Epoch: {update.Epoch}")
+    );
+
+### Identifying similar documents using the model
+
+Now that a model has been built that can represent all of my blog posts as vectors, we need to go through those post / vector combinations and identify others that are similar to it.
+
+This will be achieved by using the [HNSW.NET](https://github.com/curiosity-ai/hnsw-sharp) NuGet package that enables K-Nearest Neighbour (k-NN) searches over "high-dimensional space"\*.
+
+\* *(This just means that the vectors are relatively large; 512 in this case - two dimensions would be a point on a flat plane, three dimensions would be a physical point in space, anything with more dimensions that that is in "higher-dimensional space".. though that's not to say that any more than three dimensions is definitely a bad fit for a regular k-NN search but 512 dimensions IS going to be a bad fit and the HNSW approach will be much more efficient)*
+
+There are useful examples on the [README](https://github.com/curiosity-ai/hnsw-sharp#how-to-build-a-graph) about "**How to build a graph?**" and "**How to run k-NN search?**" and tweaking those for the data that I have so far leads to this:
+
+    Console.WriteLine("Building recommendations..");
+
+    // Combine the blog post data with the FastText-generated vectors
+    var results = fastText
+        .GetDocumentVectors()
+        .Select(result =>
+        {
+            // Each document vector instance will include a "token" string that may be mapped back to the
+            // UID of the document for each blog post. If there were a large number of posts to deal with
+            // then a dictionary to match UIDs to blog posts would be sensible for performance but I only
+            // have a 100+ and so a LINQ "First" scan over the list will suffice.
+            var uid = UID128.Parse(result.Token);
+            var postForResult = postsWithDocuments.First(
+                postWithDocument => postWithDocument.Document.UID == uid
+            );
+            return (UID: uid, result.Vector, postForResult.Post);
+        })
+        .ToArray(); // ToArray since we enumerate multiple times below
+
+    // Construct a graph to search over, as described at
+    // https://github.com/curiosity-ai/hnsw-sharp#how-to-build-a-graph
+    var graph = new SmallWorld<(UID128 UID, float[] Vector, BlogPost Post), float>(
+        distance: (to, from) => CosineDistance.NonOptimized(from.Vector, to.Vector),
+        DefaultRandomGenerator.Instance,
+        new() { M = 15, LevelLambda = 1 / Math.Log(15) }
+    );
+    graph.AddItems(results);
+
+    // For every post, use the "KNNSearch" method on the graph to find the three most similar posts
+    const int maximumNumberOfResultsToReturn = 3;
+    var postsWithSimilarResults = results
+        .Select(result =>
+        {
+            // Request one result too many from the KNNSearch call because it's expected that the original
+            // post will come back as the best match and we'll want to exclude that
+            var similarResults = graph
+                .KNNSearch(result, maximumNumberOfResultsToReturn + 1)
+                .Where(similarResult => similarResult.Item.UID != result.UID)
+                .Take(maximumNumberOfResultsToReturn); // Just in case the original post wasn't included
+
+            return new
+            {
+                result.Post,
+                Similar = similarResults
+                    .Select(similarResult => new
+                    {
+                        similarResult.Id,
+                        similarResult.Item.Post,
+                        similarResult.Distance
+                    })
+                    .ToArray()
+            };
+        })
+        .OrderBy(result => result.Post.Title, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+And with that, there is a list of every post from my blog and a list of the three blog posts most similar to it!
+
+Well, "most similar" according to the model that we trained and the hyperparameters that we used to do so. As with many machine learning algorithms, it will have started from a random state and tweaked and tweaked until it's time for it to stop (based upon the "Epoch" value in this FastText case) and so the results each time may be a little different.
+
+However, if we inspect the results like this:
+
+    foreach (var postWithSimilarResults in postsWithSimilarResults)
+    {
+        Console.WriteLine();
+        Console.WriteLine(postWithSimilarResults.Post.Title);
+        foreach (var similarResult in postWithSimilarResults.Similar.OrderBy(other => other.Distance))
+            Console.WriteLine($"{similarResult.Distance:0.000} {similarResult.Post.Title}");
+    }
+
+.. then there are some good results to be found! Like these:
+
+> **Learning F# via some Machine Learning: The Single Layer Perceptron**
+> 0.229 How are barcodes read?? (Library-less image processing in C#)
+> 0.236 Writing F# to implement 'The Single Layer Perceptron'
+> 0.299 Face or no face (finding faces in photos using C# and AccordNET)
+> 
+> **Translating VBScript into C#**
+> 0.257 VBScript is DIM
+> 0.371 If you can keep your head when all about you are losing theirs and blaming it on VBScript
+> 0.384 Using Roslyn to identify unused and undeclared variables in VBScript WSC components
+> 
+> **Writing ReactJS components in TypeScript**
+> 0.376 TypeScript classes for (ReactJS) Flux actions
+> 0.378 ReactJS and Flux with DuoCode
+> 0.410 ReactJS (and Flux) with BridgeNET
+
+However, there are also some *less* good ones - like these:
+
+> **A static type system is a wonderful message to the present and future**
+> 0.271 STA ApartmentState with ASP.Net MVC
+> 0.291 CSS Minification Regular Expressions
+> 0.303 Publishing RSS
+> 
+> **Simple TypeScript type definitions for AMD modules**
+> 0.162 STA ApartmentState with ASP.Net MVC
+> 0.189 WCF with JSON (and nullable types)
+> 0.191 The joys of AutoMapper
+> 
+> **Supporting IDispatch through the COMInteraction wrapper**
+> 0.394 A static type system is a wonderful message to the present and future
+> 0.411 TypeScript State Machines
+> 0.414 Simple TypeScript type definitions for AMD modules
+
+### Improving the results
+
+I'd like to get this good enough that I can include auto-generated recommendations on my blog and I don't feel like the consistency in quality is there yet. If they were all like the good examples then I'd be ploughing ahead right now with enabling it! But there are mediocre examples as well as those poorer ones above.
+
+It's quite possible that I could get closer by experimenting with the hyperparameters more but that does tend to get tedious when you have to analyse the output of each run manually - looking through all the 120-ish post titles and deciding whether the supposed best matches are good or not. It would be lovely if I could concoct some sort of metric of "goodness" and then have the computer try lots of variations of parameters but one of the downsides of having relatively little data is that that is difficult\*.
+
+\* *(On the flip side, if I had **1,000s** of blog posts as source data then the difficult part would be manually labelling enough of them as "quite similar" in numbers sufficient for the computer to know if it's done better or done worse with each experiment)*
+
+Fortunately, I have another trick up my sleeve - but I'm going to leave that for next time! This post is already more than long enough, I think. The plan is to combine results from *another* model in the Catalyst with the FastText results and see if I can encourage things to look a bit neater.
