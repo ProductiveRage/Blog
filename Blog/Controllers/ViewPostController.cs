@@ -178,7 +178,8 @@ namespace Blog.Controllers
 							post.Title,
 							post.IsHighlight,
 							post.MarkdownContent,
-							NonNullImmutableList<PostStub>.Empty,
+							relatedPosts: NonNullImmutableList<PostStub>.Empty, // Don't need related Post data here
+							autoSuggestedRelatedPosts: NonNullImmutableList<PostStub>.Empty,
 							post.Tags
 						))
 						.OrderByDescending(post => post.Posted)
@@ -222,6 +223,7 @@ namespace Blog.Controllers
 				post.IsHighlight,
 				post.MarkdownContent,
 				(await _postRepository.GetByIds(post.RelatedPosts)).Cast<PostStub>().ToNonNullImmutableList(),
+				(await _postRepository.GetByIds(post.AutoSuggestedRelatedPosts)).Cast<PostStub>().ToNonNullImmutableList(),
 				post.Tags
 			);
 		}

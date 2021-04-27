@@ -179,7 +179,23 @@ namespace Blog.Helpers
                 content.Append("</ul>");
                 content.Append("</div>");
             }
-            if (includeTags)
+			else if (post.AutoSuggestedRelatedPosts.Any())
+			{
+				// Only display the auto-suggested related posts if there are no manually-picked related posts
+				content.Append("<div class=\"Related\">");
+				content.Append("<h3>You may also be interested in:</h3>");
+				content.Append("<ul>");
+				foreach (var relatedPost in post.AutoSuggestedRelatedPosts)
+				{
+					content.AppendFormat(
+						"<li>{0}</li>",
+						helper.RenderedActionLink(relatedPost.Title, "ArchiveBySlug", "ViewPost", new { relatedPost.Slug }, null)
+					);
+				}
+				content.Append("</ul>");
+				content.Append("</div>");
+			}
+			if (includeTags)
                 content.Append(GetTagLinksContent(helper, post.Tags));
             return content.ToString();
         }
