@@ -357,3 +357,7 @@ It's quite possible that I could get closer by experimenting with the hyperparam
 \* *(On the flip side, if I had **1,000s** of blog posts as source data then the difficult part would be manually labelling enough of them as "quite similar" in numbers sufficient for the computer to know if it's done better or done worse with each experiment)*
 
 Fortunately, I have another trick up my sleeve - but I'm going to leave that for next time! This post is already more than long enough, I think. The plan is to combine results from *another* model in the Catalyst with the FastText results and see if I can encourage things to look a bit neater.
+
+### Trying the code if you're lazy
+
+If you want to try fiddling with this code but don't want to copy-paste the sections above into a new project, you can find the complete sample in the "Similarity" project in the solution of this repo: [BlogPostSimilarity](https://github.com/ProductiveRage/BlogPostSimilarity).
