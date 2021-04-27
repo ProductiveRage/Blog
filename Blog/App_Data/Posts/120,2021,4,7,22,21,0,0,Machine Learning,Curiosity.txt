@@ -326,10 +326,10 @@ However, if we inspect the results like this:
 > 0.371 If you can keep your head when all about you are losing theirs and blaming it on VBScript
 > 0.384 Using Roslyn to identify unused and undeclared variables in VBScript WSC components
 > 
-> **Writing ReactJS components in TypeScript**
-> 0.376 TypeScript classes for (ReactJS) Flux actions
-> 0.378 ReactJS and Flux with DuoCode
-> 0.410 ReactJS (and Flux) with BridgeNET
+> **Writing React components in TypeScript**
+> 0.376 TypeScript classes for (React) Flux actions
+> 0.378 React and Flux with DuoCode
+> 0.410 React (and Flux) with Bridge.net
 
 However, there are also some *less* good ones - like these:
 
