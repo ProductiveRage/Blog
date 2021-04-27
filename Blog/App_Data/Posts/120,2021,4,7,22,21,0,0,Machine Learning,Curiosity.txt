@@ -230,7 +230,7 @@ Now let's get training!
     fastText.Data.ContextWindow = 10;
     fastText.Data.NegativeSamplingCount = 20;
     fastText.Train(
-        postsWithDocuments.Select(postsWithDocument => postsWithDocument.Document),
+        postsWithDocuments.Select(postWithDocument => postWithDocument.Document),
         trainingStatus: update => Console.WriteLine($" Progress: {update.Progress}, Epoch: {update.Epoch}")
     );
 
