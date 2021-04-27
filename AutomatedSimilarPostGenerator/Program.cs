@@ -24,7 +24,7 @@ namespace AutomatedSimilarPostGenerator
             var postRetriever = new SingleFolderPostRetriever(new DirectoryContents(postFolderPath));
             var posts = await postRetriever.Get();
             var suggestedRelatedContent = new StringBuilder();
-            foreach (var (post, similar) in Recommender.GetSimilarPosts(posts))
+            foreach (var (post, similar) in await Recommender.GetSimilarPosts(posts))
             {
                 Console.WriteLine();
                 Console.WriteLine(post.Title);
@@ -37,9 +37,9 @@ namespace AutomatedSimilarPostGenerator
                 suggestedRelatedContent.Append(post.Id);
                 suggestedRelatedContent.Append(':');
                 var passedFirstSuggestion = false;
-                foreach (var (otherPost, distance) in similar.OrderBy(otherPost => otherPost.Distance))
+                foreach (var (otherPost, similarityDistance, proximityByTitleTFIDF) in similar.OrderBy(otherPost => otherPost.SimilarityDistance))
                 {
-                    Console.WriteLine($"{distance:0.000} {otherPost.Title}");
+                    Console.WriteLine($"{similarityDistance:0.000} {otherPost.Title}");
                     if (passedFirstSuggestion)
                         suggestedRelatedContent.Append(',');
                     suggestedRelatedContent.Append(otherPost.Id);

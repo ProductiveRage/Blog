@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using BlogBackEnd.Models;
 using Catalyst;
 using Catalyst.Models;
@@ -13,7 +14,7 @@ namespace AutomatedSimilarPostGenerator
 {
     internal static class Recommender
     {
-        public static IEnumerable<(Post Post, IEnumerable<(Post Post, float Distance)> Similar)> GetSimilarPosts(
+        public static async Task<IEnumerable<(Post Post, IEnumerable<(Post Post, float SimilarityDistance, float ProximityByTitleTFIDF)> Similar)>> GetSimilarPosts(
             IEnumerable<Post> posts,
             int epoch = 50,
             int dimensions = 512,
@@ -54,6 +55,33 @@ namespace AutomatedSimilarPostGenerator
                 trainingStatus: update => Console.WriteLine($" Progress: {update.Progress}, Epoch: {update.Epoch}")
             );
 
+            Console.WriteLine("Training TF-IDF model..");
+            var tfidf = new TFIDF(pipeline.Language, version: 0, tag: "");
+            await tfidf.Train(postsWithDocuments.Select(postWithDocument => postWithDocument.Document));
+
+            Console.WriteLine("Getting average TF-IDF weights per word..");
+            var tokenValueTFIDF = new Dictionary<string, List<float>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var doc in postsWithDocuments.Select(postWithDocument => postWithDocument.Document))
+            {
+                tfidf.Process(doc);
+                foreach (var sentence in doc)
+                {
+                    foreach (var token in sentence)
+                    {
+                        if (!tokenValueTFIDF.TryGetValue(token.Value, out var freqs))
+                        {
+                            freqs = new();
+                            tokenValueTFIDF.Add(token.Value, freqs);
+                        }
+                        freqs.Add(token.Frequency);
+                    }
+                }
+            }
+            var averagedTokenValueTFIDF = tokenValueTFIDF.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.Average(), StringComparer.OrdinalIgnoreCase
+            );
+
             Console.WriteLine("Building recommendations..");
 
             // Combine the blog post data with the FastText-generated vectors
@@ -83,18 +111,55 @@ namespace AutomatedSimilarPostGenerator
             return results
                 .Select(result =>
                 {
-                    // Request one result too many from the KNNSearch call because it's expected that the original post will come back as the best match and we'll want to exclude that
+                    // Request that the KNNSearch operate over all documents because we can't take the top {n} until we've combined the ordering with the title TFIDF proximity values
                     var similarResults = graph
-                        .KNNSearch(result, maximumNumberOfResultsToReturn + 1)
-                        .Where(similarResult => similarResult.Item.UID != result.UID)
-                        .Take(maximumNumberOfResultsToReturn) // Just in case the original post wasn't included
-                        .ToArray(); // CallToArray to do the searching work now, rather than when evaluated
+                        .KNNSearch(result, postsWithDocuments.Length)
+                        .Where(similarResult => similarResult.Item.UID != result.UID);
+
+                    var tokenValuesInTitle = GetAllTokensForText(result.Post.Title, pipeline)
+                        .Select(token => token.Value)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                     return (
                         result.Post,
-                        similarResults.Select(similarResult => (similarResult.Item.Post, similarResult.Distance))
+                        similarResults
+                            .Select(similarResult => (
+                                similarResult.Item.Post,
+                                similarResult.Distance,
+                                ProximityByTitleTFIDF: GetProximityByTitleTFIDF(similarResult.Item.Post.Title, tokenValuesInTitle, averagedTokenValueTFIDF, pipeline)
+                            ))
+                            .OrderByDescending(similarResult => similarResult.ProximityByTitleTFIDF)
+                            .ThenBy(similarResult => similarResult.Distance)
+                            .Take(maximumNumberOfResultsToReturn)
+                            .ToArray() // Call ToArray to do this work now, rather than when it's evaluated
+                            .AsEnumerable()
                     );
+                })
+                .ToArray(); // Call ToArray to do this work now, rather than when it's evaluated
+        }
+
+        private static float GetProximityByTitleTFIDF(string similarPostTitle, HashSet<string> tokenValuesInInitialPostTitle, Dictionary<string, float> averagedTokenValueTFIDF, Pipeline pipeline)
+        {
+            return GetAllTokensForText(similarPostTitle, pipeline)
+                .Where(token => tokenValuesInInitialPostTitle.Contains(token.Value))
+                .Sum(token =>
+                {
+                    var tfidfValue = averagedTokenValueTFIDF.TryGetValue(token.Value, out var score) ? score : 0;
+                    if (tfidfValue <= 0)
+                    {
+                        // Ignore any tokens that report a negative impact (eg. punctuation or really common words like "in")
+                        return 0;
+                    }
+                    return tfidfValue;
                 });
+        }
+
+        private static IEnumerable<IToken> GetAllTokensForText(string text, Pipeline pipeline)
+        {
+            var doc = new Document(text, pipeline.Language);
+            pipeline.ProcessSingle(doc);
+            return doc.SelectMany(sentence => sentence);
         }
 
         private static string NormaliseSomeCommonTerms(string text) => text
