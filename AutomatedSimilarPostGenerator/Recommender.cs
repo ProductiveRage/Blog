@@ -118,7 +118,6 @@ namespace AutomatedSimilarPostGenerator
 
                     var tokenValuesInTitle = GetAllTokensForText(result.Post.Title, pipeline)
                         .Select(token => token.Value)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                     return (
