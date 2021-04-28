@@ -1,5 +1,11 @@
 ## Creating a C# ("Roslyn") Analyser - For beginners by a beginner
 
+**Update 28th April 2021:** I came to write a new analyser today and found that the project format has completely changed, so this post is now very out-of-date and I intend to revamp it at some point. However, I haven't done so yet and - until I do - I'll leave you with these resources that I found useful:
+
+- Microsoft Tutorial: [Write your first analyzer and code fix](https://docs.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/tutorials/how-to-write-csharp-analyzer-code-fix)
+- A StackOverflow question that talks about [how to add package and/or project references to your unit test code samples](https://stackoverflow.com/q/65550409/3813189)
+- Another StackOverflow question, that [describes how to add the NuGet feed that has the analyser packages that aren't on nuget.org](https://stackoverflow.com/a/66080131/3813189) - you need the "dotnet-tools" feed
+
 I've been meaning to try writing a post about creating analysers for a little while now - they're a technology that I think has huge promise for improving code quality and they're something that I've successfully played around with recently.. but I'm still very much in the early phases of being proficient and they're not something that I can just sit down and bang out easily (ie. not without a lot of googling).
 
 So this won't be the post of an expert - but I'm hoping to use that to my advantage since I hopefully remember the pain points all too well and can go through the sort of things that I try when I'm hashing these out.
