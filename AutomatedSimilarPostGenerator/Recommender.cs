@@ -116,7 +116,7 @@ namespace AutomatedSimilarPostGenerator
                         .KNNSearch(result, postsWithDocuments.Length)
                         .Where(similarResult => similarResult.Item.UID != result.UID);
 
-                    var tokenValuesInTitle = GetAllTokensForText(result.Post.Title, pipeline)
+                    var tokenValuesInTitle = GetAllTokensForText(NormaliseSomeCommonTerms(result.Post.Title), pipeline)
                         .Select(token => token.Value)
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -140,7 +140,7 @@ namespace AutomatedSimilarPostGenerator
 
         private static float GetProximityByTitleTFIDF(string similarPostTitle, HashSet<string> tokenValuesInInitialPostTitle, Dictionary<string, float> averagedTokenValueTFIDF, Pipeline pipeline)
         {
-            return GetAllTokensForText(similarPostTitle, pipeline)
+            return GetAllTokensForText(NormaliseSomeCommonTerms(similarPostTitle), pipeline)
                 .Where(token => tokenValuesInInitialPostTitle.Contains(token.Value))
                 .Sum(token =>
                 {
