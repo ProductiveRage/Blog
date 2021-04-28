@@ -1,0 +1,257 @@
+## Automating "suggested / related posts" links for my blog posts - Part 2
+
+### TL;DR
+
+By training another type of model from the open source .NET library that I've been using and combining its results with the similarity model from last time (see [Automating "suggested / related posts" links for my blog posts](Post120)), I'm going to improve the automatically-generated "you may be interested in" links that I'm adding to my blog.
+
+Improvement, in fact, sufficient such that I'll start displayed the machine-suggested links at the bottom of each post.
+
+### Where I left off last time
+
+In my last post, I had trained a [fastText](https://en.wikipedia.org/wiki/FastText) model (as part of the [Catalyst .NET library](https://github.com/curiosity-ai/catalyst) by having it read all of my blog posts so that it could predict which posts were most likely to be similar to which other posts.
+
+This came back with some excellent suggestions, like this:
+
+> **Learning F# via some Machine Learning: The Single Layer Perceptron**
+> How are barcodes read?? (Library-less image processing in C#)
+> Writing F# to implement 'The Single Layer Perceptron'
+> Face or no face (finding faces in photos using C# and AccordNET)
+
+.. but it also produced some less good selections, like this:
+
+> **Simple TypeScript type definitions for AMD modules**
+> STA ApartmentState with ASP.Net MVC
+> WCF with JSON (and nullable types)
+> The joys of AutoMapper
+
+I'm still not discounting the idea that I might be able to improve the results by tweaking hyperparameters on the training model (such as epoch, negative sampling rate and dimensions) or maybe even changing how it processes the blog posts - eg. it's tackling the content as English language documents but there are large code segments in many of the posts and maybe that's confusing it; maybe removing the code samples before processing would give better results?
+
+However, fiddling with those options and rebuilding over and over is a time-consuming process and there is no easy way to evaluate the "goodness" of the results - so I need to flick through them all myself and try to get a rough feel for whether I think the last run was an improvement or not.
+
+### Introducing a new model
+
+The premise that I wil be experimenting with is to determine what words in my post titles are "interesting" and to then order the suggested-similar posts first by a score based upon how many interesting words they share *and then* by the similarity score that I already have.
+
+The model that I'll be training for this is called "TF-IDF" or "Term Frequency - Inverse Document Frequency" and it looks at every word in every blog post and considers how many times that word appears in the document (the more often, the more likely that the document relates to the word) and how many times it appears across multiple documents (the more often, the more common and less "specific" it's likely to be).
+
+For each blog post that I'm looking for similar posts to, I'll:
+
+1. take the words from its title
+1. take the words from another post's title
+1. add together all of the TF-IDF scores for words that appear in both titles (the higher the score for each word, the greater the relevance)
+1. repeat until all other post titles have been compared
+
+Taking the example from above that didn't have particularly good similar-post recommendations, the words in its title will have the following scores:
+
+| Word | Score |
+| --- | --- |
+| Simple | 0.6618375 |
+| TypeScript | 4.39835453 |
+| type | 0.7873714 |
+| definitions | 2.60178781 |
+| for | 0 |
+| AMD | 3.81998682 |
+| modules | 3.96386051 |
+	
+.. so it should be clear that any other titles that contain the word "TypeScript" will be given a boost.
+
+This is by no means a perfect system as there will often be posts whose main topics are similar but whose titles are not. The example from earlier that fastText generated really good similar-post suggestions for is a great illustration of this:
+
+> **Learning F# via some Machine Learning: The Single Layer Perceptron**
+> How are barcodes read?? (Library-less image processing in C#)
+> Writing F# to implement 'The Single Layer Perceptron'
+> Face or no face (finding faces in photos using C# and AccordNET)
+
+All of them are investigations into some form of machine learning or computer vision but the titles share very little in common. It's likely that the prediction quality of this one will actually suffer a little with the change I'm introducing but I'm looking for an overall improvement, across the entire blog. I'm also not looking for a perfect general solution, I'm trying to find something that works well for *my* data (again, bearing in mind that there is a relatively small quantity of it as there are only around 120 posts, which doesn't give the computer a huge amount of data to work from).
+
+*(It's also worth noting that the way I implement this in my blog is that I maintain two lists - the manually-curated list that I had before that had links for about a dozen posts and a machine-generated list; if there are manual links present then they will be displayed and the auto-generated ones will be hidden - so if I find that I have a particuarly awkward post where the machine can't find nice matches then I can always tidy it up myself by manually creating the related-post links for that post)*
+
+### Implementation
+
+[Last time](Post120), I had code that was reading and parsing my blog posts into a "postsWithDocuments" list.
+
+After training the fastText model, I'll train a TF-IDF model on all of the documents. I'll then go back round each document again, have this new "Process" them and retrieve "Frequency" values for each word. These values allow for a score to be generated - since the scores depend upon how often a word appears in a given document, the scores will vary from one blog post to another and so I'm taking an average score for each distinct word.
+
+(Confession: I'm not 100% sure that this averaging is the ideal approach here but it seems to be doing a good enough job and I'm only fiddling around with things, so *good enough* should be all that I need)
+
+    Console.WriteLine("Training TF-IDF model..");
+    var tfidf = new TFIDF(pipeline.Language, version: 0, tag: "");
+    await tfidf.Train(postsWithDocuments.Select(postWithDocument => postWithDocument.Document));
+
+    Console.WriteLine("Getting average TF-IDF weights per word..");
+    var tokenValueTFIDF = new Dictionary<string, List<float>>(StringComparer.OrdinalIgnoreCase);
+    foreach (var doc in postsWithDocuments.Select(postWithDocument => postWithDocument.Document))
+    {
+        // Calling "Process" on the document updates data on the tokens within the document
+        // (specifically, the token.Frequency value)
+        tfidf.Process(doc);
+        foreach (var sentence in doc)
+        {
+            foreach (var token in sentence)
+            {
+                if (!tokenValueTFIDF.TryGetValue(token.Value, out var freqs))
+                {
+                    freqs = new();
+                    tokenValueTFIDF.Add(token.Value, freqs);
+                }
+                freqs.Add(token.Frequency);
+            }
+        }
+    }
+    var averagedTokenValueTFIDF = tokenValueTFIDF.ToDictionary(
+        entry => entry.Key,
+        entry => entry.Value.Average(), StringComparer.OrdinalIgnoreCase
+    );
+
+Now, with a couple of helper methods:
+
+    private static float GetProximityByTitleTFIDF(
+	    string similarPostTitle,
+	    HashSet<string> tokenValuesInInitialPostTitle,
+	    Dictionary<string, float> averagedTokenValueTFIDF,
+	    Pipeline pipeline)
+    {
+        return GetAllTokensForText(similarPostTitle, pipeline)
+            .Where(token => tokenValuesInInitialPostTitle.Contains(token.Value))
+            .Sum(token =>
+            {
+                var tfidfValue = averagedTokenValueTFIDF.TryGetValue(token.Value, out var score)
+                    ? score
+                    : 0;
+                if (tfidfValue <= 0)
+                {
+                    // Ignore any tokens that report a negative impact (eg. punctuation or
+                    // really common words like "in")
+                    return 0;
+                }
+                return tfidfValue;
+            });
+    }
+
+    private static IEnumerable<IToken> GetAllTokensForText(string text, Pipeline pipeline)
+    {
+        var doc = new Document(text, pipeline.Language);
+        pipeline.ProcessSingle(doc);
+        return doc.SelectMany(sentence => sentence);
+    }
+
+.. it's possible, for any given post, to sort the titles of the other posts according to how many "interesting" words (and *how* "interesting" they are) they have in common like this:
+
+    // Post 82 on my blog is "Simple TypeScript type definitions for AMD modules"
+    var post82 = postsWithDocuments.Select(p => p.Post).FirstOrDefault(p => p.ID == 82);
+    var title = post82.Title;
+	
+    var tokenValuesInTitle =
+        GetAllTokensForText(NormaliseSomeCommonTerms(title), pipeline)
+            .Select(token => token.Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+			
+    var others = postsWithDocuments
+        .Select(p => p.Post)
+        .Where(p => p.ID != post82.ID)
+        .Select(p => new
+        {
+            Post = p,
+            ProximityByTitleTFIDF = GetProximityByTitleTFIDF(
+                NormaliseSomeCommonTerms(p.Title),
+                tokenValuesInTitle,
+                averagedTokenValueTFIDF,
+                pipeline
+            )
+        })
+        .OrderByDescending(similarResult => similarResult.ProximityByTitleTFIDF);
+		
+    foreach (var result in others)
+        Console.WriteLine($"{result.ProximityByTitleTFIDF:0.000} {result.Post.Title}");
+
+The top 11 scores (after which, everything has a TF-IDF proximity score of zero) are these:
+
+> 7.183 Parsing TypeScript definitions (functional-ly.. ish)
+> 4.544 TypeScript State Machines
+> 4.544 Writing React components in TypeScript
+> 4.544 TypeScript classes for (React) Flux actions
+> 4.544 TypeScript / ES6 classes for React components - without the hacks!
+> 4.544 Writing a Brackets extension in TypeScript, in Brackets
+> 0.796 A static type system is a wonderful message to the present and future
+> 0.796 A static type system is a wonderful message to the present and future - Supplementary
+> 0.796 Type aliases in Bridge.NET (C#)
+> 0.796 Hassle-free immutable type updates in C#
+> 0.000 I love Immutable Data
+
+So the idea is to then use the fastText similarity score when deciding which of these matches is best.
+
+There are all sorts of ways that these two scoring mechanisms could be combined - eg. I could take the 20 titles with the greatest TF-IDF proximity scores and then order them by similarity (ie. which results the fastText model thinks are best) or I could reverse it and take the 20 titles that fastText thought were best and *then* take the three with the greatest TF-IDF proximity scores from within those. For now, I'm using the simplest approach and ordering by the TF-IDF scores first and then by the fastText similarity model. So, from the above list, the 7.183-scoring post will be taken first and then 2 out of the 5 posts that have a TF-IDF score of 4.544 will be taken, according to which ones the fastText model thought were more similar.
+
+Again, there are lots of things that could be tweaked and fiddled with - and I imagine that I will experiment with them at some point. The main problem is that I have enough data across my posts that it's tedious looking through the output to try to decide if I've improved things each time I make change but there *isn't* enough data that the algorithms have a huge pile of information to work on. Coupled with the fact that training takes a few minutes to run and I have recipe for frustration if I obsess too much about it. Right now, I'm happy enough with the suggestions and any that I want to manually override, I can do so easily.
+
+### Trying the code yourself
+
+If you want to try out the code, you can find a complete sample in the "SimilarityWithTitleTFIDF" project in the solution of this repo: [BlogPostSimilarity](https://github.com/ProductiveRage/BlogPostSimilarity).
+
+### Has it helped?
+
+Let's return to those examples that I started with.
+
+Good suggestions from last time:
+
+> **Learning F# via some Machine Learning: The Single Layer Perceptron**
+> How are barcodes read?? (Library-less image processing in C#)
+> Writing F# to implement 'The Single Layer Perceptron'
+> Face or no face (finding faces in photos using C# and AccordNET)
+
+*Less* good suggestions:
+
+> **Simple TypeScript type definitions for AMD modules**
+> STA ApartmentState with ASP.Net MVC
+> WCF with JSON (and nullable types)
+> The joys of AutoMapper
+
+Now, the not-very-good one has improved and has these offered:
+
+> **Simple TypeScript type definitions for AMD modules**
+> Parsing TypeScript definitions (functional-ly.. ish)
+> TypeScript State Machines
+> Writing a Brackets extension in TypeScript, in Brackets
+
+.. but, as I said before, the good suggestions are now not *as* good as they were:
+
+> **How are barcodes read?? (Library-less image processing in C#)**
+> Face or no face (finding faces in photos using C# and Accord.NET)
+> Implementing F#-inspired "with" updates for immutable classes in C#
+> A follow-up to "Implementing F#-inspired 'with' updates in C#"
+
+There are lots of suggestions that *are* still very good - eg.
+
+> **Creating a C# ("Roslyn") Analyser - For beginners by a beginner**
+> Using Roslyn to identify unused and undeclared variables in VBScript WSC components
+> Locating TODO comments with Roslyn
+> Using Roslyn code fixes to make the "Friction-less immutable objects in Bridge" even easier
+> 
+> **Migrating my Full Text Indexer to .NET Core (supporting multi-target NuGet packages)**
+> Revisiting .NET Core tooling (Visual Studio 2017)
+> The Full Text Indexer Post Round-up
+> The NeoCities Challenge! aka The Full Text Indexer goes client-side!
+> 
+> **Dependency Injection with a WCF Service**
+> Ramping up WCF Web Service Request Handling.. on IIS 6 with .Net 4.0
+> Consuming a WCF Web Service from PHP
+> WCF with JSON (and nullable types)
+> 
+> **Translating VBScript into C#**
+> VBScript is DIM
+> Using Roslyn to identify unused and undeclared variables in VBScript WSC components
+> If you can keep your head when all about you are losing theirs and blaming it on VBScript
+
+.. but still some less-good suggestions, like:
+
+> **Auto-releasing Event Listeners**
+> Writing React apps using Bridge.NET - The Dan Way (Part Three)
+> Persistent Immutable Lists - Extended
+> Extendable LINQ-compilable Mappers
+> 
+> **Problems in Immutability-land**
+> Language detection and words-in-sentence classification in C#
+> Using Roslyn to identify unused and undeclared variables in VBScript WSC components
+> Writing a Brackets extension in TypeScript, in Brackets
+
+However, having just looked through the matches to try to find any really awful suggestions, there aren't many that jump out at me. And, informal as that may be as a measure of success, I'm fairly happy with that!
