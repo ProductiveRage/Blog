@@ -4,11 +4,11 @@
 
 By training another type of model from the open source .NET library that I've been using and combining its results with the similarity model from last time (see [Automating "suggested / related posts" links for my blog posts](Post120)), I'm going to improve the automatically-generated "you may be interested in" links that I'm adding to my blog.
 
-Improvement, in fact, sufficient such that I'll start displayed the machine-suggested links at the bottom of each post.
+Improvement, in fact, sufficient such that I'll start displaying the machine-suggested links at the bottom of each post.
 
 ### Where I left off last time
 
-In my last post, I had trained a [fastText](https://en.wikipedia.org/wiki/FastText) model (as part of the [Catalyst .NET library](https://github.com/curiosity-ai/catalyst) by having it read all of my blog posts so that it could predict which posts were most likely to be similar to which other posts.
+In my last post, I had trained a [fastText](https://en.wikipedia.org/wiki/FastText) model (as part of the [Catalyst .NET library](https://github.com/curiosity-ai/catalyst)) by having it read all of my blog posts so that it could predict which posts were most likely to be similar to which other posts.
 
 This came back with some excellent suggestions, like this:
 
@@ -70,7 +70,7 @@ All of them are investigations into some form of machine learning or computer vi
 
 [Last time](Post120), I had code that was reading and parsing my blog posts into a "postsWithDocuments" list.
 
-After training the fastText model, I'll train a TF-IDF model on all of the documents. I'll then go back round each document again, have this new "Process" them and retrieve "Frequency" values for each word. These values allow for a score to be generated - since the scores depend upon how often a word appears in a given document, the scores will vary from one blog post to another and so I'm taking an average score for each distinct word.
+After training the fastText model, I'll train a TF-IDF model on all of the documents. I'll then go back round each document again, have this new model "Process" them and retrieve Frequency values for each word. These values allow for a score to be generated - since the scores depend upon how often a word appears in a given document, the scores will vary from one blog post to another and so I'm taking an average score for each distinct word.
 
 (Confession: I'm not 100% sure that this averaging is the ideal approach here but it seems to be doing a good enough job and I'm only fiddling around with things, so *good enough* should be all that I need)
 
