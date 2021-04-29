@@ -183,7 +183,10 @@ namespace Blog.Helpers
 			{
 				// Only display the auto-suggested related posts if there are no manually-picked related posts
 				content.Append("<div class=\"Related\">");
-				content.Append("<h3>You may also be interested in:</h3>");
+				content.AppendFormat(
+					"<h3>You may also be interested in (see {0} for information about how these are generated):</h3>",
+					helper.RenderedActionLink("here", "ArchiveBySlug", "ViewPost", new { Slug = "automating-suggested-related-posts-links-for-my-blog-posts" }, null)
+				);
 				content.Append("<ul>");
 				foreach (var relatedPost in post.AutoSuggestedRelatedPosts)
 				{
