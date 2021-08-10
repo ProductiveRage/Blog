@@ -1,0 +1,499 @@
+## Parallelising (LINQ) work in C#
+
+### TL;DR
+
+For computationally-expensive work that can be split up into tasks for LINQ "Select" calls, .NET provides a convenient way to execute this code on multiple threads. This "parallelism" should not be confused with "concurrency", which is what async / await is for.
+
+### A "parallelism vs concurrency" summary
+
+Before getting started, I want to nip in the bud any confusion with the differences between code that runs "in parallel" and code that runs "concurrently".
+
+In short, recruiting a parallelisation strategy for code allows you to:
+
+* **use multiple cores simultaneously to work on the same task**
+
+..while concurrency allows you to:
+
+* **handle multiple tasks on the same core**.
+
+A common example that I like to use is to refer to Node.js because it is a **single-threaded** environment that supports concurrent execution of **multiple** requests; each request will call out to external resources such as disk, out-of-process cache, a database, etc.. and it will be non-blocking when it does so, meaning that another request can be processed while it waits for that external resource to reply. So there is only a single thread but multiple overlapping requests can be handled because each time one pauses while it waits, another one can proceed until *it* calls an external resource. **One thread / multiple requests**.
+
+Parallelising a calculation is kind of the opposite - instead of one thread for multiple requests it tackles one request using multiple threads. This only makes sense when the work to be done is some sort of computation that consists of crunching away on data and *not* just waiting for an external resource to reply.
+
+When talking about concurrency, it's worth noting that in ASP.NET, if there is a lot of load then there might be multiple threads used to process work concurrently - each of the threads will be handling requests that spend most of their time waiting for some async work to complete. This is just like "one thread / multiple requests" but multiplied out to be **"{x} threads / {y} requests" where {x} < {y}**.
+
+For a web server, it is possible that it never makes sense to do work that benefits from being parallelised because that work, by its very nature, is very computationally-expensive and you wouldn't want multiple requests to get bogged down in repeating the same costly work. You might require complicated synchronisation mechanisms (to avoid multiple requests doing the same work; instead, having one request do the work while other requests queue up and wait for the result to become available) and maybe you would be better moving that computationally-heavy work off into another service entirely (in which case your web server is back to making async requests as it asks a different server to do the work and send back the result).
+
+### A "parallelism vs concurrency" example
+
+This is what concurrent (aka "async") work looks likes - if we use **Task.Delay** to imitate the delay that would be incurred by waiting on an external resource then we can create 50 requests and await the completion of them all like this:
+
+    var items = await Task.WhenAll(
+        Enumerable
+            .Range(0, 50)
+            .Select(async i =>
+            {
+                LogWithTime($"Starting {i}");
+
+                // Pause for 1, 2, 3, 4, 5 or 6 seconds depending upon the value of i
+                await Task.Delay(TimeSpan.FromSeconds((i % 6) + 1));
+
+                LogWithTime($"Finished {i}");
+                return i;
+            })
+    );
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message}");
+    
+This work will all complete within about 6s because all it does is create 50 tasks (which it can do near-instantly) where the longest of those has a **Task.Delay** call of 6s. Whenever one task is waiting, other work is free to continue. This means that all 50 of the tasks may be started using a single thread and that single thread may also be used to jump around receiving each of the results of those tasks.
+
+In this example, the **Task.WhenAll** call creates a 50-element array where each element returns the value of "i" where i is 0-49. These 50 elements will be the 50 tasks' results, appearing in the array in the same order as they were created. This means that enumerating over the array - when **Task.WhenAll** says that all of the tasks have completed - will reveal the task results to be in the same order in which they were specified.
+
+The 50 results, when the work is coordinated by **Task.WhenAll**, will be:
+
+1. In order
+1. Not available for enumeration until *all* of them have completed (due to the "**Task.WhenAll**" call) - all of the "Starting {i}" and "Finished {i}" messages will be displayed before any of the "Received item {item}" message
+1. Almost certainly handled by a single thread, across all 50 tasks (this isn't guaranteed but it's extremely likely to be true)
+1. The total running time will be about 6s since there is almost no work involved in starting the tasks, nor receiving the results of the tasks - all that we have to wait for is the time it takes for the longest tasks to complete (which is 6s)
+
+Now, if this code is changed such that the **Thread.Sleep** is used instead of of **Task.Delay** then the thread will be blocked as each loop is iterated over. Whereas **Task.Delay** was used to imitate a call to an external service that would do the work, **Thread.Sleep** is used to imitate an expensive computation performed by the current thread.
+
+    var items = Enumerable
+        .Range(0, 50)
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+
+            // Pause for 1, 2, 3, 4, 5 or 6 seconds depending upon the value of i
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        });
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message}");
+        
+Because there is no **Task.WhenAll** call that requires that *every* iteration complete before enumeration can begin, the foreach loop will write out a line as soon as iteration finishes. The results will still be written to the console in the order in which they were defined.
+
+Note that this code is neither concurrent *not* parallelised.
+
+Its behaviour, in comparison to the async example above, is that the results are returned:
+
+1. In order
+1. Available for enumeration as soon as each iteration completes - so the console messages will always appear as "Starting 1", "Finished 1", "Receiving item 1", "Starting 2", "Finished 2", "Receiving item 2", etc..
+1. Handled by a single thread as there is merely the one thread that is processing the loop and blocking on each **Thread.Sleep** call
+1. The total running time is the sum of every **Thread.Sleep** delay, which is 171s (50 iterations where each sleep call is between 1 and 6s)
+
+With one simple change, we can alter this code such that the work *is* parallelised -
+
+    var items = Enumerable
+        .Range(0, 50)
+        .AsParallel() // <- Paralellisation enabled here
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+                    
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        });
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message}");
+        
+This changes the behaviour considerably (unless you happen to be running this code on a single core machine, which is pretty unusual these days!) because as AsParallel() call allows the 50 iterations to be distributed over multiple cores.
+
+My computer has 24 cores and so that means that up to 24 iterations can be run simultaneously - there will be up to 24 threads running and while each of those will be blocked as the **Thread.Sleep** calls are hit (which, again, are intended to mimic an expensive computation that would tie up a thread), the work will be done much more quickly than when a *single* thread had to do all the waiting.
+
+When this code is running, there will be many "Starting {i}" messages written out at once and then some "Finished {i}" messages will be written as soon as the first threads complete their current iterations and are ready to move onto another (until all 50 have been processed). It also means that "Received item {item}" messages will be interspersed throughout because enumeration of the list can commence as soon as any of the loops complete.
+
+It's important to note that the scheduling of the threads should be considered undefined in this configuration and there is no guarantee that you will first see "Starting 1", followed by "Starting 2", followed by "Starting 3". In fact, when I run it, the first messages are as follows:
+        
+> 15:15:10.423 Starting 3
+> 15:15:10.423 Starting 9
+> 15:15:10.423 Starting 15
+> 15:15:10.423 Starting 16
+> 15:15:10.423 Starting 11
+> 15:15:10.423 Starting 20
+> 15:15:10.423 Starting 5
+> 15:15:10.423 Starting 19
+> 15:15:10.423 Starting 6
+> 15:15:10.423 Starting 0
+> 15:15:10.423 Starting 12
+> 15:15:10.423 Starting 17
+> 15:15:10.423 Starting 23
+> 15:15:10.423 Starting 1
+> 15:15:10.423 Starting 14
+> 15:15:10.423 Starting 2
+> 15:15:10.423 Starting 10
+> 15:15:10.423 Starting 22
+> 15:15:10.423 Starting 18
+> 15:15:10.423 Starting 4
+> 15:15:10.423 Starting 13
+> 15:15:10.423 Starting 21
+> 15:15:10.423 Starting 7
+> 15:15:10.423 Starting 8
+> 15:15:11.437 Finished 18
+> 15:15:11.437 Finished 0
+> 15:15:11.437 Finished 12
+> 15:15:11.437 Finished 6
+> 15:15:11.437 Starting 24
+> 15:15:11.437 Starting 25        
+
+While the starting order is not predictable, the iteration-completion order is somewhat more predictable *in this example code* as loops 0, 6, 12, etc.. (ie. every multiple of 6) completes in 1s while every other value of i takes longer.
+
+As such, the first "Finished {i}" messages are 18, 0, 12, 6 in the output shown above.
+
+The "Received item {item}" messages will be interspersed between "Starting {i}" and "Finished {i}" messages because enumeration of the results *can* commence as soon as soom of the loops have completed.. however, again, it's important to note that the ordering of the results should not be considered to be defined as the scheduling of the threads depends upon how .NET decides to use its **ThreadPool** to handle the work and how it will "join" the separate threads used for the loop iteration back to the primary thread that the program is running as.
+
+That may sound a little confusing, so if we change the code a little bit then maybe it can become clearer:
+
+    var items = Enumerable
+        .Range(0, 50)
+        .AsParallel() // <- Paralellisation enabled here
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+                    
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        });
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message} " + 
+                          $"(Thread {Thread.CurrentThread.ManagedThreadId})");
+        
+Running this now has those first progress messages look like this:
+
+> 15:32:56.683 Starting 8 (Thread 19)
+> 15:32:56.688 Starting 14 (Thread 16)
+> 15:32:56.699 Starting 19 (Thread 18)
+> 15:32:56.692 Starting 17 (Thread 11)
+> 15:32:56.690 Starting 15 (Thread 14)
+> 15:32:56.687 Starting 11 (Thread 17)
+> 15:32:56.685 Starting 9 (Thread 12)
+> 15:32:56.695 Starting 18 (Thread 21)
+> 15:32:56.688 Starting 13 (Thread 26)
+> 15:32:56.703 Starting 21 (Thread 27)
+> 15:32:56.692 Starting 16 (Thread 25)
+> 15:32:56.700 Starting 20 (Thread 24)
+> 15:32:56.683 Starting 6 (Thread 4)
+> 15:32:56.683 Starting 0 (Thread 7)
+> 15:32:56.683 Starting 5 (Thread 13)
+> 15:32:56.683 Starting 1 (Thread 5)
+> 15:32:56.687 Starting 12 (Thread 10)
+> 15:32:56.683 Starting 2 (Thread 6)
+> 15:32:56.683 Starting 4 (Thread 9)
+> 15:32:56.685 Starting 10 (Thread 22)
+> 15:32:56.683 Starting 7 (Thread 15)
+> 15:32:56.706 Starting 22 (Thread 20)
+> 15:32:56.683 Starting 3 (Thread 8)
+> 15:32:56.706 Starting 23 (Thread 23)
+> 15:32:57.722 Finished 18 (Thread 21)
+> 15:32:57.722 Finished 6 (Thread 4)
+> 15:32:57.722 Finished 0 (Thread 7)
+> 15:32:57.722 Finished 12 (Thread 10)
+> 15:32:57.723 Starting 24 (Thread 21)
+> 15:32:57.723 Starting 25 (Thread 4)
+> 15:32:57.723 Starting 26 (Thread 7)
+> 15:32:57.723 Starting 27 (Thread 10)
+> 15:32:58.711 Finished 1 (Thread 5)
+> 15:32:58.711 Finished 7 (Thread 15)
+> 15:32:58.711 Finished 19 (Thread 18)
+
+Firstly, note that the "Starting {i}" and "Finished {i}" messages are in a different order again - as I said, the order in which the tasks will be delegated to threads from the **ThreadPool** should be considered undefined and so you can't rely on having each loop started in the same order.
+
+Secondly, note that all of those first "Starting {i}" messages are being written from a different thread (19, 16, 18, 11, etc..). But when one of the loops is completed, the thread that processed it becomes free to work on a different iteration and so shortly after we see "Finished 18 (Thread 24)" we see "Starting 25 (Thread 24)" - meaning that one thread (the one with ManagedThreadId 24) finished with loop 18 and then became free to be assigned to start working on loop 25.
+
+Scrolling further down the output when I run it on my computer, I can see the first "Receiving item {item}" messages:
+
+> 15:33:01.732 Received item 9 (Thread 1)
+> 15:33:01.732 Received item 42 (Thread 1)
+> 15:33:01.734 Finished 32 (Thread 21)
+> 15:33:01.734 Received item 18 (Thread 1)
+> 15:33:01.742 Received item 24 (Thread 1)
+> 15:33:01.742 Received item 32 (Thread 1)
+> 15:33:01.734 Finished 37 (Thread 24)
+> 15:33:01.734 Finished 27 (Thread 10)
+> 15:33:01.744 Received item 20 (Thread 1)
+
+Note that all of the "Received item {item}" messages are being logged by thread 1, which is the thread that the "Main" method of my program started on.
+
+Having "AsParallel()" join up its enumeration results such that the enumeration itself can happen on the "primary" thread can be useful because there are some environments that get unhappy if you try to do particular types of work on separate threads - for example, if you wrote an old-school WinForms app and had a separate thread do some work and then try to update a control on your form then you would get an error:
+
+> Cross-thread operation not valid. Control accessed from a thread other than the thread it was created on.
+
+*(You may be wondering why the "Received item {i}" messages appeared a couple of seconds after the corresponding "Finished {i}" messages, rather than immediately after each loop completed - this is due to buffering of the results and I'll touch on this later in this post)*
+
+When "AsParallel()" is used in this way, the characteristics (as compared to the **Task.WhenAll** async work and to the single-thread work) are that:
+
+1. The results are not returned in order
+1. Enumeration starts before all of the processing has completed
+1. Multiple threads are used (by default, one thread per core in your computer - but, again, there are options for this that I'll discuss further down)
+1. The total running time depends upon the number of cores you have - if you had 50 cores then every loop iteration would be running simultaneously and it would take about 6s for *everything* to complete, as the longest iterations take 6s each (but they would be getting processed simultaneously). If you only had 1 core then you would see the same behaviour as the non-parallelised version above and it would take 171s. On my computer, with 24 cores, it takes around 11s because there are threads that get through the quick iterations until they hit the longer **Thread.Sleep** calls but there will still be multiple of these slower iterations being processed at the same time.
+
+If ordering of the results is important then the code can easily be changed like this:
+
+    var items = Enumerable
+        .Range(0, 50)
+        .AsParallel() // <- Paralellisation enabled here
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+                    
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        })
+        .OrderBy(i => i); // <- Ordering enforced here
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message} " + 
+                          $"(Thread {Thread.CurrentThread.ManagedThreadId})");
+
+Now the work will still be performed on multiple threads at once but enumeration will not be able to start until all of the iterations have completed.
+
+This means that the console messages will consist entirely of "Starting {i}" and "Finished {i}" messages until *all* 50 iterations are completed, then all of the "Received item {item}" messages will be written out. This will still have the same running time (eg. 11s on my computer) because the work is being performed in the same way - the only difference is that the results are all buffered up until the work is completed, otherwise the **OrderBy** call wouldn't be able to do its job because it couldn't know all of the values that were going to be produced.
+
+### Implementation details
+
+There are a *lot* of options and intricacies that you can find if you dig deep enough into how this works in the .NET library. I have no intention of trying to cover all of them but there are a few options and observations that I think are worth including in this post.
+
+The first thing to be aware of is that parallelisation of the work will not be enabled until after the "AsParallel()" call is made - for example, the following code will *not* spread the the **Thread.Sleep** calls across multiple cores:
+
+    var items = Enumerable
+        .Range(0, 50)
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+                    
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        })
+        .AsParallel(); // <- Too late!
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message} " + 
+                          $"(Thread {Thread.CurrentThread.ManagedThreadId})");
+
+This may seem counterintuitive as the **IEnumerable** returned from "Select" may be lazily evaluated and so you may expect the runtime to be able to distribute its work over multiple cores due to the "AsParallel()" call after it but this is not the case.
+
+To get an idea where parallelisation may occur, there are hints in the method return types - eg. where "Enumerable.Range" returns an **IEnumerable&lt;int&gt;** and a "Select" call following it will also return an **IEnumerable&lt;int&gt;**, when there is an "AsParallel" call after "Enumerable.Range" then the type is now a **ParallelQuery&lt;int&gt;int** and there is a "Select" overload on that type that means that when "Select" is called on a **ParallelQuery** then that too returns a **ParallelQuery**.
+
+#### Limiting how many cores may be used
+
+The default behaviour of "AsParallel()" is to spread the work over as many cores as your computer has available (obviously if there are only 10 work items to distribute and there are 24 cores then it won't be able to use *all* of your cores but if there are at least as many things to do as there are cores then it will use them all until it starts running out of things).
+
+Depending upon your scenario, this may or may not be a good thing. For example, in my previous post ([Automating "suggested / related posts" links for my blog posts - Part 2](Post121)), I spoke about how I've started using the C# machine learning library [Catalyst](https://github.com/curiosity-ai/catalyst) (produced by a startup that I used to work at) to suggest "you may be also be interested in" links for the bottom of my posts - in this case, it's a one-off task performed before I push an update to my blog live and so I want the computer to spend all of its resources calculating this as fast as possible.
+
+One of the applicable lines in the library is in the [TFIDF](https://en.wikipedia.org/wiki/Tf%E2%80%93idf) implementation and looks like this:
+
+    documents.AsParallel().ForAll(doc => UpdateVocabulary(ExtractTokenHashes(doc)));
+    
+*(As you can see in the source file [TF-IDF.cs](https://github.com/curiosity-ai/catalyst/blob/70df89be7b725f6c7786187bd75b2032f287141b/Catalyst/src/Models/Special/TF-IDF.cs#L110); along with the rest of the implementation for if you're curious)*
+
+However, I could also imagine that there might be a web server that is serving requests from many people each day but *ocassionally* there is a request that requires some more intense computation and it might take too long to calculate this while feeling responsive to the User if it tried to do the work on a single thread - *but* if it used *every* core available on the server then it would impact all of the other requests being handled. In this case it may be appropriate to say "parallelise this work but don't allow more than four cores to be utilised". There is a method "WithDegreeOfParallelism" available for just this purpose!
+
+    var items = Enumerable
+        .Range(0, 50)
+        .AsParallel().WithDegreeOfParallelism(4)
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+                    
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        });
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message} " + 
+                          $"(Thread {Thread.CurrentThread.ManagedThreadId})");
+
+If the value passed to "WithDegreeOfParallelism" exceeds the number of cores then it will have no effect but if it is less then it will constrain that parallelised work such that it will not use more than that number of cores at any time.
+
+#### Buffering options
+
+I mentioned earlier that when work is spread over multiple cores using "AsParallel()" and then later enumerated that some buffering of the results occurs. There are three options for the buffering behaviour:
+
+1. AutoBuffering
+2. FullyBuffered
+3. NotBuffered
+
+The default is "AutoBuffering" and the behaviour of this is that results are not available for enumeration as soon as the work items are completed - instead, the runtime determines a batch size that it thinks makes sense to buffer the results up for before making them available for looping through.
+
+To be completely honest, I don't know enough about how it decides on this number or the full extent of the benefits of doing so (though I will hint at a way to find out more in the "Partitioner" section further down); I presume that there are some performance benefits to reducing how often execution jumps from one thread to another - because, as we saw earlier, as soon as enumeration commences, execution returns to the "primary thread" and hopping between threads can be a *relatively* expensive operation.
+
+The second option ("FullyBuffered") is simple to understand - enumeration will not commence until *all* of the work items are completed; they will *all* be added to a buffer first. This not only has the disadvantage that enumeration can't start until the final item is completed but it also means that all of those results must be held in memory, which could be avoided (if it's a concern) by having the results "stream" out as they become ready in the other buffering scenarios. This has the advantage of minimising "thread hops" but, even though the results are all buffered, it does not preserve the order of the work items when it comes to enumeration - despite what I've read elsewhere (you can see this yourself by running the code a little further down).
+
+The final option is "NotBuffered" and that, as you can probably tell from the name, doesn't buffer results at all and makes the available for enumeration as soon as they have been processed (the disadvantage being the additional cost of changing thread context more frequently - ie. more "thread hops").
+
+To override the default ("AutoBuffering") behaviour, you may use the "WithMergeOptions" function like this -
+
+    var items = Enumerable
+        .Range(0, 50)
+        .AsParallel().WithMergeOptions(ParallelMergeOptions.FullyBuffered)
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+                    
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        });
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message} " + 
+                          $"(Thread {Thread.CurrentThread.ManagedThreadId})");
+
+#### Cancellation
+
+Say you have many work items distributed over multiple cores in order to calculate something very expensive and parallelisable. Part way through, you might decide that actually you don't want the result any more - maybe some of the data that it relies on has changed and a "stale" result will not be of any use. In this case, you will want to cancel the parallised work.
+
+To enable this, there is a "WithCancellation" method that takes a **CancellationToken** and will stop allocating work items to threads if the token is marked as cancelled - instead, it will throw an **OperationCanceledException**. To imitate this, the code below has a token that will be set to be cancelled after 3s and the exception will be thrown during the enumeration:
+
+    var cts = new CancellationTokenSource();
+    cts.CancelAfter(TimeSpan.FromSeconds(3));
+    
+    var items = Enumerable
+        .Range(0, 50)
+        .AsParallel().WithCancellation(cts.Token)
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+                    
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        });
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message} " + 
+                          $"(Thread {Thread.CurrentThread.ManagedThreadId})");
+
+It's worth noting that "WithCancellation" can only cancel the "AsParallel" work of allocating items to threads, it doesn't have any ability to cancel the individual work items themselves. If you want to do this - such that *all* work is halted immediately as soon as the token is set to cancelled, then you would have to add cancelletion-checking code to the work performed in each step - ie.
+
+    var cts = new CancellationTokenSource();
+    cts.CancelAfter(TimeSpan.FromSeconds(3));
+    
+    var items = Enumerable
+        .Range(0, 50)
+        .AsParallel().WithCancellation(cts.Token)
+        .Select(i =>
+        {
+            LogWithTime($"Starting {i}");
+                    
+            cts.Token.ThrowIfCancellationRequested();
+            Thread.Sleep(TimeSpan.FromSeconds((i % 6) + 1));
+
+            LogWithTime($"Finished {i}");
+            return i;
+        });
+
+    foreach (var item in items)
+    {
+        LogWithTime($"Received item {item}");
+    }
+
+    static void LogWithTime(string message) =>
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message} " + 
+                          $"(Thread {Thread.CurrentThread.ManagedThreadId})");
+
+*(Granted, using "cts.Token.ThrowIfCancellationRequested" alongside "Thread.Sleep" isn't a perfect example of how to deal with cancellation because you can't cancel the "Thread.Sleep" call itself - but hopefully it demonstrates that if you want immediate cancellation of every work item then you need to incorporate cancellation support into each work item as well as calling "WithCancellation" on the **ParallelQuery**)*
+
+For more detailed information on "PLINQ (parallel LINQ) cancellation", there is a great article by Reed Copsey Jr entitled [Parallelism in .NET – Part 10, Cancellation in PLINQ and the Parallel class](http://reedcopsey.com/2010/02/17/parallelism-in-net-part-10-cancellation-in-plinq-and-the-parallel-class/).
+
+#### Partitioner&lt;TSource&gt;
+
+When an "AsParallel" call decides how to split up the work, it uses something called a "Partitioner". This determines how big the buffer will be when "AutoBuffering" is used and it may even perform other optimisations (up to this point, I've said that "AsParallel" will *always* spread the work over multiple cores - so long as you have multiple cores at your disposal and "WithDegreeOfParallelism" doesn't specify a value of 1) but, actually, the partitioner could look at the work load and decide that parallelising the work would probably incur more overhead than performing it one step at a time on a single thread and so it *won't* actually use multiple cores.
+
+The .NET library will use its own default Partitioner unless it is told to use a custom one. This is a complex subject matter that:
+
+1. I don't have a lot of knowledge about about
+1. I don't want to try to add to this article, lest it end up ginormous!
+
+If you want to find out more, I recommend starting at the Microsoft documentation about it here: [Custom Partitioners for PLINQ and TPL](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/custom-partitioners-for-plinq-and-tpl) and also checking out [Parallel LINQ in Depth (2) Partitioning](https://weblogs.asp.net/dixin/parallel-linq-2-partitioning) from Dixin's Blog (whose blog I also referenced under the "Further reading" section of my [I didn't understand why people struggled with (.NET's) async](Post113) post).
+
+### When to parallelise work (and when to not)
+
+Much of the time, there is no need for you to try to spread individual tasks over multiple threads. A very common model in this day and age for processing is a web server that is dealing with requests from many Users and most of the time is spent waiting for external caches, file system accesses, database retrievals, etc.. This is not the sort of heavy computation that would lead you to want to try to utilise multiple cores on that web server for any single request.
+
+Also, some computational work, even if it's expensive, doesn't lend itself to parallelisation - if you can't split the work into clearly delineated and independent work items then it's going to be awkward (if not impossible) to make the work parallelisable. For example, the [Fibonacci Sequence](https://en.wikipedia.org/wiki/Fibonacci_number) starts with the numbers 0 and 1 and each subsequent number is the sum of the previous two; so the third number is (0 + 1) = 1, the fourth number is (1 + 1) = 2, the fifth number is (1 + 2) = 3, etc.. In case you're not familiar with it and that description is a little confusing, maybe it will help to know that the first ten numbers in the sequence are:
+
+**0**, **1**, **1** (=0+1), **2** (=1+1), **3** (=1+2), **5** (=2+3), **8** (=3+5), **13** (=5+8), **21** (=8+13), **34** (=13+21)
+
+If you calculate the *nth* number like this (based on the previous two) then it's near impossible to split the work into big distinct chunks that you could run on different threads and so it wouldn't be a good candidate for parallelisation\*.
+
+\* *(If you search Google then you will find that there are people proposing ways to calculate Fibonacci numbers using multiple threads but it's much more complicated than working them out the simple way described above, so let's forget about that for now so that the Fibonacci sequence works as an easily-understood example of when not to parallelise!)*
+
+Another thing to bear in mind is that there *is* some cost to having the runtime jump around multiple threads, to coordinate what work is done on which and to then join the results all back up on the original thread. For this reason, the ideal use cases are when the main task can be split into fairly large chunks so that the amount of time that each thread spends doing work makes the thread coordination time negligible in comparison.
+
+One example is the **TF-IDF** class that I mentioned earlier where there are a list of documents (blog posts, in my use case) and there is analysis required on each one to look for "interesting" words:
+
+    documents.AsParallel().ForAll(doc => UpdateVocabulary(ExtractTokenHashes(doc)));
+
+Another example is something that I was tinkering with some months ago and which I'm hoping to write some blog posts about when I can motivate myself! A few years ago, I gave a tech talk to a local group that was recorded but the camera was out of focus for most of the video and so the slides are illegible. I've still got the slide deck that I prepared for the talk and so I can produce images of those in full resolution - which gave me the idea of analysing the frames of the original video and trying to determine which slide should be shown on which frame and then superimposing a clear version of the slide onto the blurry images (then creating a new version of the video with the original audio, the original blurry view of me but super-clear slide contents). Some of the steps involved in this are:
+
+1. Load all of the original slide images and translate their pixel data into a form that will make comparisons easier for the code later on
+1. Look at every frame of the video and look for the brightest area on the image and hope that that is the projection of the slide (it will be a quadrilateral but not a rectangle, due to perspective of the wall onto which the slides were projected)
+1. Load every frame of the video, extract the content that is in the "brightest area" that appears most commonly throughout the slides (it varies a little from slide to slide, depending upon how out of focus the camera was at the time), stretch the area back into a simple rectangle (reversing the effect of perspective), translate the pixel data into the same format as the original slides were converted into earlier and then try to find the closest match
+
+Each of these steps lends itself to parallelisation because the work performed on each frame may be done in isolation and the work itself is sufficiently computationally expensive that the task of coordinating the work between threads can basically be considered to be zero in comparison.
+
+*(If you're just absolutely desperate to know more about this still-slightly-rough-around-the-edges project, you can find it on my GitHub account under [NaivePerspectiveCorrection](https://github.com/ProductiveRage/NaivePerspectiveCorrection) - like I said, I hope to write some more posts about it in the coming months but, until then, you can see some sensible uses of "AsParallel()" in [Program.cs](https://github.com/ProductiveRage/NaivePerspectiveCorrection/blob/4cf5222282ea3c948d454af83eafcfdc274c155f/NaivePerspectiveCorrection/Program.cs))*
