@@ -465,7 +465,7 @@ When an "AsParallel" call decides how to split up the work, it uses something ca
 
 The .NET library will use its own default Partitioner unless it is told to use a custom one. This is a complex subject matter that:
 
-1. I don't have a lot of knowledge about about
+1. I don't have a lot of knowledge about
 1. I don't want to try to add to this article, lest it end up ginormous!
 
 If you want to find out more, I recommend starting at the Microsoft documentation about it here: [Custom Partitioners for PLINQ and TPL](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/custom-partitioners-for-plinq-and-tpl) and also checking out [Parallel LINQ in Depth (2) Partitioning](https://weblogs.asp.net/dixin/parallel-linq-2-partitioning) from Dixin's Blog (whose blog I also referenced under the "Further reading" section of my [I didn't understand why people struggled with (.NET's) async](Post113) post).
