@@ -127,11 +127,9 @@ namespace Blog.Helpers
             if (postSlugRetriever == null)
                 throw new ArgumentNullException(nameof(postSlugRetriever));
 
-            var markdownContent = await HandlePostLinks(
-                helper,
-                includeTitle ? (await ReplaceFirstLineHashHeaderWithPostLink(post, postSlugRetriever)) : RemoveTitle(post.MarkdownContent),
-                postSlugRetriever
-            );
+            var markdownContent = includeTitle ? (await ReplaceFirstLineHashHeaderWithPostLink(post, postSlugRetriever)) : RemoveTitle(post.MarkdownContent);
+            markdownContent = await HandlePostLinks(helper, markdownContent, postSlugRetriever);
+            markdownContent = HandleTagLinks(helper, markdownContent);
 
             var content = new StringBuilder();
             if (includePostedDate)
@@ -230,8 +228,8 @@ namespace Blog.Helpers
             return content.ToString();
         }
 
-        /// <summary>
-		/// Update any markdown links where the target is of the form "Post{0}" to replace with the real url
+		/// <summary>
+		/// Update any markdown links where the target is of the form "Post{0}" to replace with the real url (linking to the Post with the specified Id)
 		/// </summary>
 		private static async Task<string> HandlePostLinks(IHtmlHelper helper, string content, IRetrievePostSlugs postSlugRetriever)
 		{
@@ -252,6 +250,33 @@ namespace Blog.Helpers
 				rewrittenContent
 					.Append(content, lastIndex, match.Index - lastIndex)
 					.Append(helper.RenderedActionLink(text, "ArchiveBySlug", "ViewPost", new { Slug = await postSlugRetriever.GetSlug(id) }));
+
+				lastIndex = match.Index + match.Length;
+			}
+			rewrittenContent.Append(content, lastIndex, content.Length - lastIndex);
+			return rewrittenContent.ToString();
+		}
+
+		/// <summary>
+		/// Update any markdown links where the target is of the form "Tag:{0}" to replace with the real url (link to the specified Tag)
+		/// </summary>
+		private static string HandleTagLinks(IHtmlHelper helper, string content)
+		{
+			if (helper == null)
+				throw new ArgumentNullException(nameof(helper));
+			if (string.IsNullOrEmpty(content))
+				return content;
+
+			var rewrittenContent = new StringBuilder();
+			var lastIndex = 0;
+			foreach (Match match in Regex.Matches(content, @"\[([^\]]*?)\]\(Tag:(.*?)\)", RegexOptions.Multiline))
+			{
+				var text = match.Groups[1].Value;
+				var tag = match.Groups[2].Value;
+
+				rewrittenContent
+					.Append(content, lastIndex, match.Index - lastIndex)
+					.Append(helper.RenderedActionLink(text, "ArchiveByTag", "ViewPost", new { Tag = tag }));
 
 				lastIndex = match.Index + match.Length;
 			}
