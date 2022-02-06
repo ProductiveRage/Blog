@@ -1,6 +1,5 @@
 body {
     div.Content {
-        position: relative; // This is just for the a.ArchiveByTagReadMore elements
         margin: 0 0 16px 0;
         padding: 16px 48px 16px 16px;
         width: 100%;
@@ -13,32 +12,8 @@ body {
         border: 1px solid #c0c0c0;
 
         &.ArchiveByTag {
-            height: 255px;
+            height: 155px;
             overflow: hidden;
-
-            a.ArchiveByTagReadMore {
-                display: block;
-                position: absolute;
-                bottom: 0;
-                right: 0;
-                padding: 8px 42px 8px 8px;
-                border: 1px solid #99f;
-                border-right: none;
-                border-bottom: none;
-                text-decoration: none;
-
-                // I want a nice translucent pale blue background with white text, but for browsers that don't support rgba a white background will
-                // suffice, with the default link / link-hover colour (text colour is conditionally set by the use of rgba; even though it isn't
-                // really translucent, defining it with rgba means that non-supporting browsers will ignore the rule)
-                background: white;
-                background: rgba(128, 128, 255, 0.7);
-                color: rgba(255, 255, 255, 0.99);
-
-                &:hover {
-                    background: rgba(128, 128, 255, 0.95);
-                    border-color: #88f;
-                }
-            }
         }
 
         > p {
