@@ -76,7 +76,7 @@ Running this code will print the following to the console:
 
 Just to prove that it doesn't _only_ detect English, I ran the sentence through Google Translate to get a German version (unfortunately, the languages I'm fluent in are only English and a few computer languages and so Google Translate was very much needed!) - thus changing the "text" definition to:
 
-    const string text = "Meine Katze Cass ist eine wunderschöne, flauschige kleine Taubenmörderin!";
+    const string text = "Meine Katze Cass ist eine schöne flauschige kleine Taubenmörderin!";
 
 Running the altered program results in the following console output:
 
@@ -94,13 +94,6 @@ Add the following code immediately after the Console.WriteLine calls in the Main
     Console.WriteLine();
     Console.WriteLine($"Downloading/reading part-of-speech model for {doc.Language}..");
     var pipeline = await Pipeline.ForAsync(doc.Language);
-    pipeline.Add(
-        await AveragePerceptronEntityRecognizer.FromStoreAsync(
-            doc.Language,
-            Version.Latest,
-            tag: "WikiNER"
-        )
-    );
     pipeline.ProcessSingle(doc);
     foreach (var sentence in doc)
     {

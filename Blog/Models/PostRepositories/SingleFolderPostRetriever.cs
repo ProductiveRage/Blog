@@ -42,34 +42,20 @@ namespace Blog.Models
 					.Select(values => Tuple.Create(values[0], values[1]));
 			}
 
-			// The relatedPostRelationships set contains tuples of Post Id to Ids of related Posts (in the order that they should appear)
+			// The relatedPostRelationships set contains a map of Post Id to Ids of related Posts (in the order that they should appear)
 			const string relatedPostsFilename = "RelatedPosts.txt";
 			var relatedPostsFile = _folder.FirstOrDefault(file => file.Name.Equals(relatedPostsFilename, StringComparison.OrdinalIgnoreCase));
-			IEnumerable<Tuple<int, ImmutableList<int>>> relatedPostRelationships;
-			if (relatedPostsFile == null)
-				relatedPostRelationships = new List<Tuple<int, ImmutableList<int>>>();
-			else
-			{
-				relatedPostRelationships = (await ReadFileContents(relatedPostsFile))
-					.Replace("\r\n", "\n")
-					.Replace("\r", "\n")
-					.Split('\n')
-					.Select(entry => entry.Trim())
-					.Where(entry => (entry != "") && !entry.StartsWith("#") && entry.Contains(":"))
-					.Select(entry =>
-					{
-                        if (!int.TryParse(entry.Split(':').First(), out int sourcePostId))
-                            return null;
-                        var relatedPostIds = entry.Split(':').Skip(1).First().Split(',')
-							.Select(commaSeparatedValue => int.TryParse(commaSeparatedValue, out int relatedPostId) ? (int?)relatedPostId : null)
-							.Where(id => id != null)
-							.Select(id => id.Value)
-							.ToImmutableList();
-						return relatedPostIds.Any() ? Tuple.Create(sourcePostId, relatedPostIds) : null;
-					})
-					.Where(entry => entry != null)
-					.ToArray();
-			}
+			var relatedPostRelationships = (relatedPostsFile == null)
+				? new Dictionary<int, ImmutableList<int>>()
+				: await ReadRedirects(relatedPostsFile);
+
+			// There is similar data in the AutoSuggestedRelatedPosts.txt file but the manually-created RelatedPosts.txt should take precedence in cases
+			// where Post Ids appear in both
+			const string autoSuggestedRelatedPostsFilename = "AutoSuggestedRelatedPosts.txt";
+			var autoSuggestedRelatedPostsFile = _folder.FirstOrDefault(file => file.Name.Equals(autoSuggestedRelatedPostsFilename, StringComparison.OrdinalIgnoreCase));
+			var autoSuggestedRelatedPostRelationships = (autoSuggestedRelatedPostsFile == null)
+				? new Dictionary<int, ImmutableList<int>>()
+				: await ReadRedirects(autoSuggestedRelatedPostsFile);
 
 			// We can use this functionality from the FullTextIndexer to generate the Post slug (it will replace accented characters, normalise whitespace,
 			// remove punctuation and lower case the content - all we need to do then is replace spaces with hypens)
@@ -96,8 +82,17 @@ namespace Blog.Models
 							redirects.Where(r => r.Item2 == slug).Select(r => r.Item1)
 						);
 
-						// One this pass, set every tag's NumberOfPosts value to one since we don't have enough data to know better. After all of the
+						// On this pass, set every tag's NumberOfPosts value to one since we don't have enough data to know better. After all of the
 						// posts have been loaded, this can be fixed before the method terminates.
+						if (!relatedPostRelationships.TryGetValue(fileSummary.Id, out var relatedPosts))
+							relatedPosts = null;
+						if ((relatedPosts != null) || !autoSuggestedRelatedPostRelationships.TryGetValue(fileSummary.Id, out var autoSuggestedRelatedPosts))
+						{
+							// Only check the autoSuggestedRelatedPostRelationships if there was no relatedPostRelationships entry - this allows for posts
+							// to be specified as having no suggestions (manually-specified or auto-suggested) by having an entry in the manually-specified
+							// file that has the post id but zero suggestions.
+							autoSuggestedRelatedPosts = null;
+						}
 						posts.Add(new Post(
 							fileSummary.Id,
 							fileSummary.PostDate,
@@ -107,9 +102,8 @@ namespace Blog.Models
 							title,
 							fileSummary.IsHighlight,
 							fileContents,
-							relatedPostRelationships.Any(r => r.Item1 == fileSummary.Id)
-								? relatedPostRelationships.First(r => r.Item1 == fileSummary.Id).Item2
-								: new ImmutableList<int>(),
+							relatedPosts ?? new ImmutableList<int>(),
+							autoSuggestedRelatedPosts ?? new ImmutableList<int>(),
 							fileSummary.Tags.Select(tag => new TagSummary(tag, 1)).ToNonNullImmutableList()
 						));
 					}
@@ -132,9 +126,33 @@ namespace Blog.Models
 					post.IsHighlight,
 					post.MarkdownContent,
 					post.RelatedPosts,
+					post.AutoSuggestedRelatedPosts,
 					post.Tags.Select(tag => new TagSummary(tag.Tag, tagCounts[tag.Tag])).ToNonNullImmutableList()
 				)
 			));
+		}
+
+		private static async Task<Dictionary<int, ImmutableList<int>>> ReadRedirects(IFileInfo redirectsFile)
+		{
+			return (await ReadFileContents(redirectsFile))
+				.Replace("\r\n", "\n")
+				.Replace("\r", "\n")
+				.Split('\n')
+				.Select(entry => entry.Trim())
+				.Where(entry => (entry != "") && !entry.StartsWith("#") && entry.Contains(":"))
+				.Select(entry =>
+				{
+					if (!int.TryParse(entry.Split(':').First(), out int sourcePostId))
+						return default;
+					var relatedPostIds = entry.Split(':').Skip(1).First().Split(',')
+						.Select(commaSeparatedValue => int.TryParse(commaSeparatedValue, out int relatedPostId) ? (int?)relatedPostId : null)
+						.Where(id => id != null)
+						.Select(id => id.Value)
+						.ToImmutableList();
+					return (sourcePostId, relatedPostIds);
+				})
+				.Where(entry => entry != default)
+				.ToDictionary(entry => entry.sourcePostId, entry => entry.relatedPostIds);
 		}
 
 		private static async Task<string> ReadFileContents(IFileInfo file)

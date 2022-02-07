@@ -48,7 +48,7 @@ namespace BlogBackEnd.Caching
 					_cache.TryRemove(key, out var _);
 				}
 
-				_cache.TryAdd(key, new CacheEntry(key, value, DateTime.Now.Add(_cacheDuration)));
+				_cache.TryAdd(key, new CacheEntry(key, value, DateTime.UtcNow.Add(_cacheDuration)));
 			}
 		}
 

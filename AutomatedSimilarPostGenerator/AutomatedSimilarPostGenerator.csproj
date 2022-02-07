@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Catalyst" Version="1.0.16767" />
+    <PackageReference Include="HNSW" Version="1.0.12432" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Blog\Blog.csproj" />
+  </ItemGroup>
+
+</Project>

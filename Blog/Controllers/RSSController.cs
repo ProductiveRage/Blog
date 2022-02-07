@@ -44,6 +44,7 @@ namespace Blog.Controllers
 							post.IsHighlight,
 							post.MarkdownContent,
 							(await _postRepository.GetByIds(post.RelatedPosts)).Cast<PostStub>().ToNonNullImmutableList(),
+							(await _postRepository.GetByIds(post.AutoSuggestedRelatedPosts)).Cast<PostStub>().ToNonNullImmutableList(),
 							post.Tags
 						))
 			);

@@ -17,6 +17,7 @@ namespace Blog.Models
 			bool isHighlight,
 			string markdownContent,
 			NonNullImmutableList<PostStub> relatedPosts,
+			NonNullImmutableList<PostStub> autoSuggestedRelatedPosts,
 			NonNullImmutableList<TagSummary> tags)
 			: base(
 				id,
@@ -28,14 +29,21 @@ namespace Blog.Models
 				isHighlight,
 				markdownContent,
 				(relatedPosts ?? NonNullImmutableList<PostStub>.Empty).Select(p => p.Id).ToImmutableList(),
+				(autoSuggestedRelatedPosts ?? NonNullImmutableList<PostStub>.Empty).Select(p => p.Id).ToImmutableList(),
 				tags)
 		{
             RelatedPosts = relatedPosts ?? throw new ArgumentNullException(nameof(relatedPosts));
+			AutoSuggestedRelatedPosts = autoSuggestedRelatedPosts ?? throw new ArgumentNullException(nameof(autoSuggestedRelatedPosts));
 		}
 
 		/// <summary>
 		/// This will never be null (though it may be an empty set)
 		/// </summary>
-		public new NonNullImmutableList<PostStub> RelatedPosts { get; private set; }
+		public new NonNullImmutableList<PostStub> RelatedPosts { get; }
+
+		/// <summary>
+		/// This will never be null (though it may be an empty set)
+		/// </summary>
+		public new NonNullImmutableList<PostStub> AutoSuggestedRelatedPosts { get; }
 	}
 }

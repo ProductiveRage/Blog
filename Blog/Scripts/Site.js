@@ -20,13 +20,4 @@
 			$image.addClass("WideImage");
 		}
 	}
-	$content.filter(".ArchiveByTag").each(function () {
-		var $archiveByTagContent = $(this);
-		var $readMore = $("<a class=\"ArchiveByTagReadMore\" href=\"#\">Display Entire Post</a>").click(function (e) {
-			$archiveByTagContent.removeClass("ArchiveByTag");
-			$(this).remove();
-			e.preventDefault();
-		});
-		$archiveByTagContent.append($readMore);
-	});
 })();

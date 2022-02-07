@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "AutomatedSimilarPostGenerator": {
+      "commandName": "Project",
+      "commandLineArgs": "$(SolutionDir)Blog\\App_Data\\Posts"
+    }
+  }
+}
