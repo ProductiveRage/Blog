@@ -1,0 +1,572 @@
+## Finding the brightest area in an image with C# (fixing a blurry presentation video - part one)
+
+### TL;DR
+
+I have a video of a presentation where the camera keeps losing focus such that the slides are unreadable. I have the original slide deck and I want to fix this.
+
+The first step is analysing the individual frames of the video to find a common "most illuminated area" so that I can work out where the slide content was being projected, and that is what is described in this post.
+
+(**An experimental TL;DR approach:** See this [small scale .NET Fiddle demonstration](https://dotnetfiddle.net/X8IPgQ) of what I'll be discussing)
+
+![An out of focus frame from a presentation](/Content/Images/Posts/OutOfFocusFrame.jpg)
+
+### The basic approach
+
+An overview of the processing to do this looks as follows:
+
+1. Load the image into a **Bitmap**
+1. Convert the imae to greyscale
+1. Identify the lightest and darkest values in the greyscale range
+1. Calculate a 2/3 threshold from that range and create a mask of the image where anything below that value is 0 and anything equal to or greater is 1
+   * If the darkest value was 10 and the lightest was 220 then the difference is 220 - 10 = 210 and the cut off point would be 2/3 of this range on top of the minimum, so the threshold value would equal ((2/3) * range) + minimum = ((2/3) * 210) + 10 = 140 + 10 = 150
+1. Find the largest bounded area within this mask (if there is one) and presume that that's the projection of the slide in the dark room!
+
+Before looking at code to do that, I'm going to toss in a few other complications that arise from having to process a *lot* of frames from throughout the video, rather than just one..
+
+Firstly, the camera loses focus at different points in the video and to different extents and so some frames are blurrier than others. Following the steps above, the blurrier frames are likely to report a larger projection area for the slides. I would really like to identify a common projection area that is reasonable to use across all frames because this will make later processing (where I try to work out what slide is currently being shown in the frame) easier.
+
+Secondly, this video has intro and outro animations and it would nice if I was able to write code that worked out when they stopped and started.
+
+### The implementation for a single image
+
+To do this work, I'm going to introduce a variation of my old friend the **DataRectangle** (from "[How are barcodes read?](Post117)" and "[Face or no face](Post108)") -
+
+    public static class DataRectangle
+    {
+        public static DataRectangle<T> For<T>(T[,] values) => new DataRectangle<T>(values);
+    }
+
+    public sealed class DataRectangle<T>
+    {
+        private readonly T[,] _protectedValues;
+        public DataRectangle(T[,] values) : this(values, isolationCopyMayBeBypassed: false) { }
+        private DataRectangle(T[,] values, bool isolationCopyMayBeBypassed)
+        {
+            if ((values.GetLowerBound(0) != 0) || (values.GetLowerBound(1) != 0))
+                throw new ArgumentException("Both dimensions must have lower bound zero");
+            var arrayWidth = values.GetUpperBound(0) + 1;
+            var arrayHeight = values.GetUpperBound(1) + 1;
+            if ((arrayWidth == 0) || (arrayHeight == 0))
+                throw new ArgumentException("zero element arrays are not supported");
+
+            Width = arrayWidth;
+            Height = arrayHeight;
+
+            if (isolationCopyMayBeBypassed)
+                _protectedValues = values;
+            else
+            {
+                _protectedValues = new T[Width, Height];
+                Array.Copy(values, _protectedValues, Width * Height);
+            }
+        }
+
+        public int Width { get; }
+
+        public int Height { get; }
+
+        public T this[int x, int y]
+        {
+            get
+            {
+                if ((x < 0) || (x >= Width))
+                    throw new ArgumentOutOfRangeException(nameof(x));
+                if ((y < 0) || (y >= Height))
+                    throw new ArgumentOutOfRangeException(nameof(y));
+                return _protectedValues[x, y];
+            }
+        }
+
+        public IEnumerable<(Point Point, T Value)> Enumerate()
+        {
+            for (var x = 0; x < Width; x++)
+            {
+                for (var y = 0; y < Height; y++)
+                {
+                    var value = _protectedValues[x, y];
+                    var point = new Point(x, y);
+                    yield return (point, value);
+                }
+            }
+        }
+
+        public DataRectangle<TResult> Transform<TResult>(Func<T, TResult> transformer)
+        {
+            var transformed = new TResult[Width, Height];
+            for (var x = 0; x < Width; x++)
+            {
+                for (var y = 0; y < Height; y++)
+                    transformed[x, y] = transformer(_protectedValues[x, y]);
+            }
+            return new DataRectangle<TResult>(transformed, isolationCopyMayBeBypassed: true);
+        }
+    }
+    
+For working with **DataRectangle** instances that contain **double** values (as we will be here), I've got a couple of convenient extension methods:
+
+    public static class DataRectangleOfDoubleExtensions
+    {
+        public static (double Min, double Max) GetMinAndMax(this DataRectangle<double> source) =>
+            source
+                .Enumerate()
+                .Select(pointAndValue => pointAndValue.Value)
+                .Aggregate(
+                    seed: (Min: double.MaxValue, Max: double.MinValue),
+                    func: (acc, value) => (Math.Min(value, acc.Min), Math.Max(value, acc.Max))
+                );
+
+        public static DataRectangle<bool> Mask(this DataRectangle<double> values, double threshold) =>
+            values.Transform(value => value >= threshold);
+    }
+
+And for working with **Bitmap** instances, I've got some extension methods for those as well:
+
+    public static class BitmapExtensions
+    {
+        public static Bitmap CopyAndResize(this Bitmap image, int resizeLargestSideTo)
+        {
+            var (width, height) = (image.Width > image.Height)
+                ? (resizeLargestSideTo, (int)((double)image.Height / image.Width * resizeLargestSideTo))
+                : ((int)((double)image.Width / image.Height * resizeLargestSideTo), resizeLargestSideTo);
+
+            return new Bitmap(image, width, height);
+        }
+
+        /// <summary>
+        /// This will return values in the range 0-255 (inclusive)
+        /// </summary>
+        // Based on http://stackoverflow.com/a/4748383/3813189
+        public static DataRectangle<double> GetGreyscale(this Bitmap image) =>
+            image
+                .GetAllPixels()
+                .Transform(c => (0.2989 * c.R) + (0.5870 * c.G) + (0.1140 * c.B));
+
+        public static DataRectangle<Color> GetAllPixels(this Bitmap image)
+        {
+            var values = new Color[image.Width, image.Height];
+            var data = image.LockBits(
+                new Rectangle(0, 0, image.Width, image.Height),
+                ImageLockMode.ReadOnly,
+                PixelFormat.Format24bppRgb
+            );
+            try
+            {
+                var pixelData = new byte[data.Stride];
+                for (var lineIndex = 0; lineIndex < data.Height; lineIndex++)
+                {
+                    Marshal.Copy(
+                        source: data.Scan0 + (lineIndex * data.Stride),
+                        destination: pixelData,
+                        startIndex: 0,
+                        length: data.Stride
+                    );
+                    for (var pixelOffset = 0; pixelOffset < data.Width; pixelOffset++)
+                    {
+                        // Note: PixelFormat.Format24bppRgb means the data is stored in memory as BGR
+                        const int PixelWidth = 3;
+                        values[pixelOffset, lineIndex] = Color.FromArgb(
+                            red: pixelData[pixelOffset * PixelWidth + 2],
+                            green: pixelData[pixelOffset * PixelWidth + 1],
+                            blue: pixelData[pixelOffset * PixelWidth]
+                        );
+                    }
+                }
+            }
+            finally
+            {
+                image.UnlockBits(data);
+            }
+            return DataRectangle.For(values);
+        }
+    }
+
+With this code, we can already perform those first steps that I've described in the find-projection-area-in-image process. Note that I'm going to throw in an extra step of shrinking the input images if they're larger than 400px because we don't need pixel-perfect accuracy when the whole point of this process is that a lot of the frames are too blurry to read - and shrinking the images means that there's less data to process and the whole thing should finish more quickly.
+
+    // TODO: Download a blurry image from
+    //       https://github.com/ProductiveRage/NaivePerspectiveCorrection/tree/main/Samples/Frames
+    // - Or reference the example at the top of this blog post??
+    
+    using var image = new Bitmap("TODO: Image Name.jpg");
+    using var resizedImage = image.CopyAndResize(resizeLargestSideTo: 400);
+    var greyScaleImageData = resizedImage.GetGreyscale();
+    var (min, max) = greyScaleImageData.GetMinAndMax();
+    var range = max - min;
+    const double thresholdOfRange = 2 / 3d;
+    var thresholdForMasking = min + (range * thresholdOfRange);
+    var mask = greyScaleImageData.Mask(thresholdForMasking);
+
+This gives us a **DataRectangle** of boolean values that represent points the brighter points as true and the less bright points as false.
+
+TODO: Include image of mask (pre-largest-object-in-mask-being-located) - resized to appropriate dimensions
+
+Now we need to identify the largest "object" within this mask - wherever bright pixels are adjacent to other bright pixels, they will be considered part of the same object and we would expect there to be several such objects within the mask that has been generated.
+
+To do so, I'll be reusing some more code from "[How are barcodes read?](Post117)" -
+
+    private static IEnumerable<IEnumerable<Point>> GetDistinctObjects(DataRectangle<bool> mask)
+    {
+        // Flood fill areas in the mask to create distinct areas
+        var allPoints = mask
+            .Enumerate()
+            .Where(pointAndIsMasked => pointAndIsMasked.Value)
+            .Select(pointAndIsMasked => pointAndIsMasked.Point).ToHashSet();
+        while (allPoints.Any())
+        {
+            var currentPoint = allPoints.First();
+            var pointsInObject = GetPointsInObject(currentPoint).ToArray();
+            foreach (var point in pointsInObject)
+                allPoints.Remove(point);
+            yield return pointsInObject;
+        }
+
+        // Inspired by code at
+        // https://simpledevcode.wordpress.com/2015/12/29/flood-fill-algorithm-using-c-net/
+        IEnumerable<Point> GetPointsInObject(Point startAt)
+        {
+            var pixels = new Stack<Point>();
+            pixels.Push(startAt);
+
+            var valueAtOriginPoint = mask[startAt.X, startAt.Y];
+            var filledPixels = new HashSet<Point>();
+            while (pixels.Count > 0)
+            {
+                var currentPoint = pixels.Pop();
+                if ((currentPoint.X < 0) || (currentPoint.X >= mask.Width)
+                || (currentPoint.Y < 0) || (currentPoint.Y >= mask.Height))
+                    continue;
+
+                if ((mask[currentPoint.X, currentPoint.Y] == valueAtOriginPoint)
+                && !filledPixels.Contains(currentPoint))
+                {
+                    filledPixels.Add(new Point(currentPoint.X, currentPoint.Y));
+                    pixels.Push(new Point(currentPoint.X - 1, currentPoint.Y));
+                    pixels.Push(new Point(currentPoint.X + 1, currentPoint.Y));
+                    pixels.Push(new Point(currentPoint.X, currentPoint.Y - 1));
+                    pixels.Push(new Point(currentPoint.X, currentPoint.Y + 1));
+                }
+            }
+            return filledPixels;
+        }
+    }
+
+As the code mentions, this is based on an article "[Flood Fill algorithm (using C#.NET)](https://simpledevcode.wordpress.com/2015/12/29/flood-fill-algorithm-using-c-net/)" and its output is a list of objects, where each object is a list of points within that object. So the way to determine which object is largest is simply to count which of them contains the most points!
+
+To get the largest object in the current mask, we'll call:
+
+    var pointsInLargestHighlightedArea = GetDistinctObjects(mask)
+        .OrderByDescending(points => points.Count())
+        .FirstOrDefault();
+    
+*(If this returns null then we need to escape out of the method that we're in because the source image didn't produce a mask with any highlighted objects - this could happen if the image has every single with the same colour, for example; an edge case, surely, but one that we should handle)*
+
+From this largest object, we want to find a bounding quadrilateral, which we do by looking at every point and finding the one closest to the top left of the image (because this will be the top left of the bounding area), the point closest to the top right of the image (for the top right of the bounding area) and the same for the points closest to the bottom left and bottom right.
+
+This can be achieved by calculating, for each point in the object, the distances from each of the corners to the points and then determining which points have the shortest distances - eg.
+
+    var distancesOfPointsFromImageCorners = pointsInLargeHighlightedArea
+        .Select(p =>
+        {
+            // To work out distance from the top left, you would use Pythagoras to take the
+            // squared horizontal distance of the point from the left of the image and add
+            // that to the squared vertical distance of the point from the top of the image,
+            // then you would square root that sum. In this case, we only want to be able to
+            // compare determine which distances are smaller or larger and we don't actually
+            // care about the precise distances themselves and so we can save ourselves from
+            // performing that final square root calculation.
+            var distanceFromRight = greyScaleImageData.Width - p.X;
+            var distanceFromBottom = greyScaleImageData.Height - p.Y;
+            var fromLeftScore = p.X * p.X;
+            var fromTopScore = p.Y * p.Y;
+            var fromRightScore = distanceFromRight * distanceFromRight;
+            var fromBottomScore = distanceFromBottom * distanceFromBottom;
+            return new
+            {
+                Point = p,
+                FromTopLeft = fromLeftScore + fromTopScore,
+                FromTopRight = fromRightScore + fromTopScore,
+                FromBottomLeft = fromLeftScore + fromBottomScore,
+                FromBottomRight = fromRightScore + fromBottomScore
+            };
+        })
+        .ToArray(); // Call ToArray to avoid repeating this enumeration four times below
+        
+    var topLeft = distancesOfPointsFromImageCorners.OrderBy(p => p.FromTopLeft).First().Point;
+    var topRight = distancesOfPointsFromImageCorners.OrderBy(p => p.FromTopRight).First().Point;
+    var bottomLeft = distancesOfPointsFromImageCorners.OrderBy(p => p.FromBottomLeft).First().Point;
+    var bottomRight = distancesOfPointsFromImageCorners.OrderBy(p => p.FromBottomRight).First().Point;
+
+Finally, because we want to finding the bounding area of the largest object in the original image, we may need to multiply up the bounds that we just found because we we shrank the image down if either dimension was larger than 400px and we were performing calculations on that smaller version.
+
+We can tell how much we reduced the data by by looking at the width of the original image and comparing it to the width of the greyScaleImageData **DataRectangle** that was generated from the shrunken version of the image:
+
+    var reducedImageSideBy = (double)image.Width / greyScaleImageData.Width;
+
+Now we only need a function that will multiply the bounding area that we've got according to this value, while ensuring that none of the values are multiplied such that they exceed the bounds of the original image:
+
+    private static (Point TopLeft, Point TopRight, Point BottomRight, Point BottomLeft) Resize(
+        Point topLeft,
+        Point topRight,
+        Point bottomRight,
+        Point bottomLeft,
+        double resizeBy,
+        int minX,
+        int maxX,
+        int minY,
+        int maxY)
+    {
+        if (resizeBy <= 0)
+            throw new ArgumentOutOfRangeException("must be a positive value", nameof(resizeBy));
+
+        return (
+            Constrain(Multiply(topLeft)),
+            Constrain(Multiply(topRight)),
+            Constrain(Multiply(bottomRight)),
+            Constrain(Multiply(bottomLeft))
+        );
+
+        Point Multiply(Point p) =>
+            new Point((int)Math.Round(p.X * resizeBy), (int)Math.Round(p.Y * resizeBy));
+
+        Point Constrain(Point p) =>
+            new Point(Math.Min(Math.Max(p.X, minX), maxX), Math.Min(Math.Max(p.Y, minY), maxY));
+    }
+
+The final bounding area for the largest bright area of an image is now retrieved like this:
+
+    var bounds = Resize(
+        topLeft,
+        topRight,
+        bottomRight,
+        bottomLeft,
+        reducedImageSideBy,
+        minX: 0,
+        maxX: image.Width - 1,
+        minY: 0,
+        maxY: image.Height - 1
+    );
+
+For the example image that we're looking at, this area is outlined liked this:
+
+TODO: Insert original size example image mask with largest object outlined (and other objects still deleted)
+
+### Applying the process to multiple images
+
+Say that we put all of the above functionality into a method called "GetMostHighlightedArea" that took a **Bitmap** to process and returned a tuple of the four points that represented the bounds of the brightest area, we could then easily prepare a LINQ statement that ran that code and found the most common brightest-area-bounds across all of the images (as I said before, this will vary from image to image in my example as the camera recording the session gained and lost focus) -
+
+    var files = new DirectoryInfo("Frames").EnumerateFiles("*.jpg");
+    var (topLeft, topRight, bottomRight, bottomLeft) = files
+        .Select(file =>
+        {
+            using var image = new Bitmap(file.FullName);
+            return IlluminatedAreaLocator.GetMostHighlightedArea(image);
+        })
+        .GroupBy(area => area)
+        .OrderByDescending(group => group.Count())
+        .Select(group => group.Key)
+        .FirstOrDefault();
+
+Presuming that there is a folder called "Frames" in the output folder of project\*, this will read them all and look for the largest bright area on them all and then return the bounding points for the area that appears most often. (Note: If there are no images to read then the FirstOrDefault call at the bottom will return a default tuple-of-four-Points, which will be 4x (0,0) values).
+
+\* *(Since you probably don't happen to have a bunch of images from a video of my presentation lying around, see the next section for some code that will download some in case you want to try this all out!)*
+
+This ties in nicely with my recent post "[Parallelising (LINQ) work in C#](Post122)" because the processing required for each image is..
+
+1. Completely independent from the processing of the other images (important for parallelising work)
+1. Expensive enough that the overhead from splitting the work into multiple threads and then combining their results back together would be overshadowed by the work performed (also important for parallelising work - if individual tasks are too small and the computer spends more time scheduling the work on threads and then pulling all the results back together than it does on actually performing that work then using multiple threads can be *slower* than using a single one!)
+
+All that we would have to change in order to use multiple threads to process multiple images is the addition of a single line:
+
+    var files = new DirectoryInfo("Frames").EnumerateFiles("*.jpg");
+    var (topLeft, topRight, bottomRight, bottomLeft) = files
+        .AsParallel() // This is all that we needed to add!
+        .Select(file =>
+        {
+            using var image = new Bitmap(file.FullName);
+            return IlluminatedAreaLocator.GetMostHighlightedArea(image);
+        })
+        .GroupBy(area => area)
+        .OrderByDescending(group => group.Count())
+        .Select(group => group.Key)
+        .FirstOrDefault();
+
+*(Parallelisation side bar: When we split up the work like this, if the processing for each image was solely in memory then it would be a no-brainer that this would make sense - however, the processing for each image involves LOADING the image from disk and THEN processing it in memory and if you had a spinning rust hard disk then you may fear that trying to ask it to read multiple files simultaneously would be slower than asking it to read them one at a time because its poor little read heads have to physically move around the plates.. it turns out that this is not necessarily the case and that you can find more information in this article that I found interesting; "[Performance Impact of Parallel Disk Access](https://pkolaczk.github.io/disk-parallelism/)")*
+
+### Testing the code yourself
+
+I haven't quite finished yet but I figured that there may be *some* wild people out there that would like to try running this code locally themselves - maybe just to see it work or maybe even to get it working and then chop and change it for some new and exciting purpose!
+
+To this end, I have some sample frames available from this video that I'm trying to fix - with varying levels of fuzziness present. To download them, use the following method:
+
+    private static async Task EnsureSamplesAvailable(DirectoryInfo framesfolder)
+    {
+        // Note: The GitHub API is rate limited quite severely for non-authenticated apps, so we just
+        // only call use it if the framesFolder doesn't exist or is empty - if there are already files
+        // in there then we presume that we downloaded them on a previous run (if the API is hit too
+        // often then it will return a 403 "rate limited" response)
+        if (framesfolder.Exists && framesfolder.EnumerateFiles().Any())
+        {
+            Console.WriteLine("Sample images have already been downloaded and are ready for use");
+            return;
+        }
+
+        Console.WriteLine("Downloading sample images..");
+        if (!framesfolder.Exists)
+            framesfolder.Create();
+
+        string namesAndUrlsJson;
+        using (var client = new WebClient())
+        {
+            // The API refuses requests without a User Agent, so set one before calling (see
+            // https://docs.github.com/en/rest/overview/resources-in-the-rest-api#user-agent-required)
+            client.Headers.Add(HttpRequestHeader.UserAgent, "ProductiveRage Blog Post Example");
+            namesAndUrlsJson = await client.DownloadStringTaskAsync(new Uri(
+                "https://api.github.com/repos/" +
+                "ProductiveRage/NaivePerspectiveCorrection/contents/Samples/Frames"
+            ));
+        }
+
+        // Deserialise the response into an array of entries that have Name and Download_Url properties
+        var namesAndUrls = JsonConvert.DeserializeAnonymousType(
+            namesAndUrlsJson,
+            new[] { new { Name = "", Download_Url = (Uri?)null } }
+        );
+        if (namesAndUrls is null)
+        {
+            Console.WriteLine("GitHub reported zero sample images to download");
+            return;
+        }
+
+        await Task.WhenAll(namesAndUrls
+            .Select(async entry =>
+            {
+                using var client = new WebClient();
+                await client.DownloadFileTaskAsync(
+                    entry.Download_Url,
+                    Path.Combine(framesfolder.FullName, entry.Name)
+                );
+            })
+        );
+
+        Console.WriteLine($"Downloaded {namesAndUrls.Length} sample image(s)");
+    }
+
+.. and call it with the following argument, presuming you're trying to read images from the "Frames" folder as the code further up illustrates:
+
+    await EnsureSamplesAvailable(new DirectoryInfo("Frames"));
+
+### Filtering out intro/outro slides
+
+So I said earlier that it would also be nice if I could programatically identify which frames were part of the intro/outro animations of the video that I'm looking at.
+
+It feels logical that any frame that is of the actual presentation will have a fairly similarly-sized-and-located bright area, where a slide is being projected in a darkened room, while any frame that is part of an intro/outro animation won't. So we should be able to take the **most-common**-largest-brightest-area and then look at every frame and see if *its* largest bright area is approximately the same - if it's similar enough then it's probably a frame that is part of the projection but if it's too dissimilar then it's probably *not*.
+
+Rather than waste time going too far down a rabbit hole that I've found won't immediately result in success, I'm going to use a slightly altered version of that plan - I'm still going to take that common largest brightest area and compare the largest bright area on each frame to it but, instead of saying "close-enough = presentation / not-close-enough = intro or outro", I'm going to find the *first* frame whose largest bright area is close enough and the *last* frame that is and declare that that range is probably where the frames for the presentation are. The reason that I'm going to do this is that I found that there are some slides with more variance that can skew the results if the first approach was taken - if a frame in the middle of the presentation is so blurry that the range in intensity from darkest pixel to brightest pixel is squashed down too far then it can result in it identifying a largest bright are that isn't an accurate representation of the image. It's quite possible that I could still have made the first approach work by tweaking some other parameters in the image processing - such as considering changing that arbitrary "create a mask where the intensity threshold is 2/3 of the range of the brightness of all pixels", for example - but I know that this second approach works for my data and so I didn't pursue the first one too hard.
+
+In order to take this approach, though, we are going to need to know what order the frames are supposed to appear in - it's no longer sufficient for there to simply be a list of images that are frames out of the video, we now need to know what were they appeared in relation to each other. This is simple enough with my data because they all have names like "frame_1052.jpg" where 1052 is the frame index from the original video.
+
+So I'm going to change the frame-image-loading code to look like this:
+
+    // Get all filenames, parse the frame index from them and discard any that don't
+    // match the filename pattern that is expected (eg. "frame_1052.jpg")
+    var frameIndexMatcher = new Regex(@"frame_(\d+)\.jpg", RegexOptions.IgnoreCase);
+    var files = new DirectoryInfo("Frames")
+        .EnumerateFiles()
+        .Select(file =>
+        {
+            var frameIndexMatch = frameIndexMatcher.Match(file.Name);
+            return frameIndexMatch.Success
+                ? (file.FullName, FrameIndex: int.Parse(frameIndexMatch.Groups[1].Value))
+                : default;
+        })
+        .Where(entry => entry != default);
+
+    // Get the largest bright area for each file
+    var allFrameHighlightedAreas = files
+        .AsParallel()
+        .Select(file =>
+        {
+            using var image = new Bitmap(file.FullName);
+            return (
+                file.FrameIndex,
+                HighlightedArea: IlluminatedAreaLocator.GetMostHighlightedArea(image)
+            );
+        })
+        .ToArray()
+
+    // Get the most common largest bright area across all of the images
+    var (topLeft, topRight, bottomRight, bottomLeft) = allFrameHighlightedAreas
+        .GroupBy(entry => entry.HighlightedArea)
+        .OrderByDescending(group => group.Count())
+        .Select(group => group.Key)
+        .FirstOrDefault();
+
+*(Note that I'm calling ToArray() when declaring allFrameHighlightedAreas - that's to store the results now because I know that I'm going to need every result in the list that are generated and because I'm going to enumerate it twice in the work being outlined here and so there's no point leaving allFrameHighlightedAreas to be a lazily-evaluated **IEnumerable** that would be recalculated each time it was looped over; then it would be doing all of the "IlluminatedAreaLocator.GetMostHighlightedArea" calculations for each image twice if enumerated the list twice, which feels wasteful!)*
+
+Now to look at the "allFrameHighlightedAreas" list and try to decide if each "HighlightedArea" value is close enough to the most common area that we found. I'm going to use a very simple algorithm for this - I'm going to:
+
+1. Take all four points from the "HighlightedArea" on each entry in "allFrameHighlightedAreas"
+1. Take all four points from the most common area (which are the "topLeft", "topRight", "bottomRight", "bottomLeft" values that we already have in the code above)
+1. Take the differences in "X" value between all four points in these two areas and add them up
+1. Compare this difference to the width of the most common highlighted area - if it's too big of a proportion (say if the sum of the "X" differences is greater than 20% of the width of the entire area) then we'll say it's not a match and drop out of this list
+1. If the "X" values aren't too bad then we'll take the differences in "Y" value between all four points in these two areas and add *those* up
+1. That total will be compared to the heigh of the most common highlighted area - it's more than the 20% threshold then we'll say that it's not a match
+1. If we got to here then we'll say that the highlighted area in the current frame *is* close enough to the most common highlighted area and so the current frame probably is part of the presentation - yay!
+
+In code:
+
+    var highlightedAreaWidth = Math.Max(topRight.X, bottomRight.X) - Math.Min(topLeft.X, bottomLeft.X);
+    var highlightedAreaHeight = Math.Max(bottomLeft.Y, bottomRight.Y) - Math.Min(topLeft.Y, topRight.Y);
+    const double thresholdForPointVarianceComparedToAreaSize = 0.2;
+    var frameIndexesThatHaveTheMostCommonHighlightedArea = allFrameHighlightedAreas
+        .Where(entry =>
+        {
+            var (entryTL, entryTR, entryBR, entryBL) = entry.HighlightedArea;
+            var xVariance =
+                new[]
+                {
+                    entryBL.X - bottomLeft.X,
+                    entryBR.X - bottomRight.X,
+                    entryTL.X - topLeft.X,
+                    entryTR.X - topRight.X
+                }
+                .Sum(Math.Abs);
+            var yVariance =
+                new[]
+                {
+                    entryBL.Y - bottomLeft.Y,
+                    entryBR.Y - bottomRight.Y,
+                    entryTL.Y - topLeft.Y,
+                    entryTR.Y - topRight.Y
+                }
+                .Sum(Math.Abs);
+            return
+                (xVariance <= highlightedAreaWidth * thresholdForPointVarianceComparedToAreaSize) &&
+                (yVariance <= highlightedAreaHeight * thresholdForPointVarianceComparedToAreaSize);
+        })
+        .Select(entry => entry.FrameIndex)
+        .ToArray();
+
+This gives us a "frameIndexesThatHaveTheMostCommonHighlightedArea" array of frame indexes that have a largest brightest area that is fairly close to the most common one. So to decide which frames are probably the start of the presentation and the end, we simply need to say:
+
+    var firstFrameIndex = frameIndexesThatHaveTheMostCommonHighlightedArea.Min();
+    var lasttFrameIndex = frameIndexesThatHaveTheMostCommonHighlightedArea.Max();
+
+Any frames whose index is less that "firstFrameIndex" or greater than "lastFrameIndex" is probably part of the intro or outro sequence -
+
+TODO: Show image from one of those, with frame index overlaid (and mask alongside?)
+
+Any frames whose index is within the "firstFrameIndex" / "lastFrameIndex" is probably part of the presentation -
+
+TODO: Show image from presentation, with frame index overlaid (and mask alongside?)
+
+### Coming soon
+
+As the title of this post strongly suggests, this is only the first step in my desire to fix up my blurry presentation video. What I'm going to have to cover in the future is to:
+
+1. Extract the content from the most-common-brightest-area in each frame of the video that is part of the presentation and contort it back into a rectangle - undoing the distortion that is introduced by perspective due to the position of the camera and where the slides were projected in the room (I'll be tackling this in a slightly approximate-but-good-enough manner because to do it super accurately requires lots of complicated maths and I've managed to forget nearly all of the maths degree that I got twenty years ago!)
+1. Find a way to compare the perspective-corrected projections from each frame against clean image of the original slide deck and work out which slide each frame is most similar to (this should be possible with some surprisingly rudimentary calculations inspired by some of the image preprocessing that I've mentioned in a couple of my [posts that touch on machine learning](Tag:Machine Learning) but without requiring any machine learning itself)
+1. Some of the tweaks required to get the best results with my particular images (for example, when I described the "GetMostHighlightedArea" function earlier, I picked 400px as an arbitrary value to resize images to before greyscaling them, masking them and looking for their largest bright area; maybe it will turn out that smaller or larger values for that process result in improved or worsened results - we'll find out!)
+
+Once this is all done, I will take the original frame images and, for each one, overlay a clean version of the slide that is appropriate to that frame (again, I'll have clean versions of each slide from the original slide deck that I produced) - then I'll mash them all back together into a new video, combined with the original audio. To do this (the video work), I'll likely use the same tool that I used to extract the individual frame files from the video in the first place - the famous [FFmpeg](https://www.ffmpeg.org/)!
+
+I doubt that I'll have a post on this last section as it would only be a small amount of C# code that combines two images for each frame, writes the results to disk, followed by me making a command line call to FFmpeg to produce the video - and I don't think that there's anything particularly exciting there! If I get this all completed, though, I will - of course - link to the fixed-up presentation video.. because why not shameless plug myself given any opportunity!
