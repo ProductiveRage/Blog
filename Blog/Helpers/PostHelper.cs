@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -100,11 +99,7 @@ namespace Blog.Helpers
             doc.LoadHtml(content);
             MakeUrlsAbsolute(doc, "a", "href", scheme, host);
             MakeUrlsAbsolute(doc, "img", "src", scheme, host);
-            using (var writer = new StringWriter())
-            {
-                doc.Save(writer);
-                content = writer.ToString();
-            }
+            content = doc.DocumentNode.OuterHtml;
 
             cache[cacheKey] = new CachablePostContent(content, post.LastModified);
             return content;
