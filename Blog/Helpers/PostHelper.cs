@@ -28,7 +28,7 @@ namespace Blog.Helpers
                 throw new ArgumentNullException(nameof(post));
 
             var content = new StringBuilder();
-            content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
+            AppendPostDate(content, post.Posted);
             content.AppendFormat("<h2><a href=\"/{0}\">{1}</a></h2>", HttpUtility.HtmlAttributeEncode(post.Slug), HttpUtility.HtmlEncode(post.Title));
             content.Append(GetTagLinksContent(helper, post.Tags));
             return new HtmlString(content.ToString());
@@ -105,6 +105,9 @@ namespace Blog.Helpers
             return content;
         }
 
+        private static void AppendPostDate(StringBuilder content, DateTime postedAt) =>
+            content.AppendFormat("<p class=\"PostDate\">{0}</p>", postedAt.ToString("d MMMM yyyy"));
+
         private static async Task<string> GetRenderableContent(
             IHtmlHelper helper,
             PostWithRelatedPostStubs post,
@@ -128,7 +131,7 @@ namespace Blog.Helpers
 
             var content = new StringBuilder();
             if (includePostedDate)
-                content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
+                AppendPostDate(content, post.Posted);
             content.Append(
 				MarkdownTransformations.ToHtml(markdownContent)
             );

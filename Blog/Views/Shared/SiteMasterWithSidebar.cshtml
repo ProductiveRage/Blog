@@ -24,7 +24,10 @@
 					@using (Html.BeginForm("Search", "Search", FormMethod.Get))
 					{
 						<div>
-							<input type="text" class="SiteSearch" name="term" value="@Html.Raw(((Model is Blog.Models.SearchResultsModel) ? Html.Encode(((Blog.Models.SearchResultsModel)Model).SearchTerm) : ""))" />
+							<label>
+								<span class="text">Site Search</span>
+								<input type="text" class="SiteSearch" name="term" value="@Html.Raw(((Model is Blog.Models.SearchResultsModel) ? Html.Encode(((Blog.Models.SearchResultsModel)Model).SearchTerm) : ""))" />
+							</label>
 							<input type="submit" class="SiteSearchSubmit" value="Search" />
 						</div>
 					}
