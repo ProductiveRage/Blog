@@ -11,10 +11,10 @@
 
 			<div class="SideBar">
 				<div class="Search">
-					@using (Html.BeginForm("Search", "Search", FormMethod.Get))
+					@using (Html.BeginForm("Search", "Search", FormMethod.Get, new { autocomplete = "off" }))
 					{
 						<div>
-							<label>
+							<label class="SearchField">
 								<span class="text">Site Search</span>
 								<input type="text" class="SiteSearch" name="term" value="@Html.Raw(((Model is Blog.Models.SearchResultsModel) ? Html.Encode(((Blog.Models.SearchResultsModel)Model).SearchTerm) : ""))" />
 							</label>
