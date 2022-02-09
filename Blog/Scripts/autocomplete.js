@@ -56,8 +56,8 @@ function autocomplete(inp, arr) {
             /*and and make the current item more visible:*/
             addActive(x);
         } else if (e.keyCode == 13) {
-            /*If the ENTER key is pressed, prevent the form from being submitted (2022-02-09 DWR: But ONLY if a dropdown is currently visible), */
-            if (document.getElementsByClassName("autocomplete-items").length > 0) {
+            /*If the ENTER key is pressed, prevent the form from being submitted (2022-02-09 DWR: But ONLY if a dropdown is currently visible AND a term is highlighted), */
+            if ((document.getElementsByClassName("autocomplete-items").length > 0) && (currentFocus > -1)) {
                 e.preventDefault();
                 if (currentFocus > -1) {
                     /*and simulate a click on the "active" item:*/
