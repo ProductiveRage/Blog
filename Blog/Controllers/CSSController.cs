@@ -79,7 +79,7 @@ namespace Blog.Controllers
 			if ((lastModifiedDateFromRequest != null) && AreDatesApproximatelyEqual(lastModifiedDateFromRequest.Value, lastModifiedDate))
 			{
 				Response.StatusCode = 304;
-				return Content("Not changed since last request", "text/css");
+				return new EmptyResult(); // Musn't return any response body content with a 304
 			}
 
 			var cssLoader = (new EnhancedNonCachedLessCssLoaderFactory(
@@ -110,7 +110,7 @@ namespace Blog.Controllers
 			if ((lastModifiedDateFromRequest != null) && AreDatesApproximatelyEqual(lastModifiedDateFromRequest.Value, lastModifiedDate))
 			{
 				Response.StatusCode = 304;
-				return Content("Not changed since last request", "text/css");
+				return new EmptyResult(); // Musn't return any response body content with a 304
 			}
 			SetResponseCacheHeadersForSuccess(content.LastModified);
 			return Content(content.Content, "text/css");
