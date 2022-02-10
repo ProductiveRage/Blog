@@ -1,23 +1,31 @@
-﻿(function () {
-	var $search = $("input.SiteSearch");
-	if ($search.length > 0) {
-		$.ajax({
-			url: "/AutoComplete.json",
-			dataType: 'json',
-			success: function (data) {
-				$search.autocomplete(data);
+(function () {
+	var siteSearchInput = document.querySelector("input.SiteSearch");
+	if (siteSearchInput) {
+		var request = new XMLHttpRequest();
+		request.open("GET", "/AutoComplete.json", true);
+		request.onload = function () {
+			if (this.status >= 200 && this.status < 400) {
+				autocomplete(siteSearchInput, JSON.parse(this.response));
 			}
-		});
+		};
+		request.send();
 	}
 
-	var $content = $("div.Main div.Content");
-	$content.find("pre").addClass("prettyprint");
+	var codeBlocks = document.querySelectorAll("div.Main div.Content pre");
+	for (var i = 0; i < codeBlocks.length; i++) {
+		codeBlocks[i].classList.add("prettyprint");
+	}
 	prettyPrint();
-	$("img").each(function () { ApplyWideImageClassAsRequired(this) }).load(function () { ApplyWideImageClassAsRequired(this) });
-	function ApplyWideImageClassAsRequired(objEleImage) {
-		var $image = $(objEleImage);
-		if ($image.width() > 500) {
-			$image.addClass("WideImage");
+
+	var images = document.querySelectorAll("img");
+	function ApplyWideImageClassAsRequired(image) {
+		if (image.width > 500) {
+			image.classList.add("WideImage");
 		}
+	}
+	for (var i = 0; i < images.length; i++) {
+		var image = images[i];
+		ApplyWideImageClassAsRequired(image);
+		images[i].addEventListener("load", function () { ApplyWideImageClassAsRequired(this); });
 	}
 })();

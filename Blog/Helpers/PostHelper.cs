@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -29,7 +28,7 @@ namespace Blog.Helpers
                 throw new ArgumentNullException(nameof(post));
 
             var content = new StringBuilder();
-            content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
+            AppendPostDate(content, post.Posted);
             content.AppendFormat("<h2><a href=\"/{0}\">{1}</a></h2>", HttpUtility.HtmlAttributeEncode(post.Slug), HttpUtility.HtmlEncode(post.Title));
             content.Append(GetTagLinksContent(helper, post.Tags));
             return new HtmlString(content.ToString());
@@ -100,15 +99,14 @@ namespace Blog.Helpers
             doc.LoadHtml(content);
             MakeUrlsAbsolute(doc, "a", "href", scheme, host);
             MakeUrlsAbsolute(doc, "img", "src", scheme, host);
-            using (var writer = new StringWriter())
-            {
-                doc.Save(writer);
-                content = writer.ToString();
-            }
+            content = doc.DocumentNode.OuterHtml;
 
             cache[cacheKey] = new CachablePostContent(content, post.LastModified);
             return content;
         }
+
+        private static void AppendPostDate(StringBuilder content, DateTime postedAt) =>
+            content.AppendFormat("<p class=\"PostDate\">{0}</p>", postedAt.ToString("d MMMM yyyy"));
 
         private static async Task<string> GetRenderableContent(
             IHtmlHelper helper,
@@ -133,7 +131,7 @@ namespace Blog.Helpers
 
             var content = new StringBuilder();
             if (includePostedDate)
-                content.AppendFormat("<h3 class=\"PostDate\">{0}</h3>", post.Posted.ToString("d MMMM yyyy"));
+                AppendPostDate(content, post.Posted);
             content.Append(
 				MarkdownTransformations.ToHtml(markdownContent)
             );
