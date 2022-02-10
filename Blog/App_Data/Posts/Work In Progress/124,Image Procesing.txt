@@ -182,11 +182,7 @@ And for working with **Bitmap** instances, I've got some extension methods for t
 
 With this code, we can already perform those first steps that I've described in the find-projection-area-in-image process. Note that I'm going to throw in an extra step of shrinking the input images if they're larger than 400px because we don't need pixel-perfect accuracy when the whole point of this process is that a lot of the frames are too blurry to read - and shrinking the images means that there's less data to process and the whole thing should finish more quickly.
 
-    // TODO: Download a blurry image from
-    //       https://github.com/ProductiveRage/NaivePerspectiveCorrection/tree/main/Samples/Frames
-    // - Or reference the example at the top of this blog post??
-    
-    using var image = new Bitmap("TODO: Image Name.jpg");
+    using var image = new Bitmap("frame_338.jpg");
     using var resizedImage = image.CopyAndResize(resizeLargestSideTo: 400);
     var greyScaleImageData = resizedImage.GetGreyscale();
     var (min, max) = greyScaleImageData.GetMinAndMax();
@@ -195,9 +191,11 @@ With this code, we can already perform those first steps that I've described in 
     var thresholdForMasking = min + (range * thresholdOfRange);
     var mask = greyScaleImageData.Mask(thresholdForMasking);
 
-This gives us a **DataRectangle** of boolean values that represent points the brighter points as true and the less bright points as false.
+This gives us a **DataRectangle** of boolean values that represent the brighter points as true and the less bright points as false.
 
-TODO: Include image of mask (pre-largest-object-in-mask-being-located) - resized to appropriate dimensions
+In the image below, you can see the original frame on the left, the content that would be masked out by hiding all but the brightest pixels and a "binary mask" (where every pixel is either black or white, there is none of the original content from the source frame) -
+
+![A frame from the video with the brightest third of the pixels masked out](/Content/Images/Posts/VideoFrameWithMask.jpg)
 
 Now we need to identify the largest "object" within this mask - wherever bright pixels are adjacent to other bright pixels, they will be considered part of the same object and we would expect there to be several such objects within the mask that has been generated.
 
@@ -256,8 +254,10 @@ To get the largest object in the current mask, we'll call:
     var pointsInLargestHighlightedArea = GetDistinctObjects(mask)
         .OrderByDescending(points => points.Count())
         .FirstOrDefault();
+
+![A binary mask of a frame in the video with all but the single largest areas hidden](/Content/Images/Posts/VideoFrameWithLargestBinaryMaskObject.jpg)
     
-*(If this returns null then we need to escape out of the method that we're in because the source image didn't produce a mask with any highlighted objects - this could happen if the image has every single with the same colour, for example; an edge case, surely, but one that we should handle)*
+*(If pointsInLargestHighlightedArea is null then we need to escape out of the method that we're in because the source image didn't produce a mask with any highlighted objects - this could happen if the image has every single with the same colour, for example; an edge case, surely, but one that we should handle)*
 
 From this largest object, we want to find a bounding quadrilateral, which we do by looking at every point and finding the one closest to the top left of the image (because this will be the top left of the bounding area), the point closest to the top right of the image (for the top right of the bounding area) and the same for the points closest to the bottom left and bottom right.
 
@@ -347,7 +347,7 @@ The final bounding area for the largest bright area of an image is now retrieved
 
 For the example image that we're looking at, this area is outlined liked this:
 
-TODO: Insert original size example image mask with largest object outlined (and other objects still deleted)
+<img alt="An outline around the largest object within the binary mask of a frame from the video" src="/Content/Images/Posts/VideoFrameWithLargestBinaryMaskObjectOutlined.jpg" class="AlwaysFullWidth" />
 
 ### Applying the process to multiple images
 
@@ -391,7 +391,7 @@ All that we would have to change in order to use multiple threads to process mul
 
 *(Parallelisation side bar: When we split up the work like this, if the processing for each image was solely in memory then it would be a no-brainer that this would make sense - however, the processing for each image involves LOADING the image from disk and THEN processing it in memory and if you had a spinning rust hard disk then you may fear that trying to ask it to read multiple files simultaneously would be slower than asking it to read them one at a time because its poor little read heads have to physically move around the plates.. it turns out that this is not necessarily the case and that you can find more information in this article that I found interesting; "[Performance Impact of Parallel Disk Access](https://pkolaczk.github.io/disk-parallelism/)")*
 
-### Testing the code yourself
+### Testing the code on your own computer
 
 I haven't quite finished yet but I figured that there may be *some* wild people out there that would like to try running this code locally themselves - maybe just to see it work or maybe even to get it working and then chop and change it for some new and exciting purpose!
 
@@ -553,11 +553,11 @@ This gives us a "frameIndexesThatHaveTheMostCommonHighlightedArea" array of fram
 
 Any frames whose index is less that "firstFrameIndex" or greater than "lastFrameIndex" is probably part of the intro or outro sequence -
 
-TODO: Show image from one of those, with frame index overlaid (and mask alongside?)
+![A frame from the intro of the video - the largest bright area is not near the slide projection](/Content/Images/Posts/VideoFrameWithMask-Intro.jpg)
 
 Any frames whose index is within the "firstFrameIndex" / "lastFrameIndex" is probably part of the presentation -
 
-TODO: Show image from presentation, with frame index overlaid (and mask alongside?)
+![A frame from the presentation part of the video - the largest bright area IS the slide projection](/Content/Images/Posts/VideoFrameWithMask-Alternate.jpg)
 
 ### Coming soon
 
