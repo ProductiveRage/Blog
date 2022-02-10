@@ -98,7 +98,11 @@ body
                 font-weight: bold;
             }
         }
-        @media screen and (max-width: 35em) { > ul > li { padding: 0 0 16px 0; } }
+
+        // Don't think that there's a lot of benefit to showing the monthly archive links
+        // in a long list at the bottom of the mobile view - hide them and leave only the
+        // "Every Post Title" option (they make more sense in the desktop sidebar)
+        @media screen and (max-width: 70em) { > ul { display: none; } }
     }
 
     div.Search
