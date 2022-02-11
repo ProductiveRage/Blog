@@ -1,8 +1,0 @@
-/* Reduce border size where rounded border not supported */
-div.HeaderContent,
-div.Content,
-div.About,
-div.Featured,
-div.History { border-width: 2px; }
-
-div.Content img.ErrorPage { border: none; }
