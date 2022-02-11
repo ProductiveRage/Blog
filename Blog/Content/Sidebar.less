@@ -118,58 +118,13 @@ body
             font-weight: bold;
             text-align: left;
         }
-        input.SiteSearch
+        form.Search
         {
-            font-size: 12px;
-            width: 100%;
-            box-sizing: border-box; // Allow us to combine padding with width: 100%
-        }
-        input.SiteSearchSubmit
-        {
-            font-size: 12px;
-            margin: 4px 0 0 0;
-            padding: 3px 6px;
-        }
-
-        label.SearchField
-        {
-            // Settings required for autocomplete dropdown
-            position: relative;
             display: block;
-        }
-
-        div.autocomplete-items
-        {
-            position: absolute;
-            border: 1px solid #d4d4d4;
-            border-bottom: none;
-            border-top: none;
-            z-index: 1;
-            text-align: left;
-            
-            // Position the autocomplete items to be the same width as the container
-            top: 100%;
-            left: 0;
-            right: 0;
-
-            overflow: hidden; // Don't let long single-word terms spill out of the horizontal space
-
-            > div
+            input.SiteSearch
             {
-                padding: 3px 5px;
-                font-size: 12px;
-                cursor: pointer;
-                background-color: #fff;
-                border-bottom: 1px solid #d4d4d4;
-
-                &:hover { background-color: #e9e9e9; }
-
-                // when navigating through the items using the arrow keys
-                &.autocomplete-active
-                {
-                    background-color: #c0c0c0; 
-                    color: #ffffff; 
-                }
+                width: 100%;
+                box-sizing: border-box; // Allow us to combine padding with width: 100%
             }
         }
     }
