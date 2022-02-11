@@ -6,6 +6,7 @@
 @import "Header.less";
 @import "Content.less";
 @import "Sidebar.less";
+@import "Search.less";
 @import "Footer.less";
 
 @import "PrettyPrint.less";

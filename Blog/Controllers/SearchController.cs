@@ -64,7 +64,7 @@ namespace Blog.Controllers
 				// Add a small grace period to the comparison (if only because lastModifiedDateOfLiveData is granular to milliseconds while lastModifiedDate only
 				// considers seconds and so will nearly always be between zero and one seconds older)
 				Response.StatusCode = 304;
-				return Json("{ \"Result\": \"Not Modified\" }");
+				return new EmptyResult(); // Musn't return any response body content with a 304
 			}
 
 			base.SetResponseCacheHeadersForSuccess(lastModifiedDateOfData);
