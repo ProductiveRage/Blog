@@ -22,7 +22,8 @@ namespace BlogBackEnd.Models
 			var html = Markdown.ToHtml(markdown, _markdigPipeline);
 
 			// Populate the "title" attribute on any img nodes that don't have one but DO have an "alt text" value (could have done this as
-			// a variation on the Markdig LinkInlineParser but this way seemed easier!)
+			// a variation on the Markdig LinkInlineParser but this way seemed easier! It also has the benefit that it will apply to any img
+			// tags that are included are bare html, rather than via markdown - for cases where additional classes are added, for example).
 			var doc = new HtmlDocument();
 			doc.LoadHtml(html);
 			var imgNodes = doc.DocumentNode.SelectNodes("//img");
