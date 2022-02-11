@@ -54,25 +54,30 @@ namespace Blog.Controllers
 				);
 			}
 
+			// Try to extract a  description / intro from the Post content - the ideal is to find the first paragraph of content and break that at a natural point to get
+			// no more than 200 characters. If that fails for then just try to get all of the plain text content and cut it at 200 characters (this is not as good an
+			// approach because the plain text content may include code sample content if that appears very early on in the post).
+			var description = postMatch.Post.TryToGetFirstParagraphContentAsPlainText(maxLength: 200);
+			if (description == null)
+			{
+				description = postMatch.Post.GetContentAsPlainText();
+				if (description.Length > 200)
+					description = description.Substring(0, 198) + "..";
+				else if (description == "")
+					description = null;
+			}
+
 			TwitterCardDetails twitterCardDetails;
 			if ((_siteConfiguration.OptionalTwitterUserName == null) || (_siteConfiguration.OptionalTwitterImage == null))
 				twitterCardDetails = null;
 			else
 			{
-				// Try to get Twitter card description from the Post content - the ideal is to find the first paragraph of content and break that at a natural point to get
-				// no more than 200 characters. If that fails for then just try to get all of the plain text content and cut it at 200 characters (this is not as good an
-				// approach because the plain text content may include code sample content if that appear very early on in the post). If THAT fails then just display
-				// a generic (and quite sad) message.
-				var description = postMatch.Post.TryToGetFirstParagraphContentAsPlainText(maxLength: 200);
-				if (description == null)
-				{
-					description = postMatch.Post.GetContentAsPlainText();
-					if (description.Length > 200)
-						description = description.Substring(0, 198) + "..";
-					else if (description == "")
-						description = "No preview content available";
-				}
-				twitterCardDetails = new TwitterCardDetails(_siteConfiguration.OptionalTwitterUserName, postMatch.Post.Title, _siteConfiguration.OptionalTwitterImage, description);
+				twitterCardDetails = new TwitterCardDetails(
+					_siteConfiguration.OptionalTwitterUserName,
+					postMatch.Post.Title,
+					_siteConfiguration.OptionalTwitterImage,
+					description ?? "No preview content available"
+				);
 			}
 
 			return View(
@@ -89,6 +94,7 @@ namespace Blog.Controllers
 					_siteConfiguration.OptionalCanonicalLinkBase,
 					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_siteConfiguration.OptionalDisqusShortName,
+					description,
 					twitterCardDetails,
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
@@ -119,6 +125,7 @@ namespace Blog.Controllers
 					_siteConfiguration.OptionalCanonicalLinkBase,
 					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_siteConfiguration.OptionalDisqusShortName,
+					optionalMetaDescription: "Archive for tag: " + tag,
 					null, // optionalTwitterCardDetails
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
@@ -137,10 +144,11 @@ namespace Blog.Controllers
 			if (!posts.Any())
 				return NotFound();
 
+			var monthDisplayText = new DateTime(year.Value, month.Value, 1).ToString("MMMM yyyy");
 			return View(
 				"Index",
 				new PostListModel(
-					new DateTime(year.Value, month.Value, 1).ToString("MMMM yyyy"),
+					monthDisplayText,
 					await GetPostsWithRelatedPostStubs(posts),
 					null, // previousPostIfAny,
 					null, // nextPostIfAny
@@ -151,6 +159,7 @@ namespace Blog.Controllers
 					_siteConfiguration.OptionalCanonicalLinkBase,
 					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_siteConfiguration.OptionalDisqusShortName,
+					optionalMetaDescription: "Archive for " + monthDisplayText,
 					null, // optionalTwitterCardDetails
 					new PostSlugRetriever(_postRepository),
 					_postContentCache
@@ -193,6 +202,7 @@ namespace Blog.Controllers
 					_siteConfiguration.OptionalCanonicalLinkBase,
 					_siteConfiguration.GetGoogleAnalyticsIdIfAny(Request),
 					_siteConfiguration.OptionalDisqusShortName,
+					optionalMetaDescription: "Every Post Title on this site",
 					optionalTwitterCardDetails: null,
 					new PostSlugRetriever(_postRepository),
 					_postContentCache

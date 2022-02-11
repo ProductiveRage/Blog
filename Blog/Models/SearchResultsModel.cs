@@ -83,6 +83,13 @@ namespace Blog.Models
 		public bool MarkPageAsFollowNoIndex { get { return true; } }
 
 		/// <summary>
+		/// This may be null but it will never be empty if non-null (if there is a non-null OptionalTwitterCardDetails reference then
+		/// the value may match the Description value in there but - as of Feb 2022 - it seems like Google / LightHouse are keen on
+		/// seeing a meta description tag even if there's already a Twitter card description)
+		/// </summary>
+		public string OptionalMetaDescription { get { return "Search results for: " + SearchTerm; } }
+
+		/// <summary>
 		/// This may be null if no Twitter meta data should be displayed
 		/// </summary>
 		public TwitterCardDetails OptionalTwitterCardDetails { get { return null; } }
