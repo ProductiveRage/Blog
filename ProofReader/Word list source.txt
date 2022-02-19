@@ -1,0 +1,1 @@
+﻿The words.txt file came from https://github.com/dwyl/english-words (https://github.com/dwyl/english-words/blob/7cb484da5de560c11109c8f3925565966015e5a9/words.txt)
