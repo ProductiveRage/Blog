@@ -16,19 +16,32 @@ body {
             overflow: hidden;
         }
 
+        .CodeSection() {
+            font-family: Consolas, Courier New, Courier, monospace;
+        }
+
+        .InlineCodeSection() {
+            .CodeSection();
+            font-weight: bold;
+            color: #777;
+        }
+
         > p {
             padding: 0 0 16px 0;
             line-height: 21px;
             word-break: break-word; // Don't allow really long words to force horizontal scrolling for small form factors ("mobile friendly")
+
+            > code { .InlineCodeSection(); }
+
             @media screen and (max-width: 35em) { line-height: 28px; }
         }
 
         > pre {
+            .CodeSection();
+            border: 1px solid #eee;
+            font-size: 12px;
             margin: 0 0 16px 0;
             padding: 8px;
-            border: 1px solid #eee;
-            font-family: Consolas, Courier New, Courier, monospace;
-            font-size: 12px;
             line-height: 18px;
             clear: both; // Don't allow code alongside an image, ensure it goes underneath in order to allow the full width of the post to be used
             box-sizing: border-box; // Allow us to combine padding with width: 100%
@@ -171,7 +184,11 @@ body {
             background: #f8f8f8;
             overflow-wrap: anywhere; // Ensure that any long strings in quotes will break even if it's one long run of characters
 
-            > p { padding: 5px 0 11px 0; }
+            > p {
+                padding: 5px 0 11px 0;
+
+                > code { .InlineCodeSection(); }
+            }
         }
 
         @HeaderColour: #30a;
