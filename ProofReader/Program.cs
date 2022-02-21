@@ -4,14 +4,13 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Blog.Models;
 using BlogBackEnd.Models;
-using Fastenshtein;
 using FullTextIndexer.Common.Lists;
 using FullTextIndexer.Core.TokenBreaking;
 using HtmlAgilityPack;
+using ProofReader.MarkdownApproximation;
 
 namespace ProofReader
 {
@@ -181,7 +180,7 @@ namespace ProofReader
             // when a word is encountered that is thought to be misspelt then this may be used to suggest a similar but correct
             // alternative
             Console.WriteLine("Reading English dictionary for generating suggestions..");
-            var closestMatchFinder = GetClosestMatchFinder(
+            var closestMatchFinder = ClosestMatchFinder.Get(
                 caseSensitiveKnownWords,
                 caseIrrelevantKnownWords,
                 suggestion =>
@@ -189,28 +188,9 @@ namespace ProofReader
                         ? count
                         : 0);
 
-            // Read each post and apply a limited form of Markdown transformation such that each word maintains its position in the
-            // the original text - eg. remove code sections because I want to concentrate on finding spelling mistakes in English
-            // prose but the code sections are replaced with empty lines so that the positions of text following it is unaffected.
-            // This allows for the any word that is thought to be spelt incorrectly to have its location reported as it would be
-            // in the original Markdown text. The downside is that it limits what Markdown transformations are supported but it
-            // is sufficient for my case.
-            var possibleHtmlEntityContainingContentTokenBreaker = new HtmlEncodedEntityTokenBreaker(breakOn);
             foreach (var post in posts)
             {
-                // Note: Taking this manual approach instead of rendering from markdown to plain text to try to keep the original source
-                // locations of the tokens in case want to explore any automated replacements
-                var postContent = post.MarkdownContent
-                    .RemoveCodeBlocks()
-                    .RemoveLinkUrls()
-                    .RemoveExplicitImgTags()
-                    .RemoveExplicitLineBreaks();
-
-                // Note: Using the HtmlEncodedEntityTokenBreaker means that any decoding of html entities is already done - so each
-                // token.Content is a plain string (if triangular brackets were encoded and used as token separators then they will
-                // not appear as tokens but if there was a copyright symbol, encoded as "&copy;", for example, then the token content
-                // would include the copyright symbol itself)
-                var tokens = possibleHtmlEntityContainingContentTokenBreaker.Break(postContent);
+                var tokens = MarkdownReader.GetTokens(post.MarkdownContent, breakOn);
                 var suggestions = new List<(WeightAdjustingToken Token, string SuggestedReplacement)>();
                 foreach (var token in tokens)
                 {
@@ -260,7 +240,7 @@ namespace ProofReader
                 Console.WriteLine($"Reading post {post.Id} {post.Title}..");
                 foreach (var (token, suggestedReplacement) in suggestions)
                 {
-                    Console.Write($"Bad word {GetRowAndColumnSourceIndex(postContent, token.SourceLocation.SourceIndex)}: {token.Token}");
+                    Console.Write($"Bad word {GetRowAndColumnSourceIndex(post.MarkdownContent, token.SourceLocation.SourceIndex)}: {token.Token}");
                     Console.Write(" => " + suggestedReplacement);
                     Console.WriteLine();
                 }
@@ -297,7 +277,7 @@ namespace ProofReader
         {
             // Note: If this term is a single word OR it's a number / unit of measurement then we don't need to
             // do any more work and can just drop out now
-            if (knownWordLookup(source) || IsNumber(source))
+            if (knownWordLookup(source) || source.IsNumber())
                 return true;
 
             // Some strings contain multiple words that are combined (eg. "my-application") but it may be necessary
@@ -341,7 +321,7 @@ namespace ProofReader
 
                 // If the term has been broken down into multiple smaller terms such that ALL of them are either recognised words
                 // or numbers / units of measurement then we're done 
-                if (subTokens.All(t => IsNumber(t) || knownWordLookup(t)))
+                if (subTokens.All(t => t.IsNumber() || knownWordLookup(t)))
                     return true;
 
                 void AddBufferToListIfNonEmpty()
@@ -382,89 +362,11 @@ namespace ProofReader
             }
         }
 
-        private static string RemoveCodeBlocks(this string source)
-        {
-            // Remove multiline code blocks that are indicated by three backticks before and after content
-            source = Regex.Replace(
-                source,
-                "```(.*?)```",
-                match => new string(match.Value.Select(c => char.IsWhiteSpace(c) ? c : ' ').ToArray()),
-                RegexOptions.Singleline // Treat "." to match EVERY character (not just every one EXCEPT new lines)
-            );
-
-            // Remove multiline code blocks that are indicated by four trailing spaces per line
-            var content = new StringBuilder();
-            foreach (var line in NormaliseLineEndingsWithoutAffectingCharacterIndexes(source).Split('\n'))
-            {
-                var contentForLine = line.StartsWith("    ")
-                    ? new string(' ', line.Length)
-                    : line;
-                content.Append(contentForLine + '\n');
-            }
-
-            // Remove inline code blocks (indicated by single backticks before and after the content)
-            return Regex.Replace(
-                content.ToString(),
-                "`(.*?)`",
-                match => new string(' ', match.Length)
-            );
-        }
-
-        private static string RemoveLinkUrls(this string source) =>
-            Regex.Replace(
-                source,
-                @"\[([^\]]*?)(\[.*?\])?\]\((.*?)\)",
-                match =>
-                {
-                    // General link syntax is of the form [description](http://example.com) and we want to spell check the "description" string
-                    // while replacing the rest of the content with whitespace so that the token positions don't change. There are a couple
-                    // of exceptions to this, such as where the text is either the same as the url (eg. "http://example.com") or the same
-                    // but without the protocol to make it shorter (eg. "example.com") - in both of these cases, we want to replace the
-                    // description with whitespace as well. Finally, SOMETIMES the description includes a format note in its content in
-                    // square brackets (eg. [description [PDF]](http://example.com/doc.pdf)) and we need a separate capture group in
-                    // the regex to pick up on that (and include it in the linkText value if this optional text is present).
-                    var linkText = match.Groups[1].Value;
-                    if (match.Groups[2].Success)
-                        linkText += " " + match.Groups[2].Value;
-                    if (linkText.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || linkText.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // If there is no text description for the link (it's just the URL) then replace the entire content with whitespace
-                        return new string(' ', match.Length);
-                    }
-                    var linkUrl = match.Groups[3].Value;
-                    if (linkUrl.Contains("://") && (linkText == linkUrl.Split("://", 2).Last()))
-                    {
-                        // This is basically the same case as above except that the protocol has been hidden from the link text
-                        return new string(' ', match.Length);
-                    }
-                    var textToKeep = match.Groups[1].Value;
-                    textToKeep = " " + textToKeep; // Prepend a space to replace the opening square bracket that was removed
-                    return textToKeep + new string(' ', match.Length - textToKeep.Length); // Pad out the rest with spaces to maintain total length
-                });
-
-        private static string RemoveExplicitImgTags(this string source) =>
-            Regex.Replace(
-                source,
-                @"<img.*?\/>",
-                match =>
-                {
-                    var doc = new HtmlDocument();
-                    doc.LoadHtml(match.Value);
-                    var altText = doc.DocumentNode.ChildNodes.FirstOrDefault()?.Attributes["alt"]?.DeEntitizeValue ?? "";
-                    return altText + new string(' ', match.Length - altText.Length);
-                });
-
-        private static string RemoveExplicitLineBreaks(this string source) =>
-            Regex.Replace(
-                source,
-                @"<br.*?\/>",
-                match => new string(' ', match.Length));
-
         static (int Column, int Row) GetRowAndColumnSourceIndex(string source, int sourceIndex)
         {
             var rowIndex = 0;
             var colIndex = 0;
-            foreach (var c in NormaliseLineEndingsWithoutAffectingCharacterIndexes(source).Take(sourceIndex))
+            foreach (var c in source.NormaliseLineEndingsWithoutAffectingCharacterIndexes().Take(sourceIndex))
             {
                 if (c == '\n')
                 {
@@ -475,70 +377,6 @@ namespace ProofReader
                 colIndex++;
             }
             return (colIndex + 1, rowIndex + 1);
-        }
-
-        static bool IsNumber(string value)
-        {
-            if (value.All(c => (c == '.') || (c == '-') || (c == '+') || (c == 'π') || ((c >= '0') && (c <= '9'))))
-            {
-                // Approximate but good enough (allow ".12" or "1.2.2" - call the last one a version number)
-                // - Originally intended for numbers but will probably suffice for common numeric ranges
-                return true;
-            }
-
-            if (Regex.IsMatch(value, @"^\d+(st|nd|rd|th)$"))
-            {
-                // Again, approximate but will suffice - can live with "3th" instead of "3rd"
-                return new[] { "st", "nd", "rd", "th" }.Contains(value[^2..], StringComparer.OrdinalIgnoreCase);
-            }
-
-            // Check for common units of measurement; "2.02s", "3ms", "10k", "128px", "5.2x"
-            if (Regex.IsMatch(value, @"^\d+(\.\d+)?(s|ms|k|em|rem|px|x|kb|mb|mbps|gb|fps|m|am|pm|bit|bits)$", RegexOptions.IgnoreCase))
-                return true;
-
-            // Check for common dimensions (with or without pixel units included); "128x128", "3x3x3", "32x32px"
-            if (Regex.IsMatch(value, @"^\d+x\d+(x\d+)?(px)?$"))
-                return true;
-
-            // Check for html hex code values (shortest is #RGB while longest is #RRGGBBAA)
-            if (Regex.IsMatch(value, "#[0-9a-fA-F]{3,8}"))
-                return true;
-
-            return false;
-        }
-
-        private static string NormaliseLineEndingsWithoutAffectingCharacterIndexes(string source) =>
-            source
-                .Replace("\r\n", " \n") // Note: Important to maintain character count (so include space before single line return)
-                .Replace('\r', '\n');
-
-        private static Func<string, string?> GetClosestMatchFinder(
-            IEnumerable<string> caseSensitiveKnownWords,
-            IEnumerable<string> caseIrrelevantKnownWords,
-            Func<string, int> wordCountInHistoricalData)
-        {
-            var caseSensitiveLookup = caseSensitiveKnownWords.ToHashSet(StringComparer.Ordinal);
-            var caseIrrelevantLookup = caseIrrelevantKnownWords
-                .Select(word => word.ToLowerInvariant()) // Note: The Levenshtein appplies greater distance to the same word with different casing
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            return typo =>
-            {
-                // Check for a precise match first - no approximating required if one is found!
-                if (caseSensitiveLookup.Contains(typo) || caseIrrelevantLookup.Contains(typo))
-                    return typo;
-
-                // Note: This will offer what it thinks is a best match but it will never be perfect when considering words in
-                // isolation - more sentence context would be required to improve accuracy. However, it's good enough for fixing
-                // up historical data with a manual review involved,
-                var lev = new Levenshtein(typo.ToLowerInvariant()); // Note: Lower case to match justification above
-                return caseIrrelevantLookup
-                    .Select(word => (Word: word, Distance: lev.DistanceFrom(word), OccurencesInHistoricalData: wordCountInHistoricalData(word)))
-                    .OrderBy(entry => entry.Distance)
-                    .ThenByDescending(entry => entry.OccurencesInHistoricalData)
-                    .FirstOrDefault()
-                    .Word;
-            };
         }
     }
 }

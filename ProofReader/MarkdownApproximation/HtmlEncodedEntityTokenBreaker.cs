@@ -5,7 +5,7 @@ using FullTextIndexer.Common.Lists;
 using FullTextIndexer.Core.Indexes;
 using FullTextIndexer.Core.TokenBreaking;
 
-namespace ProofReader
+namespace ProofReader.MarkdownApproximation
 {
     /// <summary>
     /// A variation of a split-on-whitespace-and-other-specified-characters token breaker that can deal with content that may have
