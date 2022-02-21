@@ -103,7 +103,10 @@ namespace ProofReader
                 '@', '+', '|', '=');
             var plainTextTokenBreaker = new WhiteSpaceExtendingTokenBreaker(breakOn, new WhiteSpaceTokenBreaker());
             var tokensFromPosts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var postRetriever = new SingleFolderPostRetriever(new DirectoryContents(postFolderPath));
+            var postRetriever = new SingleFolderPostRetriever(
+                new DirectoryInfo(postFolderPath)
+                    .EnumerateFiles()
+                    .Select(f => new FileProvidersFile(f)));
             var posts = await postRetriever.Get();
             foreach (var post in posts)
             {
