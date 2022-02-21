@@ -149,7 +149,7 @@ I've also updated the ExtendableCompilableTypeConverterFactory (see [The Less-Ef
 
 ### Splitting the AutoMapper dependency
 
-Since the majority of work in this solution no longer requires AutoMapper, I've broken out a separate project "AutoMapperIntegration" which houses the AutoMapperEnabledpropertyGetter and AutoMapperEnabledpropertyGetterFactory classes so now the main project has no AutoMapper reference. My original intention was improve how AutoMapper worked with by-constructor conversions and this functionality is still available - without taking advantage of the compiled converters - by referencing the main project along with AutoMapperItegration (and so the example in [Teaching AutoMapper about "verbose constructors"](Post5) is still applicable).
+Since the majority of work in this solution no longer requires AutoMapper, I've broken out a separate project "AutoMapperIntegration" which houses the AutoMapperEnabledPropertyGetter and AutoMapperEnabledPropertyGetterFactory classes so now the main project has no AutoMapper reference. My original intention was improve how AutoMapper worked with by-constructor conversions and this functionality is still available - without taking advantage of the compiled converters - by referencing the main project along with AutoMapperIntegration (and so the example in [Teaching AutoMapper about "verbose constructors"](Post5) is still applicable).
 
 And so I've renamed the solution itself to...
 

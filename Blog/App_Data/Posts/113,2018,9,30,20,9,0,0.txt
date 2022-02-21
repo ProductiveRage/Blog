@@ -371,7 +371,7 @@ I prefer these two approaches and choosing which of them to use comes down to wh
 - If I was writing the non-async code and I needed to call into a trusted and battle-tested async library then I might be tempted to do nothing at all because I would expect such a library to follow recommended practices such as using ".ConfigureAwait(false)" internally
 - If I was writing non-async code that had to call into async code that I was less confident about then I would call it using "AsyncCallHelpers.WaitForAsyncResult" to be sure that nothing was going to go awry
  - Note: This only applies to non-async code that will be hosted in an environment that uses a synchronization context that I need to be worried about (such as ASP.NET or WinForms but *not* Console Applications or Windows Services)
-- If I was writing async code that might be called from different environments (where an awkward synchronization context might come into play), then I would use the **SynchronizationContextRemover** approach at the public boundaries (so that I wouldn't need to specify ".ConfigureAwait(false)" everytime that I await something in my code)
+- If I was writing async code that might be called from different environments (where an awkward synchronization context might come into play), then I would use the **SynchronizationContextRemover** approach at the public boundaries (so that I wouldn't need to specify ".ConfigureAwait(false)" every time that I await something in my code)
 
 ### Two more "solutions" to round out the post
 

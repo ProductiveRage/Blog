@@ -142,7 +142,7 @@ React 0.14 introduced a concept, the "[Stateless Component](https://facebook.git
 
 The "**StatelessComponent**" base class takes a generic type parameter that describe the "props" reference type. Then, when "Render" is called, the "props" reference will be populated and ready to use *within* Render. If any other functions are declared within the class, they may be called from Render as you might expect (see further down). So we are able to write very simple custom components that React will treat as these special Stateless Components - about which, Facebook say:
 
-> In the future, we’ll also be able to make performance optimizations specific to these components
+> In the future, we'll also be able to make performance optimizations specific to these components
 
 Creating one of these components is as easy as:
 

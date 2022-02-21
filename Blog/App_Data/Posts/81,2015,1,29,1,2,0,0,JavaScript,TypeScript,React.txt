@@ -92,7 +92,7 @@ Like I said, I've been clinging to my hacked-about way to get TypeScript working
 
 **Update (16th March 2015):** With React 0.13's official release, the [DefinitelyTyped repo](https://github.com/borisyankov/DefinitelyTyped/tree/master/react) has been updated and now *does* work with 0.13, I'm leaving the below section untouched for posterity but you might want to skip to the next section "Writing a TypeScript React component" if you're using the DefinitelyTyped definition.
 
-In fact, after some investigation, very little needs changing. Starting with their React type definitions (from the file [typings/react/reactd.ts](https://github.com/Asana/typed-react/blob/master/typings/react/react.d.ts)), we need to expose the "React.Component" class but currently that is described by an interface. So the following must be changed -
+In fact, after some investigation, very little needs changing. Starting with their React type definitions (from the file [typings/react/react.d.ts](https://github.com/Asana/typed-react/blob/master/typings/react/react.d.ts)), we need to expose the "React.Component" class but currently that is described by an interface. So the following must be changed -
 
     interface Component<P> {
       getDOMNode<TElement extends Element>(): TElement;

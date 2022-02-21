@@ -215,6 +215,6 @@ And then replace the "webHttp" node of the behaviour we added above with a "post
         <postServiceWebHttp />
     </behavior>
 
-The QueryStringConverter's CanConvert, ConvertStringToValue and ConvertValueToString methods are overridden so that we can pick up on parameters that are of the type Nullable&lt;T&gt&; and deal with them appropriately - returning null if a null value is stored in the type and dealing with the wrapped value if not.
+The QueryStringConverter's CanConvert, ConvertStringToValue and ConvertValueToString methods are overridden so that we can pick up on parameters that are of the type Nullable&lt;T&gt; and deal with them appropriately - returning null if a null value is stored in the type and dealing with the wrapped value if not.
 
 This could easily be changed to perform different translation actions, if required (it could feasibly be integrated with a JSON serialiser to deal with complex data types, for example).

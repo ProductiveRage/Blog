@@ -412,7 +412,7 @@ So, to look for invalid property combinations first.. The Syntax Visualizer (as 
 
 .. however, "SimpleAssignmentExpressionSyntax" is not a real type. I tried starting to type  out "Simple" to see if intellisense would pick up what the correct name was - but that didn't get me anywhere.
 
-Next, I resorted to deleting those last few lines (since they don't compile) and to just putting a breakpoint at the top of "LookForInvalidSelectAttributeProperties". I then used Debug Tests on "DoNotUseValueWhenMultipleIsTrue". The breakpoint is hit.. but I can't see the child nodes with QuickWatch because "ChildNodes()" is a method, not a property, and QuickWatch only shows you property values (it doesn't offter to execute methods and show you what is returned). So I go to the Immediate Window (Debug / Windows / Immediate), type the following and hit [Enter] -
+Next, I resorted to deleting those last few lines (since they don't compile) and to just putting a breakpoint at the top of "LookForInvalidSelectAttributeProperties". I then used Debug Tests on "DoNotUseValueWhenMultipleIsTrue". The breakpoint is hit.. but I can't see the child nodes with QuickWatch because "ChildNodes()" is a method, not a property, and QuickWatch only shows you property values (it doesn't offer to execute methods and show you what is returned). So I go to the Immediate Window (Debug / Windows / Immediate), type the following and hit [Enter] -
 
     context.Node.ChildNodes().First().GetType().Name
 

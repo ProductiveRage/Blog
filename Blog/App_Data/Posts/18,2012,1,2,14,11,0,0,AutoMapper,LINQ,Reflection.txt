@@ -290,7 +290,7 @@ to
 
 (The enum mapping in this example would be handled by specifying a CaseInsensitiveSkipUnderscoreNameMatcher for the CompilableEnumConversionPropertyGetterFactory).
 
-But the problem I opened with does *not* come under this "simple structure" umbrella as in that case SourceRole and DestRole are types for which we have no Compilable Property Getter! Oh nos!
+But the problem I opened with does *not* come under this "simple structure" umbrella as in that case SourceRole and DestRole are types for which we have no Compilable Property Getter! Oh noes!
 
 ### The CompilableTypeConverterPropertyGetter
 

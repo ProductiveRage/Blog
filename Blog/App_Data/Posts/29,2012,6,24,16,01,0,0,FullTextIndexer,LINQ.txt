@@ -54,7 +54,7 @@ Then I tried integrating the project as a search facility into my blog which is 
 
 Hmmm...
 
-Stack Overflow to the rescue again! [Inheritance security rules violated with overriding member](http://stackoverflow.com/questions/3055792/inheritance-security-rules-violated-while-overriding-member-securityruleset-le). Reading the post led me to click "Use Definition" on ISerializable and observice that the "SecurityCritical" attribute was marked on the GetObjectData method - and from what I understand from what I read, I should be able to fix this by marking that attribute on my GetObjectData method. Sortio!
+Stack Overflow to the rescue again! [Inheritance security rules violated with overriding member](http://stackoverflow.com/questions/3055792/inheritance-security-rules-violated-while-overriding-member-securityruleset-le). Reading the post led me to click "Use Definition" on ISerializable and observe that the "SecurityCritical" attribute was marked on the GetObjectData method - and from what I understand from what I read, I should be able to fix this by marking that attribute on my GetObjectData method. Sortio!
 
 Not sortio.. :( And now I must admit to being a bit lazy in my eagerness to get the search functionality integrated on the site. One of the Stack Overflow answers was to specify "Full Trust" for the web application but I got the impression that this was cheating a bit and bypassing some of the new .Net 4.0 security mechanisms. However, for now I've gone with it by adding this to the web.config (as per one of the posted answers):
 

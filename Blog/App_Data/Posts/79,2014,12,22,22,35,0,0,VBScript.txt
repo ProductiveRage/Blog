@@ -2,7 +2,7 @@
 
 I've been migrating an old VBScript app to .net and some of those old idiosyncracies of VBScript have been rearing their head again. For a language that is intended to make things simple (and, in fairness, for many use cases it does), it really does have some confusing and complicated rules hidden behind its facade of ease!
 
-Language design quite interests me, there's always a view into someone's way of thinking, about how things should be done. And there's always compromises (like all programming). Is it really true that languages like [Smalltak have no "if" statement](http://stackoverflow.com/a/1937434)? Why did the features that got into C# 6 get in and why didn't other candidates? Should languages make immutable structures simple, or should these be difficult because immutability is expensive (yes, no and it's not - if you ask me)?
+Language design quite interests me, there's always a view into someone's way of thinking, about how things should be done. And there's always compromises (like all programming). Is it really true that languages like [Smalltalk have no "if" statement](http://stackoverflow.com/a/1937434)? Why did the features that got into C# 6 get in and why didn't other candidates? Should languages make immutable structures simple, or should these be difficult because immutability is expensive (yes, no and it's not - if you ask me)?
 
 Anyway, if you're not similarly interested *and* you're not just happy to point and laugh, not only at some of the decisions* made in VBScript, but also that someone *is still using it in this day and age* then this post might not be for you..
 

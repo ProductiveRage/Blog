@@ -232,7 +232,7 @@ Whereas other tutorials talked about calling "sleep\_enable()" and "set\_sleep\_
 
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
 
-This willl cause the board to go into its most power-saving mode for eight seconds (which is the longest that's possible when relying upon its internal Watchdog Timer to wake it up).
+This will cause the board to go into its most power-saving mode for eight seconds (which is the longest that's possible when relying upon its internal Watchdog Timer to wake it up).
 
 No muss, no fuss.
 

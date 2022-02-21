@@ -8,7 +8,7 @@ This won't take long, but it's worth blasting through. It's also worth noting th
 
 ### Last-modified-dates
 
-The **EnhancedNonCachedLessCssLoaderFactory** utilises the **SameFolderImportFlatteningCssLoader** which will run through the CSS / LESS files and pull in any content fom "import" statements inline - effectively flattening them all into one chunk of stylesheet content.
+The **EnhancedNonCachedLessCssLoaderFactory** utilises the **SameFolderImportFlatteningCssLoader** which will run through the CSS / LESS files and pull in any content from "import" statements inline - effectively flattening them all into one chunk of stylesheet content.
 
 A built-in (and intentional) limitation of this class is that all imports must come from the same folder as the source file. This means you can't import stylesheets from any other folder or any server (if you were going to load a resets sheet from a CDN, perhaps).
 

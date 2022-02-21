@@ -6,7 +6,7 @@ When I wrote a couple of weeks ago about writing a way to consume [Full Text Ind
 
 This may have been somewhat of an understatement.
 
-As a little refresher; there is one JSON file responsible for matching posts to search terms (*"oh, I see you seached for '[cats](/Search?term=cats)'! The posts that you want are, in descending order of match quality: 26, 28, 58, 36, 27, 53, 24"*). Then there is a JSON file *per-post* for all of the source location mappings. These describe precisely *where* in the posts that tokens may be matched. There's quite a lot of data to consider and it's in a fairly naive JSON structure (I used single letter property names but that was the only real attempt at size-constraining*). On top of this, there's a plain-text representation of each post so that the source location mappings can be used to generate a best match "content excerpt" for each result (à la Google's results, which highlight matched terms). And finally a JSON file for all of the titles of the posts so that the titles can be displayed when the search logic knows which posts match the query but the content exceprts generation is still being worked on in the background.
+As a little refresher; there is one JSON file responsible for matching posts to search terms (*"oh, I see you seached for '[cats](/Search?term=cats)'! The posts that you want are, in descending order of match quality: 26, 28, 58, 36, 27, 53, 24"*). Then there is a JSON file *per-post* for all of the source location mappings. These describe precisely *where* in the posts that tokens may be matched. There's quite a lot of data to consider and it's in a fairly naive JSON structure (I used single letter property names but that was the only real attempt at size-constraining*). On top of this, there's a plain-text representation of each post so that the source location mappings can be used to generate a best match "content excerpt" for each result (à la Google's results, which highlight matched terms). And finally a JSON file for all of the titles of the posts so that the titles can be displayed when the search logic knows which posts match the query but the content excerpt generation is still being worked on in the background.
 
 This results in 5.8MB of JSON and plain text data.
 
@@ -108,7 +108,7 @@ so clearly particular bytes *can* be invalid somehow..
 
 With this error, it didn't actually take much searching. There's a link on www.unicode.com; [Are there any 16-bit valuese that are invalid?](http://www.unicode.org/faq/utf_bom.html#utf16-7) that states that
 
-> Unpaired surrogates are invalid in UTFs. These include any value in the range D80016 to DBFF16 not followed by a value in the range DC0016 to DFFF16, or any value in the range DC0016 to DFFF16 not preceded by a value in the range D80016 to DBFF16
+> Unpaired surrogates are invalid in UTF8. These include any value in the range D80016 to DBFF16 not followed by a value in the range DC0016 to DFFF16, or any value in the range DC0016 to DFFF16 not preceded by a value in the range D80016 to DBFF16
 
 I spent a little while wandering through various searches on the internet trying to decide what the best way would be to try to address this. I didn't want to have to try to find another compressor for all of the reasons that the author of the one I'm using outlined! Which made me think, maybe there's more information about this on his site.
 

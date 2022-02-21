@@ -9,7 +9,7 @@ I'm willing to make certain compromises: Eval, Execute and ExecuteGlobal would r
 
 Also, VBScript has a deterministic garbage collector, which seems to be why people in the days of yore used to slap "Set x = Nothing" calls at the end of functions - I don't think they did it *solely* to drive me mad (if you don't know what I'm talking about then you are either lucky enough never to have dealt with it or *you* were one of the ones doing it and don't realise why it's a waste of typing.. help me out Eric: [When are you required to set objects to Nothing](http://blogs.msdn.com/b/ericlippert/archive/2004/04/28/when-are-you-required-to-set-objects-to-nothing.aspx)). Trying to emulate this perfectly would also be incredibly difficult with .net's non-determinstic GC. Maybe some sort of reference counting alternate GC could be squeezed in, but this process is going to be difficult enough without going to such lengths. (I'll make sure that all resources are disposed of after any single script / request is processed, which should be good enough).
 
-A final compromise is that this is *not* going to be comparable in performance to manually-written C# code - if the VBScript could be translated into C# by a real, thinking person then that would be much better! But so long as it's significantly quicker than the original VBScript, then that will be fine. Or maybe a parallel goal could be considered - if you have a Classic ASP site and the code is all translated into C# then you could host your site on Linux using Mono and not wory about Windows Server licenses!
+A final compromise is that this is *not* going to be comparable in performance to manually-written C# code - if the VBScript could be translated into C# by a real, thinking person then that would be much better! But so long as it's significantly quicker than the original VBScript, then that will be fine. Or maybe a parallel goal could be considered - if you have a Classic ASP site and the code is all translated into C# then you could host your site on Linux using Mono and not worry about Windows Server licenses!
 
 ### From VBScript snippet to C# executable code
 
@@ -92,7 +92,7 @@ Or, actually, don't yet. I want to take a brief foray into the madnesses of VBSc
 
 ### VBScript classes and scoping
 
-Imagine another example. One that is somewhat contrived, such that it serves no genuine purpose when executed, but that manages to capture a surpring number and range of WTFs in a small number of lines of code. Something like..
+Imagine another example. One that is somewhat contrived, such that it serves no genuine purpose when executed, but that manages to capture a surprising number and range of WTFs in a small number of lines of code. Something like..
 
     On Error Resume Next
     Dim o: Set o = new C1
