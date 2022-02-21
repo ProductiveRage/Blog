@@ -240,8 +240,9 @@ namespace ProofReader
                 Console.WriteLine($"Reading post {post.Id} {post.Title}..");
                 foreach (var (token, suggestedReplacement) in suggestions)
                 {
-                    Console.Write($"Bad word {GetRowAndColumnSourceIndex(post.MarkdownContent, token.SourceLocation.SourceIndex)}: {token.Token}");
-                    Console.Write(" => " + suggestedReplacement);
+                    Console.Write($"Bad word {GetRowAndColumnSourceIndex(post.MarkdownContent, token.SourceLocation.SourceIndex)}:");
+                    Console.Write($" {token.Token.Trim('*')}");
+                    Console.Write($" => {suggestedReplacement.Trim('*')}");
                     Console.WriteLine();
                 }
 
