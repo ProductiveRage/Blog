@@ -198,8 +198,6 @@ namespace ProofReader
             var possibleHtmlEntityContainingContentTokenBreaker = new HtmlEncodedEntityTokenBreaker(breakOn);
             foreach (var post in posts)
             {
-                var haveRenderedPostName = false;
-
                 // Note: Taking this manual approach instead of rendering from markdown to plain text to try to keep the original source
                 // locations of the tokens in case want to explore any automated replacements
                 var postContent = post.MarkdownContent
@@ -213,6 +211,7 @@ namespace ProofReader
                 // not appear as tokens but if there was a copyright symbol, encoded as "&copy;", for example, then the token content
                 // would include the copyright symbol itself)
                 var tokens = possibleHtmlEntityContainingContentTokenBreaker.Break(postContent);
+                var suggestions = new List<(WeightAdjustingToken Token, string SuggestedReplacement)>();
                 foreach (var token in tokens)
                 {
                     if (IsGoodWord(token.Token, IsInKnownWordLists))
@@ -252,17 +251,38 @@ namespace ProofReader
                         continue;
                     }
 
-                    if (!haveRenderedPostName)
-                    {
-                        Console.WriteLine();
-                        Console.WriteLine($"Reading post {post.Id} {post.Title}..");
-                        haveRenderedPostName = true;
-                    }
+                    suggestions.Add((token, suggestedReplacement));
+                }
+                if (!suggestions.Any())
+                    continue;
 
+                Console.WriteLine();
+                Console.WriteLine($"Reading post {post.Id} {post.Title}..");
+                foreach (var (token, suggestedReplacement) in suggestions)
+                {
                     Console.Write($"Bad word {GetRowAndColumnSourceIndex(postContent, token.SourceLocation.SourceIndex)}: {token.Token}");
                     Console.Write(" => " + suggestedReplacement);
                     Console.WriteLine();
                 }
+
+                // Write the corrected content to disk
+                var files = new DirectoryInfo(postFolderPath).EnumerateFiles($"{post.Id},*.txt").Take(2).ToArray();
+                if (files.Length != 1)
+                    throw new Exception("Could not locate source file for Post " + post.Id);
+                var correctedMarkdownContent = suggestions
+                    .OrderByDescending(suggestion => suggestion.Token.SourceLocation.SourceIndex)
+                    .Aggregate(
+                        post.MarkdownContent,
+                        (markdown, suggestion) =>
+                        {
+                            var indexOfTokenToReplace = suggestion.Token.SourceLocation.SourceIndex;
+                            var indexAfterTokenToReplace = indexOfTokenToReplace + suggestion.Token.SourceLocation.SourceTokenLength;
+
+                            var contentBeforeSuggestion = markdown[..indexOfTokenToReplace];
+                            var contentAfterSuggestion = markdown[indexAfterTokenToReplace..];
+                            return contentBeforeSuggestion + suggestion.SuggestedReplacement + contentAfterSuggestion;
+                        });
+                await File.WriteAllTextAsync(files[0].FullName, correctedMarkdownContent);
             }
 
             Console.WriteLine();
