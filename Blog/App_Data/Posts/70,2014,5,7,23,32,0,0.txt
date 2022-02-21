@@ -259,7 +259,7 @@ This will write all messages with level Info, Warning and Error to the Trace (so
 
 In the above example, the only log level not being passed to the **TraceLogger** is Debug. This is the log level that I would recommend be used for any expensive messages, such as serialised representations of requests, responses or interim state. This ensures that the work to generate those messages is not performed unless it's really useful, like when an error has occurred and we want all the information we can get (the **ErrorWithBackTrackLogger** writes messages for *all* log levels).
 
-And with that, we're done! This library is simple enough that I can happily use it with any new project that I start but it can also be easily configured to handle amost every situation I've needed a logger for that I can think of in the last few years. A lot of unusual cases can probably be dealt with by tweaking values on the current loggers or by extending the functionality by writing a new implementation (such as one to write to a persistence mechanism other than disk).
+And with that, we're done! This library is simple enough that I can happily use it with any new project that I start but it can also be easily configured to handle almost every situation I've needed a logger for that I can think of in the last few years. A lot of unusual cases can probably be dealt with by tweaking values on the current loggers or by extending the functionality by writing a new implementation (such as one to write to a persistence mechanism other than disk).
 
 [Happy Logging](https://bitbucket.org/DanRoberts/happylogging) indeed! :)
 

@@ -169,6 +169,7 @@ memcached
 microbenchmarking
 Mindstorms
 minidumps
+misassigning
 miscomprehensions
 mixin
 mmc
@@ -219,6 +220,7 @@ protobuf
 pureattribute
 queryable
 quora
+read-aheads
 reallllllllllly
 regexes
 remoting

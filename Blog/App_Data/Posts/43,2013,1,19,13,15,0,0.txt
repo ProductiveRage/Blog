@@ -51,7 +51,7 @@ When the Code Snippets Manager is closed, the snippet should become immediately 
 
 So within a function with arguments, type "tna" (this string is specified by the "Shortcut" node in the snippet xml) and hit Tab twice (once for intellisense to match the "tna" string to the snippet and the second time to actually insert the snippet content). Then type in the parameter name and press Enter twice (again, it seems to be once to match what you've entered using intellisense - or not, if it doesn't match anything in scope - and the second time to end the snippet insertion and move on). It seems a bit weird to have to hit Tab and Enter twice each, but I can live with it!
 
-Another similar, but also common, snippet I use is to check a string argument against string.IsNullorWhiteSpace:
+Another similar, but also common, snippet I use is to check a string argument against string.IsNullOrWhiteSpace:
 
     <?xml version="1.0" encoding="utf-8" ?>
     <CodeSnippets  xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">

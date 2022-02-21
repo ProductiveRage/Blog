@@ -50,7 +50,7 @@ I essentially just want to write to disk a custom string-keyed dictionary object
 
 ### However..
 
-Then I tried integrating the project as a search facility into my blog which is running ASP.Net MVC 3 (.Net 4.0) and ran into another snag; "Inheritance security rules violated while overriding member: MyBusinessException.GetObjectData(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)'. Security accessibility of the overriding method must match the security accessibility of the method being overriden."
+Then I tried integrating the project as a search facility into my blog which is running ASP.Net MVC 3 (.Net 4.0) and ran into another snag; "Inheritance security rules violated while overriding member: MyBusinessException.GetObjectData(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)'. Security accessibility of the overriding method must match the security accessibility of the method being overridden."
 
 Hmmm...
 
