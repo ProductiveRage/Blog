@@ -12,10 +12,10 @@ namespace Blog.Models
 {
     public sealed class SingleFolderPostRetriever : ISingleFolderPostRetriever
 	{
-		private readonly IDirectoryContents _folder;
-		public SingleFolderPostRetriever(IDirectoryContents folder)
+		private readonly IEnumerable<IFileInfo> _files;
+		public SingleFolderPostRetriever(IEnumerable<IFileInfo> files)
 		{
-            _folder = folder ?? throw new ArgumentNullException(nameof(folder));
+            _files = files ?? throw new ArgumentNullException(nameof(files));
 		}
 
 		/// <summary>
@@ -25,7 +25,7 @@ namespace Blog.Models
 		{
 			// The redirects set contains tuples From, To slugs (blank lines and those starting with a "#" are ignored, as are any that don't have any whitespace)
 			const string redirectsFilename = "Redirects.txt";
-			var redirectsFile = _folder.FirstOrDefault(file => file.Name.Equals(redirectsFilename, StringComparison.OrdinalIgnoreCase));
+			var redirectsFile = _files.FirstOrDefault(file => file.Name.Equals(redirectsFilename, StringComparison.OrdinalIgnoreCase));
 			IEnumerable<Tuple<string, string>> redirects;
 			if (redirectsFile == null)
 				redirects = new List<Tuple<string, string>>();
@@ -44,7 +44,7 @@ namespace Blog.Models
 
 			// The relatedPostRelationships set contains a map of Post Id to Ids of related Posts (in the order that they should appear)
 			const string relatedPostsFilename = "RelatedPosts.txt";
-			var relatedPostsFile = _folder.FirstOrDefault(file => file.Name.Equals(relatedPostsFilename, StringComparison.OrdinalIgnoreCase));
+			var relatedPostsFile = _files.FirstOrDefault(file => file.Name.Equals(relatedPostsFilename, StringComparison.OrdinalIgnoreCase));
 			var relatedPostRelationships = (relatedPostsFile == null)
 				? new Dictionary<int, ImmutableList<int>>()
 				: await ReadRedirects(relatedPostsFile);
@@ -52,7 +52,7 @@ namespace Blog.Models
 			// There is similar data in the AutoSuggestedRelatedPosts.txt file but the manually-created RelatedPosts.txt should take precedence in cases
 			// where Post Ids appear in both
 			const string autoSuggestedRelatedPostsFilename = "AutoSuggestedRelatedPosts.txt";
-			var autoSuggestedRelatedPostsFile = _folder.FirstOrDefault(file => file.Name.Equals(autoSuggestedRelatedPostsFilename, StringComparison.OrdinalIgnoreCase));
+			var autoSuggestedRelatedPostsFile = _files.FirstOrDefault(file => file.Name.Equals(autoSuggestedRelatedPostsFilename, StringComparison.OrdinalIgnoreCase));
 			var autoSuggestedRelatedPostRelationships = (autoSuggestedRelatedPostsFile == null)
 				? new Dictionary<int, ImmutableList<int>>()
 				: await ReadRedirects(autoSuggestedRelatedPostsFile);
@@ -61,7 +61,7 @@ namespace Blog.Models
 			// remove punctuation and lower case the content - all we need to do then is replace spaces with hypens)
 			var stringNormaliser = DefaultStringNormaliser.Instance;
 			var posts = new List<Post>();
-			foreach (var file in _folder.Where(file => file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)))
+			foreach (var file in _files.Where(file => file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)))
 			{
 				if (file.Name.Equals(redirectsFilename, StringComparison.InvariantCultureIgnoreCase))
 					continue;
