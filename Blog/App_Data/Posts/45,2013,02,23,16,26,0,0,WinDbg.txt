@@ -38,7 +38,7 @@ So now some progress is being made! The next step is to view all of the managed 
 
 ![WinDbg viewing managed threads](/Content/Images/Posts/WinDbgASPError2.png "WinDbg viewing managed threads")
 
-Of these, one reports an exception. It's a bit vague-sounding, a "System.Reflection.TargetInvocationException" but more information can be gleaned with the PrintException command ("!pe"), specifying the address of the exception:
+Of these, one reports an exception. It's a bit vague-sounding, a "System.Reflection.TargetInvocationException" but more information can be gleaned with the PrintException command (`!pe`), specifying the address of the exception:
 
 ![WinDbg PrintException TargetInvocationException](/Content/Images/Posts/WinDbgASPError3.png "WinDbg PrintException TargetInvocationException")
 

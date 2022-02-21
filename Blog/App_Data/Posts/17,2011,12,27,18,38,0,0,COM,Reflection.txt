@@ -543,7 +543,7 @@ Each unique interface applier has a specific class name (of the form "InterfaceA
 
 In the above example, the INode interface has to be located outside of the Program class since it must be accessible by the InterfaceApplierFactory and the Program class is private. This isn't an issue for the Node class as the InterfaceApplierFactory doesn't need direct access to that, it just returns an IInterfaceApplier that we pass the n2 reference to as an argument. Alternatively, the Program class could be made public. This isn't exactly rocket science but if it slips your mind then you're presented with an error such as -
 
-> TypeLoadException: "Type 'InterfaceApplierdb2cb792e09d424a8dcecbeca6276dc8' from assembly 'DynamicAssembly, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' is attempting to implement an inaccessible interface."
+> TypeLoadException: "Type `'InterfaceApplierdb2cb792e09d424a8dcecbeca6276dc8'` from assembly `'DynamicAssembly, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null'` is attempting to implement an inaccessible interface."
 
 at the line
 

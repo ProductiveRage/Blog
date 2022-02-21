@@ -8,7 +8,7 @@ I wanted to write a type definition to work with the AMD module loading that Typ
 
 I must admit that, writing this now, it seems that nothing that I'm about to cover is particularly complicated or confusing - it's just that when I tried to find out how to do it, I found it really difficult! The [DefinitelyTyped](https://github.com/borisyankov/DefinitelyTyped) GitHub repo seemed like it should be a good start, since surely it would cover any use case I could thing of.. but it was also difficult to know where to start since I couldn't think of any packages that I knew, that would support AMD and whose type definitions would be small enough that I would be able to understand them by just trying to stare them down.
 
-There is an official TypeScript article that is commonly linked to by Stack Overflow answers: [Writing Definition (.d.ts) Files](https://typescript.codeplex.com/wikipage?title=Writing%20Definition%20%28.d.ts%29%20Files), but this seems to take quite a high level view and I couldn't work out how to expose my module's functionality in an AMD fashion.
+There is an official TypeScript article that is commonly linked to by Stack Overflow answers: [Writing Definition (`.d.ts`) Files](https://typescript.codeplex.com/wikipage?title=Writing%20Definition%20%28.d.ts%29%20Files), but this seems to take quite a high level view and I couldn't work out how to expose my module's functionality in an AMD fashion.
 
 ### The short answer
 

@@ -365,7 +365,7 @@ Having done some research while writing this post, I think the best resource tha
 
 [https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a)
 
-And then find details of every attribute that it has, along with compatibility information. For example, the "td" table cell documentation..
+And then find details of every attribute that it has, along with compatibility information. For example, the `td` table cell documentation..
 
 [https://developer.mozilla.org/en-US/docs/Web/HTML/Element/td](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/td)
 

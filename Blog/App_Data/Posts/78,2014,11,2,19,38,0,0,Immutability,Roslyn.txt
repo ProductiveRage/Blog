@@ -266,7 +266,7 @@ The log verbosity can be altered by going to Tools / Option / Projects and Solut
 
 It turns out that this warning is telling a bit of a fib and you actually need to bump the verbosity up another step to "Diagnostic". *Then* the log includes the following
 
-> There was a conflict between "Microsoft.Build, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" and "Microsoft.Build, Version=14.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a".
+> There was a conflict between `Microsoft.Build, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a` and `Microsoft.Build, Version=14.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a`.
 
 It also includes lots of other useful information like what references have what dependencies, so I can see that Microsoft Build v4 is required by project item "Microsoft.Build" (meaning that is the version that I explicitly added as a reference to parse the project files). And I can see that Microsoft Build v14 is required by the project items "Microsoft.CodeAnalysis.Workspaces", "Microsoft.CodeAnalysis.VisualBasic.Workspaces" and "Microsoft.CodeAnalysis.CSharp.Workspaces", which are references pulled in by the Roslyn NuGet package.
 
