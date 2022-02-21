@@ -148,7 +148,7 @@ which resulted in the error
 
 This is another case of functionality that is in .NET 4.5.2 but that is an optional package for .NET Core. Thankfully, it's easy to find out what additional package needs to be included - the "lightbulb" code fix options will try to look for a package to resolve the problem and it correctly identifies that "System.Globalization.Extensions" contains a relevant extension method (as illustrated below).
 
-<img alt="TODO" src="/Content/Images/Posts/SystemGlobalizationExtensionsDependency.png" class="AlwaysFullWidth NoBorder" />
+<img alt="NormalizationForm exists in the System.Globalization.Extensions package for .NET Core" src="/Content/Images/Posts/SystemGlobalizationExtensionsDependency.png" class="AlwaysFullWidth NoBorder" />
 
 *Note: Selecting the "Add package System.Globalization.Extensions 4.0.1" option will add the package as a dependecy for netstandard in the project.json file and it will add the required "using System.Globalization;" statement to the class - which is very helpful of it!*
 
