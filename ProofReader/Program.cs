@@ -150,10 +150,28 @@ namespace ProofReader
                 if (string.IsNullOrWhiteSpace(word))
                     continue;
 
-                // These terms ARE added to the case sensitive matching list because they can be very specific terms that general-
-                // use word lists wouldn't pick up on (as with the example earlier, it may be desirable to specify "PoS" to mean
-                // Point of Sales but that shouldn't mean that a lower-cased misspelling "pos" of "pose" should be overlooked)
-                caseSensitiveKnownWords.Add(word);
+                // Allow the Custom Additions file to be condensed slightly for similar words where only the ending differs - eg.
+                // instead of separate entries for "flatlined" and "flatlining", allow a single entry "flatlin/ed/ing" that will
+                // be split on the slashes and the first segment combined with each of the following segments to recreate the
+                // original variations of the word.
+                IEnumerable<string> variations;
+                if (word.Contains('/'))
+                {
+                    var segments = word.Split('/');
+                    variations = segments.Skip(1).Select(ending => segments.First() + ending);
+                }
+                else
+                {
+                    variations = new[] { word };
+                }
+
+                // Any terms that are entirely lower case are presumed to be usable in case-insensitive matches while any terms
+                // that have at least one upper case character as presumed to be case SENSITIVE (as with the example earlier, it
+                // may be desirable to specify "PoS" to mean Point of Sales but that shouldn't mean that a lower-cased misspelling
+                // "pos" of "pose" should be overlooked)
+                var hashSetToAddTo = word.Any(char.IsUpper) ? caseSensitiveKnownWords : caseIrrelevantKnownWords;
+                foreach (var variation in variations)
+                    hashSetToAddTo.Add(variation);
             }
 
             // Use the common word lookup lists to generate a "select closest match" method using the Levenshtein distance method -
