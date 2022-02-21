@@ -97,8 +97,8 @@ namespace ProofReader
             //   maintained in case an automated apply-best-suggested-correction step is to be added)
             Console.WriteLine("Looking for additional common terms from Posts..");
             var breakOn = new ImmutableList<char>(
-                '<', '>', '[', ']', '(', ')', '{', '}',
-                '.', ',', ':', ';', '"', '?', '!',
+                '<', '>', '(', ')', '{', '}', // Don't break on square brackets due to post content like "cact[us][ii]'
+                ',', ':', ';', '"', '?', '!', // Don't break on "." so that it's easier to support file extensions or abbreviations like "pp."
                 '/', '\\',
                 '@', '+', '|', '=');
             var plainTextTokenBreaker = new WhiteSpaceExtendingTokenBreaker(breakOn, new WhiteSpaceTokenBreaker());
@@ -135,10 +135,8 @@ namespace ProofReader
             }
 
             // Try to find a balance - hopefully low enough so that correct uncommon technical terms are identified but not words
-            // that I've spelt incorrectly too often! Note: A value of 2 is required to match "unicode" but that could be too low
-            // and risk repeated misspellings from being introduced - if this becomes a problem then this value could be raised
-            // and additional terms (such as "unicode") be added to the "Custom Additions" list
-            const int minFrequencyOfAppearanceInPostsToConsider = 2;
+            // that I've spelt incorrectly too often!
+            const int minFrequencyOfAppearanceInPostsToConsider = 3;
             foreach (var (termFromPosts, _) in tokensFromPosts.Where(kvp => kvp.Value >= minFrequencyOfAppearanceInPostsToConsider))
             {
                 // These are added to the case-insensitive matching list because they aren't being read from a curated list that
@@ -199,14 +197,6 @@ namespace ProofReader
                     if (IsGoodWord(token.Token, IsInKnownWordLists))
                         continue;
 
-                    if (!haveRenderedPostName)
-                    {
-                        Console.WriteLine();
-                        Console.WriteLine($"Reading post {post.Id} {post.Title}..");
-                        haveRenderedPostName = true;
-                    }
-
-                    Console.Write($"Bad word {GetRowAndColumnSourceIndex(postContent, token.SourceLocation.SourceIndex)}: {token.Token}");
                     var partialTokenSuggestions = token.Token
                         .SplitIntoIndividualWords()
                         .Select(partial =>
@@ -232,7 +222,24 @@ namespace ProofReader
                             }
                             return suggestion + (partial.Separator is null ? "" : partial.Separator.ToString());
                         });
-                    Console.Write(" => " + string.Join("", partialTokenSuggestions));
+                    var suggestedReplacement = string.Join("", partialTokenSuggestions);
+                    if (suggestedReplacement == token.Token)
+                    {
+                        // This happens with "w3wp.exe" due to the discrepancies in not splitting on "." when parsing the initial
+                        // content but supporting it will trying to break a token down to see if its individual components make
+                        // it valid - that's fine, so let's just move on
+                        continue;
+                    }
+
+                    if (!haveRenderedPostName)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine($"Reading post {post.Id} {post.Title}..");
+                        haveRenderedPostName = true;
+                    }
+
+                    Console.Write($"Bad word {GetRowAndColumnSourceIndex(postContent, token.SourceLocation.SourceIndex)}: {token.Token}");
+                    Console.Write(" => " + suggestedReplacement);
                     Console.WriteLine();
                 }
             }
@@ -450,6 +457,10 @@ namespace ProofReader
 
             // Check for common dimensions (with or without pixel units included); "128x128", "3x3x3", "32x32px"
             if (Regex.IsMatch(value, @"^\d+x\d+(x\d+)?(px)?$"))
+                return true;
+
+            // Check for html hex code values (shortest is #RGB while longest is #RRGGBBAA)
+            if (Regex.IsMatch(value, "#[0-9a-fA-F]{3,8}"))
                 return true;
 
             return false;
