@@ -11,7 +11,7 @@
 
 			<div class="SideBar">
 				<div class="Search">
-					@using (Html.BeginForm("Search", "Search", FormMethod.Get, new { autocomplete = "off" }))
+					@using (Html.BeginForm("Search", "Search", FormMethod.Get, new { @class = "Search", autocomplete = "off" }))
 					{
 						<div>
 							<label class="SearchField">
