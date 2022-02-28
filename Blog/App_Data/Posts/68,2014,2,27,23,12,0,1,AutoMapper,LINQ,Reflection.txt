@@ -17,7 +17,7 @@ Projections are when data is retrieved from an **IQueryable** source and mapped 
 
 The clever thing about **IQueryable** and these projections is that the data source (Entity Framework, for example) can construct a query to retrieve only the data required. Without projections, the database querying and the mapping are completely separate steps and so it is very common for the ORM to have to retrieve much more data than is strictly necessary (and often to introduce the dreaded N+1 SELECT problem). Projections allows the mapping to directly affect how the database query is constructed so that precisely the right amount of data may be requested (and all in one query, *not* in N+1).
 
-The code shown above could be referred to as a manual projection (where the the properties - "Key" and "Name" in that example - are explicitly mapped). *Auto-projection* is the utilisation of a mapping library to automatically create this projection / mapping. This means that you don't have to write the boring "Key = album.AlbumKey, Name = album.Name" code for each property in a mapping. In essence, something like:
+The code shown above could be referred to as a manual projection (where the properties - "Key" and "Name" in that example - are explicitly mapped). *Auto-projection* is the utilisation of a mapping library to automatically create this projection / mapping. This means that you don't have to write the boring "Key = album.AlbumKey, Name = album.Name" code for each property in a mapping. In essence, something like:
 
     using (var context = new AlbumDataEntities())
     {

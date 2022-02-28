@@ -28,7 +28,7 @@ If we were implementing the "Average" function ourselves, then we would need to 
     {
     }
 
-Static typing gives us a lot of clues here. It ensures that anyone calling "Average" has to provide a set of values that may be enumerated and they have to provide a lambda that extracts an integer from each of those values. If the caller tried to provide a lambda that extracted a string (eg. the employee's name) from the values then it wouldn't compile. The type signature documents many of the the requirements of the method.
+Static typing gives us a lot of clues here. It ensures that anyone calling "Average" has to provide a set of values that may be enumerated and they have to provide a lambda that extracts an integer from each of those values. If the caller tried to provide a lambda that extracted a string (eg. the employee's name) from the values then it wouldn't compile. The type signature documents many of the requirements of the method.
 
 However, the type system does not ensure that the implementation of "Average" is correct. It would be entirely possible to write an "Average" function that returned the *highest* value, rather than the [mean](https://en.wikipedia.org/wiki/Arithmetic_mean) value.
 

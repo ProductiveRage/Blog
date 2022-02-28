@@ -416,7 +416,7 @@ Anonymous types boil down to simple classes, a little bit like this:
 
 Note: I said earlier that the compiler generates distinct classes for anonymous types that have unique combinations of property names and types. That's a bit of a lie, it only has to vary them based upon the property names since it can use generic type parameters for the types of those properties. I confirmed this by using [ildasm](https://msdn.microsoft.com/en-us/library/aa309387(v=vs.71).aspx) on my binaries, which also showed that the name of the auto-generated class was **&lt;&gt;f\_AnonymousType1**.. it's not *really* called "CRAZY\_AUTO\_GEN\_NAME" :)
 
-So we can take the Expression "x => x.Name" and extract the fact the the "Name" property is being targeted. This allows us to match the constructor that takes a "Name" argument and a "Type" argument and to call that constructor - passing the new value into the "Name" argument and passing the existing "Type" property value into the "Type" argument.
+So we can take the Expression "x => x.Name" and extract the fact the "Name" property is being targeted. This allows us to match the constructor that takes a "Name" argument and a "Type" argument and to call that constructor - passing the new value into the "Name" argument and passing the existing "Type" property value into the "Type" argument.
 
 This has the benefit that everything would still work if one of the properties was renamed in a refactor (since if the "Name" property was renamed to "SomethingElse" then Visual Studio would update the lambda "x => x.Name" to "x => x.SomethingElse", just as it would for any other reference to that "Name" property).
 

@@ -290,7 +290,7 @@ This means that the console messages will consist entirely of "Starting {i}" and
 
 There are a *lot* of options and intricacies that you can find if you dig deep enough into how this works in the .NET library. I have no intention of trying to cover all of them but there are a few options and observations that I think are worth including in this post.
 
-The first thing to be aware of is that parallelisation of the work will not be enabled until after the "AsParallel()" call is made - for example, the following code will *not* spread the the **Thread.Sleep** calls across multiple cores:
+The first thing to be aware of is that parallelisation of the work will not be enabled until after the "AsParallel()" call is made - for example, the following code will *not* spread the **Thread.Sleep** calls across multiple cores:
 
     var items = Enumerable
         .Range(0, 50)
