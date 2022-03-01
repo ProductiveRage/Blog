@@ -12,23 +12,16 @@
     if (!string.IsNullOrWhiteSpace(Model.OptionalDisqusShortName))
     {
         <script type="text/javascript">
-			var disqus_shortname = @Html.Raw(JsonSerializer.Serialize(Model.OptionalDisqusShortName));
-			function executeWhen(fncAction, fncConditional, intDelayBetweenRetries) {
-				if (fncConditional()) { fncAction(); return; }
-				setTimeout(function () { executeWhen(fncAction, fncConditional, intDelayBetweenRetries); }, intDelayBetweenRetries);
-			}
-			function whenjQueryIsAvailable(fncAction) {
-				executeWhen(
-					fncAction,
-					function () { return (typeof ($) !== "undefined") },
-					10
-				);
-			}
-			(function () {
-				whenjQueryIsAvailable(
-					function () { $("div.Content p.Comments").show(); }
-				);
-			}());
+            var disqus_shortname = @Html.Raw(JsonSerializer.Serialize(Model.OptionalDisqusShortName));
+            document.addEventListener(
+                "DOMContentLoaded",
+                function () {
+                    var commentsLinks = document.querySelectorAll("div.Content p.Comments");
+                    for (var i = 0; i < commentsLinks.length; i++) {
+                        commentsLinks[i].style.display = "block";
+                    }
+                }
+            );
         </script>
     }
 }
@@ -43,44 +36,48 @@
             {
                 <div id="disqus_thread"></div>
                 <script type="text/javascript">
-					var disqus_identifier = "@post.Id";
-					var disqus_title = @Html.Raw(JsonSerializer.Serialize(post.Title.Trim()));
-					(function () {
-						whenjQueryIsAvailable(
-							function () {
-								$(function () {
-									loadCommentsIfHalfwayDownAndNotAlreadyLoaded();
-									$(window).scroll(loadCommentsIfHalfwayDownAndNotAlreadyLoaded);
-								});
-							}
-						);
+                    var disqus_identifier = "@post.Id";
+                    var disqus_title = @Html.Raw(JsonSerializer.Serialize(post.Title.Trim()));
 
-						var bStartedLoadingComments = false;
-						function loadCommentsIfHalfwayDownAndNotAlreadyLoaded() {
-							if (bStartedLoadingComments) {
-								return;
-							}
-							var $post = $("div.Content.SinglePost");
-							var bottomOfPost = $post.position().top + $post.height();
-							var $window = $(window);
-							if (($window.scrollTop() + $window.height()) >= (bottomOfPost / 2)) {
-								bStartedLoadingComments = true;
-								loadComments();
-							}
-						}
+                    document.addEventListener(
+                        "DOMContentLoaded",
+                        function () {
+                            var singlePostContent = document.querySelector("div.Content.SinglePost");
+                            if (!singlePostContent) {
+                                return;
+                            }
+        
+                            var getScrolledDownHalfWayEvent = function (callback) {
+                                return function () {
+                                    var rect = singlePostContent.getBoundingClientRect();
+                                    console.log(rect);
+                                    if ((rect.top - window.innerHeight) <= -(rect.height / 2)) {
+                                        callback();
+                                    }
+                                };
+                            };
+        
+                            var scrolledDownHalfWayEvent = getScrolledDownHalfWayEvent(
+                                function () {
+                                    console.log("Done!!"); // TODO: Stuff
+                                    document.removeEventListener("scroll", scrolledDownHalfWayEvent);
+                                    window.removeEventListener("resize", scrolledDownHalfWayEvent);
 
-						function loadComments() {
-							var dsq = document.createElement("script");
-							dsq.type = "text/javascript";
-							dsq.async = true;
-							dsq.src = "https://" + disqus_shortname + ".disqus.com/embed.js";
-							(document.getElementsByTagName("head")[0] || document.getElementsByTagName("body")[0]).appendChild(dsq);
-						}
-					}());
+                                    var dsq = document.createElement("script");
+                                    dsq.type = "text/javascript";
+                                    dsq.async = true;
+                                    dsq.src = "https://" + disqus_shortname + ".disqus.com/embed.js";
+                                    (document.getElementsByTagName("head")[0] || document.getElementsByTagName("body")[0]).appendChild(dsq);
+                                }
+                            );
+        
+                            document.addEventListener("scroll", scrolledDownHalfWayEvent);
+                            window.addEventListener("resize", scrolledDownHalfWayEvent);
+                        }
+                    );
                 </script>
             }
         }
-
         else
         {
             <p class="Comments">
