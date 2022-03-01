@@ -50,7 +50,6 @@
                             var getScrolledDownHalfWayEvent = function (callback) {
                                 return function () {
                                     var rect = singlePostContent.getBoundingClientRect();
-                                    console.log(rect);
                                     if ((rect.top - window.innerHeight) <= -(rect.height / 2)) {
                                         callback();
                                     }
@@ -59,7 +58,6 @@
         
                             var scrolledDownHalfWayEvent = getScrolledDownHalfWayEvent(
                                 function () {
-                                    console.log("Done!!"); // TODO: Stuff
                                     document.removeEventListener("scroll", scrolledDownHalfWayEvent);
                                     window.removeEventListener("resize", scrolledDownHalfWayEvent);
 
