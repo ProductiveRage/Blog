@@ -25,7 +25,7 @@ namespace AutomatedSimilarPostGenerator
                     .Select(f => new FileProvidersFile(f)));
             var posts = await postRetriever.Get();
             var suggestedRelatedContent = new StringBuilder();
-            foreach (var (post, similar) in await Recommender.GetSimilarPosts(posts))
+            foreach (var (post, similar) in (await Recommender.GetSimilarPosts(posts)).OrderBy(result => result.Post.Id))
             {
                 Console.WriteLine();
                 Console.WriteLine(post.Title);
