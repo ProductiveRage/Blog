@@ -162,7 +162,7 @@ While the starting order is not predictable, the iteration-completion order is s
 
 As such, the first "Finished {i}" messages are 18, 0, 12, 6 in the output shown above.
 
-The "Received item {item}" messages will be interspersed between "Starting {i}" and "Finished {i}" messages because enumeration of the results *can* commence as soon as soom of the loops have completed.. however, again, it's important to note that the ordering of the results should not be considered to be defined as the scheduling of the threads depends upon how .NET decides to use its **ThreadPool** to handle the work and how it will "join" the separate threads used for the loop iteration back to the primary thread that the program is running as.
+The "Received item {item}" messages will be interspersed between "Starting {i}" and "Finished {i}" messages because enumeration of the results *can* commence as soon as some of the loops have completed.. however, again, it's important to note that the ordering of the results should not be considered to be defined as the scheduling of the threads depends upon how .NET decides to use its **ThreadPool** to handle the work and how it will "join" the separate threads used for the loop iteration back to the primary thread that the program is running as.
 
 That may sound a little confusing, so if we change the code a little bit then maybe it can become clearer:
 
