@@ -44,6 +44,23 @@ namespace BlogBackEnd.Models
 				html = doc.DocumentNode.OuterHtml;
 			}
 
+			// When a table is too wide for mobile (there are no points in the content that can be split on while still making it legible)
+			// then horizontal scrolling is going to be required - this isn't really possible with a table element, so wrap every table in
+			// a special div that can be used to enforce the scrolling if needed
+			var tableNodes = doc.DocumentNode.SelectNodes("//table");
+			if (tableNodes is not null)
+			{
+				foreach (var node in tableNodes)
+				{
+					var wrapper = doc.CreateElement("div");
+					wrapper.SetAttributeValue("class", "TableScrollWrapper");
+					node.ParentNode.InsertBefore(wrapper, node);
+					wrapper.AppendChild(node.Clone());
+					node.Remove();
+				}
+				html = doc.DocumentNode.OuterHtml;
+			}
+
 			return html;
 		}
 	}

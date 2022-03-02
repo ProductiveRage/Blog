@@ -1,8 +1,7 @@
 html { background: url("../Content/Images/Background-Repeat.jpg") repeat-x #800C0E; }
 
-body, td
+.StandardText()
 {
-    background: url("../Content/Images/Background.jpg") no-repeat;
     font-family: "Segoe UI", "Lucida Grande", Verdana;
     font-size: 15px;
     color: #121212;
@@ -11,6 +10,14 @@ body, td
     @media screen and (max-width: 35em) { font-size: 20px; }
 }
 
+body
+{
+    .StandardText();
+    background: url("../Content/Images/Background.jpg") no-repeat;
+}
+
+td { .StandardText(); }
+
 a
 {
     color: #30a;
@@ -18,6 +25,7 @@ a
 }
 
 em { font-style: italic; }
+
 strong
 {
     font-weight: bold;

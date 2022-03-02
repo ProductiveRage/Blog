@@ -54,24 +54,32 @@ body {
             }
         }
 
-        > table {
-            margin: 0 0 16px 0;
-            line-height: 21px;
+        // The markdown rendering will always wrap tables in posts in a wrapper with this class just in case horizontal scrolling needs to be applied
+        // to wide tables in mobile view where there are no more natural break points in the words in each column (enabling horizontal scrolling on
+        // table elements themselves seems to be.. not fun, if even possible)
+        div.TableScrollWrapper {
+            max-width: 100%;
+            overflow: auto;
 
-            > thead > tr > th {
-                font-weight: bold;
-                text-align: left;
-                padding: 8px;
-            }
+            > table {
+                margin: 0 0 16px 0;
+                line-height: 21px;
 
-            > tbody > tr {
-                &:nth-child(odd) { background: #e4e4e4; }
-
-                &:nth-child(even) { background: #eee; }
-
-                > td {
-                    background: none;
+                > thead > tr > th {
+                    font-weight: bold;
+                    text-align: left;
                     padding: 8px;
+                }
+
+                > tbody > tr {
+                    &:nth-child(odd) { background: #e4e4e4; }
+
+                    &:nth-child(even) { background: #eee; }
+
+                    > td {
+                        background: none;
+                        padding: 8px;
+                    }
                 }
             }
         }
