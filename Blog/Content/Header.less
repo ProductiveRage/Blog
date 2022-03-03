@@ -5,11 +5,14 @@ body
         div.HeaderContent
         {
             border: 1px solid #bf7c52;
-
             background: url("../Content/Images/Grouch.jpg") bottom right no-repeat white;
-            @media screen and (max-width: 35em) { background: white; }
-
             min-height: 150px;
+
+            @media screen and (max-width: 35em)
+            {
+                background: white;
+                min-height: auto;
+            }
 
             > h1
             {
@@ -41,7 +44,7 @@ body
 
                 @media screen and (max-width: 35em)
                 {
-                    margin: 0;
+                    margin: 0 0 24px 0;
                     text-align: center;
                 }
             }
