@@ -199,38 +199,40 @@ body {
             }
         }
 
-        @HeaderColour: #30a;
+        .Header() {
+            color: #30a;
+
+            > a { text-decoration: none; } // TODO: Not even on hover?
+        }
 
         > h2 {
+            .Header();
             padding: 0 0 11px 0;
-            color: @HeaderColour;
             font-size: 22px;
 
             @media screen and (max-width: 35em) { font-size: 26px; }
-
-            > a { text-decoration: none; }
         }
 
         > h3 {
+            .Header();
             padding: 0 0 10px 0;
             font-size: 20px;
-            color: @HeaderColour;
 
             @media screen and (max-width: 35em) { font-size: 23px; }
         }
 
         > h4 {
+            .Header();
             padding: 0 0 9px 0;
             font-size: 18px;
-            color: @HeaderColour;
 
             @media screen and (max-width: 35em) { font-size: 22px; }
         }
 
         > h5 {
+            .Header();
             padding: 0 0 8px 0;
             font-size: 17px;
-            color: @HeaderColour;
 
             @media screen and (max-width: 35em) { font-size: 21px; }
         }
@@ -238,11 +240,11 @@ body {
         .PostTimeText() { font-family: "Lucida Console", "Lucida Grande", Verdana; }
 
         p.PostDate {
+            .Header();
             .PostTimeText();
 
             padding: 0 0 10px 0;
             font-size: 20px;
-            color: @HeaderColour;
         }
 
         p.PostTime {

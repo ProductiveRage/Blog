@@ -1,15 +1,17 @@
 ﻿using System;
+using System.Linq;
 using HtmlAgilityPack;
 using Markdig;
 
 namespace BlogBackEnd.Models
 {
-    /// <summary>
-    /// Helper class for transforming Markdown into HTML
-    /// </summary>
-    public static class MarkdownTransformations
+	/// <summary>
+	/// Helper class for transforming Markdown into HTML
+	/// </summary>
+	public static class MarkdownTransformations
 	{
 		private static readonly MarkdownPipeline _markdigPipeline = new MarkdownPipelineBuilder()
+			.UseAutoIdentifiers() // This adds ids to the headers but doesn't have an option to inject anchors into them to make them clickable
 			.UseSoftlineBreakAsHardlineBreak()
 			.UsePipeTables()
 			.Build();
@@ -21,11 +23,39 @@ namespace BlogBackEnd.Models
 
 			var html = Markdown.ToHtml(markdown, _markdigPipeline);
 
+			// For header (h3, h4, etc..) tags that have an id generated via the call to UseAutoIdentifiers when the pipeline is configured,
+			// ensure that there is a link in the header so that it can be clicked and the URL updated to set the hash tag to the current
+			// header (to make sharing links to particular sections of articles easier)
+			var doc = new HtmlDocument();
+			doc.LoadHtml(html);
+			var nodesWithId = doc.DocumentNode.SelectNodes("//@id");
+			if (nodesWithId is not null)
+			{
+				foreach (var node in nodesWithId)
+				{
+					if (!node.Name.StartsWith("h", StringComparison.OrdinalIgnoreCase) || !int.TryParse(node.Name[1..], out _))
+						continue;
+
+					// If there's already an anchor in the header then presume that it's already been configured to link to somewhere intentionally
+					// (like the way in which the post headers do via the PostHelper class' ReplaceFirstLineHashHeaderWithPostLink method)
+					if (node.ChildNodes.Any(childNode => childNode.Name.Equals("a", StringComparison.OrdinalIgnoreCase)))
+						continue;
+
+					var newLink = doc.CreateElement("a");
+					newLink.Attributes.Add("href", "#" + node.Id);
+					foreach (var childNode in node.ChildNodes.ToArray()) // ToArray the list so that it's not modified as they are removed
+					{
+						newLink.AppendChild(childNode.Clone());
+						childNode.Remove();
+					}
+					node.AppendChild(newLink);
+				}
+				html = doc.DocumentNode.OuterHtml;
+			}
+
 			// Populate the "title" attribute on any img nodes that don't have one but DO have an "alt text" value (could have done this as
 			// a variation on the Markdig LinkInlineParser but this way seemed easier! It also has the benefit that it will apply to any img
 			// tags that are included are bare html, rather than via markdown - for cases where additional classes are added, for example).
-			var doc = new HtmlDocument();
-			doc.LoadHtml(html);
 			var imgNodes = doc.DocumentNode.SelectNodes("//img");
 			if (imgNodes is not null)
 			{
