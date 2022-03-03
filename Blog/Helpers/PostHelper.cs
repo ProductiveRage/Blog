@@ -490,7 +490,7 @@ namespace Blog.Helpers
 					var titleHashSymbols = match.Groups[1].Value;
 					var spaceAfterHashSymbols = match.Groups[2].Value;
 					var title = match.Groups[3].Value;
-					return $"{titleHashSymbols}{spaceAfterHashSymbols}<a id=\"{slug}\" href=\"/{slug}\">{HttpUtility.HtmlEncode(title)}</a>";
+					return $"{titleHashSymbols}{spaceAfterHashSymbols}<a href=\"/{slug}\">{HttpUtility.HtmlEncode(title)}</a>";
 				},
 				RegexOptions.Singleline
 			);
