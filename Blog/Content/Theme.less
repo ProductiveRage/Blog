@@ -6,6 +6,8 @@ html { background: url("../Content/Images/Background-Repeat.jpg") repeat-x #800C
     font-size: 15px;
     color: #121212;
     padding: 16px;
+    
+    .DarkMode & { color: #eee; }
 
     @media screen and (max-width: 35em) { font-size: 20px; }
 }
@@ -22,6 +24,12 @@ a
 {
     color: #30a;
     &:hover { color: #63f; }
+    
+    .DarkMode &
+    {
+        color: #99a;
+        &:hover { color: #667; }
+    }
 }
 
 em { font-style: italic; }
@@ -30,4 +38,6 @@ strong
 {
     font-weight: bold;
     color: #777; // For Posts where there are a lot of types (highlighted by "strong" tags), this makes them less distracting
+    
+    .DarkMode & { color: #e8e8e8; }
 }

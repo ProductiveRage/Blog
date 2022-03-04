@@ -10,6 +10,8 @@ body {
         background: white;
         float: left; // Ensure any floated images in the content are wrapped
         border: 1px solid #c0c0c0;
+        
+        .DarkMode & { background: #333; }
 
         &.ArchiveByTag {
             height: 155px;
@@ -47,6 +49,11 @@ body {
             box-sizing: border-box; // Allow us to combine padding with width: 100%
             width: 100%;
             overflow: auto;
+            
+            .DarkMode & {
+                border-color: #777;
+                background: #eee;
+            }
 
             > code {
                 display: block;
@@ -73,8 +80,12 @@ body {
 
                 > tbody > tr {
                     &:nth-child(odd) { background: #e4e4e4; }
-
                     &:nth-child(even) { background: #eee; }
+                    
+                    .DarkMode & {
+                        &:nth-child(odd) { background: #777; }
+                        &:nth-child(even) { background: #666; }
+                    }
 
                     > td {
                         background: none;
@@ -191,6 +202,11 @@ body {
             border-left: 3px solid #ccc;
             background: #f8f8f8;
             overflow-wrap: anywhere; // Ensure that any long strings in quotes will break even if it's one long run of characters
+            
+            .DarkMode & {
+                color: #e8e8e8;
+                background: #555;
+            }
 
             > p {
                 padding: 5px 0 11px 0;
@@ -200,8 +216,6 @@ body {
         }
 
         .Header() {
-            color: #30a;
-
             // 2022-03-02: Considered showing underline on hover but it doesn't need to be an obvious feature that clicking on headers will
             // set the hash in the url for sharing links.. I don't think
             > a { text-decoration: none; }
@@ -260,6 +274,8 @@ body {
             margin: 8px 16px 8px 0;
             max-width: 100%;
             border: 1px solid silver;
+            
+            .DarkMode & { border-color: #777; }
 
             &.NoBorder { border: none; }
 

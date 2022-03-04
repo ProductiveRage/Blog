@@ -7,10 +7,17 @@ body
             border: 1px solid #bf7c52;
             background: url("../Content/Images/Grouch.jpg") bottom right no-repeat white;
             min-height: 150px;
+            
+            .DarkMode &
+            {
+                background-color: #333;
+                background-image: url("../Content/Images/Grouch-Dark.jpg");
+                border-color: #c0c0c0;
+            }
 
             @media screen and (max-width: 35em)
             {
-                background: white;
+                background-image: none !important; // important required because DarkMode image is technically more specific
                 min-height: auto;
             }
 
@@ -41,6 +48,8 @@ body
                 text-align: left;
                 margin: 0 0 0 34px;
                 color: #121212;
+
+                .DarkMode & { color: #eee; }
 
                 @media screen and (max-width: 35em)
                 {
