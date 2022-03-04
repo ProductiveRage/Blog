@@ -110,7 +110,7 @@ namespace ProofReader
             foreach (var post in posts)
             {
                 var doc = new HtmlDocument();
-                doc.LoadHtml(MarkdownTransformations.ToHtml(post.MarkdownContent));
+                doc.LoadHtml(MarkdownTransformations.ToHtml(post.MarkdownContent, post.Slug));
 
                 // Remove code blocks because they are a much lower proportion of English
                 var preNodes = doc.DocumentNode.SelectNodes("//code");

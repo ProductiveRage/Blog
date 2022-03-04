@@ -133,7 +133,7 @@ namespace Blog.Helpers
             if (includePostedDate)
                 AppendPostDate(content, post.Posted);
             content.Append(
-				MarkdownTransformations.ToHtml(markdownContent)
+                MarkdownTransformations.ToHtml(markdownContent, post.Slug)
             );
             if (includePostedDate)
                 content.AppendFormat("<p class=\"PostTime\">Posted at {0}</p>", post.Posted.ToString("HH:mm"));

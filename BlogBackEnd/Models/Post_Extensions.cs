@@ -21,7 +21,7 @@ namespace BlogBackEnd.Models
 
 			var doc = new HtmlDocument();
 			doc.LoadHtml(
-				MarkdownTransformations.ToHtml(source.MarkdownContent)
+				MarkdownTransformations.ToHtml(source.MarkdownContent, source.Slug)
 			);
 			var segments = doc.DocumentNode.DescendantsAndSelf()
 				.Where(node => node.NodeType == HtmlNodeType.Text)
@@ -72,7 +72,7 @@ namespace BlogBackEnd.Models
 
 			var doc = new HtmlDocument();
 			doc.LoadHtml(
-				MarkdownTransformations.ToHtml(source.MarkdownContent)
+				MarkdownTransformations.ToHtml(source.MarkdownContent, source.Slug)
 			);
 			var firstParagraph = doc.DocumentNode.ChildNodes.FindFirst("p");
 			if (firstParagraph == null)

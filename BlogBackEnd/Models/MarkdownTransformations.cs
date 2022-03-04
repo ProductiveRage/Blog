@@ -16,7 +16,7 @@ namespace BlogBackEnd.Models
 			.UsePipeTables()
 			.Build();
 
-		public static string ToHtml(string markdown)
+		public static string ToHtml(string markdown, string postSlug)
 		{
 			if (markdown == null)
 				throw new ArgumentNullException(nameof(markdown));
@@ -41,8 +41,12 @@ namespace BlogBackEnd.Models
 					if (node.ChildNodes.Any(childNode => childNode.Name.Equals("a", StringComparison.OrdinalIgnoreCase)))
 						continue;
 
+					// Note: If clicking a header on the home page then don't just add the hash to the URL because that link would become invalid
+					// if the home page started showing a later month in the future, so link to the post AND the hash (browsers - Chrome, at least -
+					// don't reload the page if you're already on the same URL but with a different hash, so there will be no additional page views
+					// recorded in cases where header links are clicked when already reading a single post)
 					var newLink = doc.CreateElement("a");
-					newLink.Attributes.Add("href", "#" + node.Id);
+					newLink.Attributes.Add("href", $"/{postSlug}#{node.Id}");
 					foreach (var childNode in node.ChildNodes.ToArray()) // ToArray the list so that it's not modified as they are removed
 					{
 						newLink.AppendChild(childNode.Clone());
