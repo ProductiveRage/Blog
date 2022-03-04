@@ -36,6 +36,17 @@
 		ga('send', 'pageview');
 	</script>
 }
+	<script type="text/javascript">
+		var darkModeEnabledLocalStorageKey = "DarkMode";
+		var darkModeHtmlWrapperClassName = "DarkMode";
+		function IsDarkModeEnabled() {
+			return localStorage.getItem(darkModeEnabledLocalStorageKey) !== null;
+		}
+		if (IsDarkModeEnabled()) {
+			document.querySelector("html").classList.add(darkModeHtmlWrapperClassName);
+		}
+	</script>
+
 @if (Model?.OptionalMetaDescription != null)
 {
     <meta name="description" content="@Model.OptionalMetaDescription" />
