@@ -16,7 +16,7 @@ body div.Content { padding: 16px; }
 
 /* Don't need these at all for the print layout */
 div.SideBar,
-button.DarkMode { display: none; }
+a.DarkMode { display: none; }
 
 /* Ensure this is shown even if it's been hidden for smaller viewports */
 div.Footer { display: block; }
