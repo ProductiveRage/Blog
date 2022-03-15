@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net5.0</TargetFrameworks>
     <Platforms>AnyCPU</Platforms>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>9</LangVersion>
     <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
   </PropertyGroup>
 
