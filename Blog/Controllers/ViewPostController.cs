@@ -10,14 +10,14 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.Controllers
 {
-    public sealed class ViewPostController : Controller
+	public sealed class ViewPostController : Controller
 	{
 		private readonly IPostRepository _postRepository;
 		private readonly SiteConfiguration _siteConfiguration;
 		private readonly ICache _postContentCache;
 		public ViewPostController(IPostRepository postRepository, SiteConfiguration siteConfiguration, ICache postContentCache)
 		{
-            _postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
+			_postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
 			_siteConfiguration = siteConfiguration ?? throw new ArgumentNullException(nameof(siteConfiguration));
 			_postContentCache = postContentCache ?? throw new ArgumentNullException(nameof(postContentCache));
 		}
@@ -232,10 +232,22 @@ namespace Blog.Controllers
 				post.Title,
 				post.IsHighlight,
 				post.MarkdownContent,
-				(await _postRepository.GetByIds(post.RelatedPosts)).Cast<PostStub>().ToNonNullImmutableList(),
-				(await _postRepository.GetByIds(post.AutoSuggestedRelatedPosts)).Cast<PostStub>().ToNonNullImmutableList(),
+				await GetRelatedPostStubs(post.RelatedPosts),
+				await GetRelatedPostStubs(post.AutoSuggestedRelatedPosts),
 				post.Tags
 			);
+
+			async Task<NonNullImmutableList<PostStub>> GetRelatedPostStubs(ImmutableList<int> ids)
+			{
+				var orderValues = ids
+					.Select((id, index) => (Id: id, Index: index))
+					.ToDictionary(entry => entry.Id, entry => entry.Index);
+
+				return (await _postRepository.GetByIds(ids))
+					.Cast<PostStub>()
+					.OrderBy(p => orderValues.TryGetValue(p.Id, out var orderValue) ? orderValue : int.MaxValue)
+					.ToNonNullImmutableList();
+			}
 		}
 
 		private async Task<NonNullImmutableList<PostWithRelatedPostStubs>> GetPostsWithRelatedPostStubs(IEnumerable<Post> posts)
@@ -251,7 +263,7 @@ namespace Blog.Controllers
 			private readonly IPostRepository _postRepository;
 			public PostSlugRetriever(IPostRepository postRepository)
 			{
-                _postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
+				_postRepository = postRepository ?? throw new ArgumentNullException(nameof(postRepository));
 			}
 
 			/// <summary>
