@@ -82,6 +82,7 @@ ebay
 eds.
 Elgetec
 email
+embeddings
 Emgu
 enumerables
 erroring
@@ -132,6 +133,7 @@ hotspots
 HRESULTs
 hunkydory
 hyperlink
+hyperparameter
 Hz
 Icaza
 ico
@@ -142,6 +144,7 @@ imgur
 imho
 Immo
 Impl
+inbox
 inetsrv
 ini
 inn
@@ -183,8 +186,10 @@ nameof
 namespaces
 neighbourhoods
 netcoreapp
+Netflix
 new'ing
 ninject
+nltk
 non-TypeScripters
 normalise/r/rs
 Norvig
@@ -258,6 +263,7 @@ standalone
 StdObject
 stfld
 stinkin
+stopwords
 Strilanc
 subfolde/r/rs
 svc
@@ -268,6 +274,7 @@ targetframework
 TEventsArgs
 tm
 tokenised
+tokenising
 tool/bars/tips
 topics
 tops
