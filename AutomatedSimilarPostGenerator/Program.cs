@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Blog.Misc;
 using Blog.Models;
 using Microsoft.Extensions.FileProviders;
 
@@ -22,7 +23,7 @@ namespace AutomatedSimilarPostGenerator
             var postRetriever = new SingleFolderPostRetriever(
                 new DirectoryInfo(postFolderPath)
                     .EnumerateFiles()
-                    .Select(f => new FileProvidersFile(f)));
+                    .Select(f => new WebFileInfoFromDisk(f)));
             var posts = await postRetriever.Get();
             var suggestedRelatedContent = new StringBuilder();
             foreach (var (post, similar) in (await Recommender.GetSimilarPosts(posts)).OrderBy(result => result.Post.Id))
@@ -53,21 +54,6 @@ namespace AutomatedSimilarPostGenerator
                 Path.Combine(postFolderPath, "AutoSuggestedRelatedPosts.txt"),
                 suggestedRelatedContent.ToString()
             );
-        }
-
-        private sealed class FileProvidersFile : IFileInfo
-        {
-            private readonly FileInfo _file;
-            public FileProvidersFile(FileInfo file) => _file = file;
-                
-            public bool Exists => _file.Exists;
-            public bool IsDirectory => false;
-            public DateTimeOffset LastModified => _file.LastWriteTimeUtc;
-            public long Length => _file.Length;
-            public string Name => _file.Name;
-            public string PhysicalPath => _file.FullName;
-
-            public Stream CreateReadStream() => _file.OpenRead();
         }
     }
 }

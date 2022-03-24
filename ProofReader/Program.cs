@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Blog.Misc;
 using Blog.Models;
 using BlogBackEnd.Models;
 using FullTextIndexer.Common.Lists;
@@ -105,7 +106,7 @@ namespace ProofReader
             var postRetriever = new SingleFolderPostRetriever(
                 new DirectoryInfo(postFolderPath)
                     .EnumerateFiles()
-                    .Select(f => new FileProvidersFile(f)));
+                    .Select(f => new WebFileInfoFromDisk(f)));
             var posts = await postRetriever.Get();
             foreach (var post in posts)
             {

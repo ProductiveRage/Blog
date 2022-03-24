@@ -2,12 +2,12 @@
 using System.IO;
 using Microsoft.Extensions.FileProviders;
 
-namespace ProofReader
+namespace Blog.Misc
 {
-    internal sealed class FileProvidersFile : IFileInfo
+    public sealed class WebFileInfoFromDisk : IFileInfo
     {
         private readonly FileInfo _file;
-        public FileProvidersFile(FileInfo file) => _file = file;
+        public WebFileInfoFromDisk(FileInfo file) => _file = file;
 
         public bool Exists => _file.Exists;
         public bool IsDirectory => false;
