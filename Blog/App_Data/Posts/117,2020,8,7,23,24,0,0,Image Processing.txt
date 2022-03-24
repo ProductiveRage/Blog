@@ -531,7 +531,7 @@ The numbers are encoded using the following system:
 
 *(Note that every combination of values totals 7 when they added up - this is very helpful later!)*
 
-To see what that looks like in the real world, here's a slice of that barcode from the jar of peanut butter with each section and each numberic value identified:
+To see what that looks like in the real world, here's a slice of that barcode from the jar of peanut butter with each section and each numeric value identified:
 
 <img alt="Barcode numbers interpreted" src="/Content/Images/Posts/PeanutBarcode-AnnotatedValues.png" class="NoBorder AlwaysFullWidth" />
 
@@ -553,7 +553,7 @@ The way to tackle the reading is to:
 1. If the line couldn't be interpreted as a barcode or the checksum calculation fails then take the next line down and go back to step 4
 1. If there are no more lines to attempt then a barcode could not be identified in the image
 
-This processing is fairly light computationally and so there is no need to resize the "may be a barcode" image region before attempting the work. In fact, it's benefical to *not* shrink it as shrinking it will likely make the barcode section fuzzier and that makes the above steps less likely to work - the ideal case for creating a binary mask is where there is no significant "seepage" of pixel intensity between the black bar areas and the white bar areas. That's not to say that the images have to be crystal clear or perfectly aligned with the camera because the redundancy built into the format works in our favour here - if one line across the image can't be read because it's fuzzy then there's a good chance that one of the other lines will be legible.
+This processing is fairly light computationally and so there is no need to resize the "may be a barcode" image region before attempting the work. In fact, it's beneficial to *not* shrink it as shrinking it will likely make the barcode section fuzzier and that makes the above steps less likely to work - the ideal case for creating a binary mask is where there is no significant "seepage" of pixel intensity between the black bar areas and the white bar areas. That's not to say that the images have to be crystal clear or perfectly aligned with the camera because the redundancy built into the format works in our favour here - if one line across the image can't be read because it's fuzzy then there's a good chance that one of the other lines will be legible.
 
 60 length values is the precise number that we expect to find - there is expected to be some blank space before the barcode starts (1) and then a guard section of three single-width lines that we use to gauge bar width (3) and then six numbers that are encoded in four bars each (6x4=24) and then a guard section of five single-width lines (5) and then six numbers (6x4=24) and then a final guard region of three single-width bars, giving 1+3+24+5+24+3=60.
 
@@ -640,7 +640,7 @@ I'm going to try to present the code in approximately the same order as the step
         return string.Join("", extractedNumericValues);
     }
 
-With the code below, we find the runs of continous 0 or 1 lengths that will represent bars are return that list (again, for larger images each run will be longer and for smaller images each run will be shorter but this will be taken care of later) -
+With the code below, we find the runs of continuous 0 or 1 lengths that will represent bars are return that list (again, for larger images each run will be longer and for smaller images each run will be shorter but this will be taken care of later) -
 
     private static IEnumerable<int> GetBarLengthsFromBarcodeSlice(
         DataRectangle<bool> barcodeDetails,

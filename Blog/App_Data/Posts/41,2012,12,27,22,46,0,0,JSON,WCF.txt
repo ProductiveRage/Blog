@@ -202,7 +202,7 @@ The new class looks like this:
         }
     }
 
-And we plumb it in by adding this to system.serviceModel / extensions / behaviorExtensions (again, the "extensions" node and its "behaviorExtensions" child node need adding in to a vanila web.config):
+And we plumb it in by adding this to system.serviceModel / extensions / behaviorExtensions (again, the "extensions" node and its "behaviorExtensions" child node need adding in to a vanilla web.config):
 
     <add
         name="postServiceWebHttp"

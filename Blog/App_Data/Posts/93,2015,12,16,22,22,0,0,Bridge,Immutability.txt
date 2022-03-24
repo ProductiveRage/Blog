@@ -40,7 +40,7 @@ If we wanted to update a record with some notes where previously it had none the
       "Awesome attitude!"
     );
 
-This sort of thing (calling the constructor explicitly) gets old quickly, particularly if the class gets extended in the future since then anywhere that did something like this would have to add more arguements to the constructor call.
+This sort of thing (calling the constructor explicitly) gets old quickly, particularly if the class gets extended in the future since then anywhere that did something like this would have to add more arguments to the constructor call.
 
 So an alternative is to include "With" functions in the class -
 
@@ -159,7 +159,7 @@ and
 
 *Never mind* contemplating writing all of those "WithName", "WithStartDate" methods (checking in them that the values have actually changed and returning the same instance back out if not). I love the benefits of having these immutable types (reducing places where it's possible for state to change makes reasoning about code soooooooo much easier) but I'm getting tired of banging out the same constructs and sentences! follows a
 
-So I've started on a new tack. I want to find those places where repetition is getting me down and I want to reduce it as much as possible. *But* I don't want to sacrifice my validation checks or the guarantess of immutability. And, again, to put this into context - I'm going to be concentrating on the classes that I write in C# but that Bridge.NET then translates into JavaScript, so there are different considerations to take into account. First of which being that Bridge doesn't support reflection and so none of the crazy stuff I was doing in "pure" C# will be possible! Not in the same way that I wrote it last time, at least..
+So I've started on a new tack. I want to find those places where repetition is getting me down and I want to reduce it as much as possible. *But* I don't want to sacrifice my validation checks or the guarantees of immutability. And, again, to put this into context - I'm going to be concentrating on the classes that I write in C# but that Bridge.NET then translates into JavaScript, so there are different considerations to take into account. First of which being that Bridge doesn't support reflection and so none of the crazy stuff I was doing in "pure" C# will be possible! Not in the same way that I wrote it last time, at least..
 
 Before I get into any silly stuff, though, I want to talk about a couple of techniques that hopefully aren't *too* controversial and that I think have improved my code as well as requiring me to type less.
 
@@ -288,7 +288,7 @@ Which makes the next part somewhat unfortunate. The "propertyIdentifier" must be
 
 If any of these conditions are not met then the "CtorSet" method will throw an exception. But you might not find out until runtime because C#'s type system is not strong enough to describe all of these requirements.
 
-The good news, though, is that while the C# type system itself isn't powerful enough, with Visual Studio 2015 it's possible to write a [Roslyn Analyser](https://msdn.microsoft.com/en-us/magazine/dn879356.aspx) that *can* pick up any invalid propertRetriever before run time, so that errors *will* be thrown right in your face without you ever executing the code. The even better news is that such an analyser is included in the NuGet package! But let's not get ahead of ourselves, let me finish describing what this new method actually does first..
+The good news, though, is that while the C# type system itself isn't powerful enough, with Visual Studio 2015 it's possible to write a [Roslyn Analyser](https://msdn.microsoft.com/en-us/magazine/dn879356.aspx) that *can* pick up any invalid propertyRetriever before run time, so that errors *will* be thrown right in your face without you ever executing the code. The even better news is that such an analyser is included in the NuGet package! But let's not get ahead of ourselves, let me finish describing what this new method actually does first..
 
 If it's not apparent from looking at the example code above, "CtorSet" is doing some magic. It's doing some basic sort of reflection in JavaScript to work out *how* to identify and set the target property. Bridge won't support reflection until v2 but my code does an approximation where it sniffs about in the JavaScript representation of the "propertyIdentifier" and gets a hold of the setter. Once it has done the work to identify the setter for a given "T" and "propertyIdentifier" combination, it saves it away in an internal cache - while we can't control and performance-tune JavaScript in quite the same way that we can with the CLR, it doesn't mean that we should do the same potentially-complicated work over and over again if we don't need to!
 

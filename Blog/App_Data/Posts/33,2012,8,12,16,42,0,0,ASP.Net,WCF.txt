@@ -64,7 +64,7 @@ The factory needs to inherit from the WebServiceHostFactory class. A given facto
 The instantiation process follows theses steps:
 
 1. The CreateServiceHost method on the factory specified in the Service declaration is called (this is a method of WebServiceHostFactory that must be overridden)
-1. This returns a class that inherits from ServiceHost which registers a "Instance Provider" that will be used to instantiate the actual Service type (this Instance Provider must implement IContractBehaviour, so that it may be added tohe Behaviours collection, and implement IInstanceProvider to mark it as being able to instantiate the target type)
+1. This returns a class that inherits from ServiceHost which registers a "Instance Provider" that will be used to instantiate the actual Service type (this Instance Provider must implement IContractBehaviour, so that it may be added the Behaviours collection, and implement IInstanceProvider to mark it as being able to instantiate the target type)
 1. The GetInstance method (which is part of the IInstanceProvider interface) is called; this must return an instance of the Service class to handle the request
 
 Example code may make this clearer!

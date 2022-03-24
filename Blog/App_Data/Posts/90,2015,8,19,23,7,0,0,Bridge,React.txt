@@ -347,7 +347,7 @@ would result in something like:
 
 Which is a real pity.
 
-The good news is that it appears to be as easy as *also* including an [Ignore] attribute on the type - doing so re-enables the behaviour that only includes explicitly-specifed properties in the JavaScript. However, I have been unable to find authoritative information on how [ObjectLiteral] *should* behave and how it should behave with or without [Ignore]. I had a quick flick through the 1.8 release notes and couldn't see any mention of this being an explicit change from 1.7 to 1.8 (but, I will admit, I wasn't *super* thorough in that investigation).
+The good news is that it appears to be as easy as *also* including an [Ignore] attribute on the type - doing so re-enables the behaviour that only includes explicitly-specified properties in the JavaScript. However, I have been unable to find authoritative information on how [ObjectLiteral] *should* behave and how it should behave with or without [Ignore]. I had a quick flick through the 1.8 release notes and couldn't see any mention of this being an explicit change from 1.7 to 1.8 (but, I will admit, I wasn't *super* thorough in that investigation).
 
 I only came across the idea of combining [Ignore] with [ObjectLiteral] when I was looking through their source code on [GitHub](https://github.com/bridgedotnet/) (open source software, ftw!) and found a few places where there are checks for one of those attributes or *both* of them in some places.
 

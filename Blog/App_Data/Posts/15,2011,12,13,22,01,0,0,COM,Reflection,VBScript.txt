@@ -4,7 +4,7 @@ Another area of this migration proof-of-concept work I'm doing at the day job in
 
 Writing the interfaces is valuable since it enables some documentation-through-comments to be generated for each method and property and forces me to look into the idiosyncracies of the various components.
 
-However, writing endless wrappers for the components to "join" them to the interfaces sounded boring! Even if I used the .Net 4.0 "dynamic" keyword it seemed like there'd be a lot of repitition and opportunity for me to mistype a property name and not realise until debugging / writing tests. (Plus I found a problem that prevented me from using "dynamic" with the WSCs I was wrapping - see the bottom of this post for more details).
+However, writing endless wrappers for the components to "join" them to the interfaces sounded boring! Even if I used the .Net 4.0 "dynamic" keyword it seemed like there'd be a lot of repetition and opportunity for me to mistype a property name and not realise until debugging / writing tests. (Plus I found a problem that prevented me from using "dynamic" with the WSCs I was wrapping - see the bottom of this post for more details).
 
 I figured this is the sort of thing that should be dynamically generatable from the interfaces instead of writing them all by hand - something like how Moq can create generate Mock&lt;ITest&gt; implementations. I did most of this investigation back in Summer, not long after the AutoMapper work I was looking into, and had hoped I'd be able to leverage my sharpened Linq Expression dynamic code generation skills. Alas, it seems that new classes can not be defined in this manner so I had to go deeper..
 

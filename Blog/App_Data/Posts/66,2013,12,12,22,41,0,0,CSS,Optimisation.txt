@@ -83,7 +83,7 @@ So while these "Source Mapping Marker Ids" add overhead to the delivered content
 
 ### Addressing the performance problems
 
-My last post was about my first stabs at optimising the id-tidying process (see [Optimising the CSS Processor - ANTS and algorithms](Post65)). I made some good strides but I wasn't happy with all of the approaches that I took and it still didn't perform as well as I would haved liked with source files that contained many deeply-nested selectors.
+My last post was about my first stabs at optimising the id-tidying process (see [Optimising the CSS Processor - ANTS and algorithms](Post65)). I made some good strides but I wasn't happy with all of the approaches that I took and it still didn't perform as well as I would have liked with source files that contained many deeply-nested selectors.
 
 If the problem I was trying to solve was that the LESS compiler was emitting too much content, maybe what I really needed to do was work *with it* rather than tidying up after it. The [code is on GitHub](https://github.com/dotless/dotless) so I figured I'd dive in and see what I could find!
 

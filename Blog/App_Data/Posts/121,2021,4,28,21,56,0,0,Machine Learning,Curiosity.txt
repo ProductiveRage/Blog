@@ -64,7 +64,7 @@ This is by no means a perfect system as there will often be posts whose main top
 
 All of them are investigations into some form of machine learning or computer vision but the titles share very little in common. It's likely that the prediction quality of this one will actually suffer a little with the change I'm introducing but I'm looking for an overall improvement, across the entire blog. I'm also not looking for a perfect general solution, I'm trying to find something that works well for *my* data (again, bearing in mind that there is a relatively small quantity of it as there are only around 120 posts, which doesn't give the computer a huge amount of data to work from).
 
-*(It's also worth noting that the way I implement this in my blog is that I maintain two lists - the manually-curated list that I had before that had links for about a dozen posts and a machine-generated list; if there are manual links present then they will be displayed and the auto-generated ones will be hidden - so if I find that I have a particuarly awkward post where the machine can't find nice matches then I can always tidy it up myself by manually creating the related-post links for that post)*
+*(It's also worth noting that the way I implement this in my blog is that I maintain two lists - the manually-curated list that I had before that had links for about a dozen posts and a machine-generated list; if there are manual links present then they will be displayed and the auto-generated ones will be hidden - so if I find that I have a particularly awkward post where the machine can't find nice matches then I can always tidy it up myself by manually creating the related-post links for that post)*
 
 ### Implementation
 

@@ -8,7 +8,7 @@ Ok, I admit, I didn't actually bother trying! And at this point I think I'm glad
 
 ### A false start
 
-After doing some initial reading around I found out about the BitBucket "Import Repository" functionality. Amazing! Point it at my GitHub repositories and import them into new BitBucket Mercurial repos - ideal! So I select "Git/GitHub" as the source and it set "Git" as the "Repository type", fair enough - it's realised that it has to import from Git! Selected Language as "C#" and hit "Import" and.. it all looked rosey!
+After doing some initial reading around I found out about the BitBucket "Import Repository" functionality. Amazing! Point it at my GitHub repositories and import them into new BitBucket Mercurial repos - ideal! So I select "Git/GitHub" as the source and it set "Git" as the "Repository type", fair enough - it's realised that it has to import from Git! Selected Language as "C#" and hit "Import" and.. it all looked rosy!
 
 I set up Username Aliases to my BitBucket user and had a poke around the history and found it all looked good. It even imported the tags from GitHub which I'd been concerned about since one of the articles I'd read had put some doubt in my mind regarding those.
 

@@ -6,6 +6,6 @@ When I got home and tried to update my repository there, _seemed_ became the ope
 
 I'm not sure if there's a good way to do this and a lot of information out there about resolving this sort of mess starts with "On the Linux/FreeBSD machine.." or "On a case sensitive OS.." which is not very useful when all my computers run Windows!
 
-Long story short; this page helped me out a lot - [http://mercurial.selenic.com/wiki/FixingCaseCollisions](http://mercurial.selenic.com/wiki/FixingCaseCollisions). I haven't tried the CaseFoldExtension but following the instructions in there sorted me out. The only issue I encountered was one of the commands complained that it didn't have a username, including an additional -u"user@whereever.com" sorted that out.
+Long story short; this page helped me out a lot - [http://mercurial.selenic.com/wiki/FixingCaseCollisions](http://mercurial.selenic.com/wiki/FixingCaseCollisions). I haven't tried the CaseFoldExtension but following the instructions in there sorted me out. The only issue I encountered was one of the commands complained that it didn't have a username, including an additional -u"user@wherever.com" sorted that out.
 
 This has tired me out! :S

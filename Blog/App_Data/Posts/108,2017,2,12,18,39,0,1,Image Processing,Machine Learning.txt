@@ -24,7 +24,7 @@ This "Naked People Skin Filter" paper was published by Margaret M. Fleck and Dav
 
 ![Tiger Woods](/Content/Images/Posts/TigerWoods.gif)
 
-*Note: That "Face Detection in Color Images" link use the [Wayback Machine](http://archive.org/web/) to make available a GeoCities page. Maybe it's a sad reminder that there was actually worthwhile content on GeoCities as well as the many harshly-coloured-and-bizarely-animated eye-watering monstrosities. By the way, if you (quite rightly, imho) think that the web has lost something by having less places for people to upload content for free then check out [NeoCities](https://neocities.org/browse) - it's awesome because it makes that possible again (and all the good and bad that comes with it)!*
+*Note: That "Face Detection in Color Images" link use the [Wayback Machine](http://archive.org/web/) to make available a GeoCities page. Maybe it's a sad reminder that there was actually worthwhile content on GeoCities as well as the many harshly-coloured-and-bizarrely-animated eye-watering monstrosities. By the way, if you (quite rightly, imho) think that the web has lost something by having less places for people to upload content for free then check out [NeoCities](https://neocities.org/browse) - it's awesome because it makes that possible again (and all the good and bad that comes with it)!*
 
 "Face Detection in Color Images" uses an example image of Tiger Woods and so I will use that same image while I discuss what I've done, based upon these articles.
 
@@ -34,9 +34,9 @@ There are a set of steps that are followed when trying to identify faces in an i
 1. Avoid desaturation by bring colour down values so that the minimum is true zero
 1. Transform RGB colours into the RG/BY colour space, alongside an Intensity spectrum
 1. Calculate "texture amplitude" across the image (how quickly intensity changes - the theory is that areas of skin have a relatively low texture amplitude)
-1. Calculate hue and sauturation across the image (in order to identify areas that seem to be skin-coloured)
+1. Calculate hue and saturation across the image (in order to identify areas that seem to be skin-coloured)
 1. Combine the texture amplitude and hue data to identify areas of skin (the texture amplitude, hue and saturation must be within acceptable "this is probably skin" bounds)
-1. Expand these areas of skin using a more relaxed texture amplitide / hue / saturation "this is probably skin" filter
+1. Expand these areas of skin using a more relaxed texture amplitude / hue / saturation "this is probably skin" filter
 1. Check these areas for holes - no holes (for non-skin facial features, such as eyes) means no face
  * Any skin areas that are very small are ignored
  * Any skin areas that are extreme aspect ratios are ignored (very, very wide areas or very, very tall areas are probably not faces)
@@ -170,7 +170,7 @@ In my Pictures folder, some photos from an Easter weekend\* night out I went to 
 
 ![Egg Man](/Content/Images/Posts/EggMan.jpg)
 
-Firstly, we have this fine gentleman. The skin tone pass has identified his face perfectly but it's also misidentified two regions that contain colours and textureus that the skin filter allows through.
+Firstly, we have this fine gentleman. The skin tone pass has identified his face perfectly but it's also misidentified two regions that contain colours and textures that the skin filter allows through.
 
 ![Egg Man Skin Mask](/Content/Images/Posts/EggMan-SkinMask.jpg)
 
@@ -277,7 +277,7 @@ Now for step 5, we want to produce "histograms of oriented gradients" (one for e
 
 *(The example on the left is from [wikipedia](https://en.wikipedia.org/wiki/Histogram) and reproduced here under the [creative commons](https://creativecommons.org/licenses/by-sa/3.0/) license)*
 
-To generate our histograns, we want to assign the gradients with the block across nine buckets, spaced twenty-degrees apart. The first will be at 10 degrees, the second at 30 and they'll go all the way up to 170.
+To generate our histograms, we want to assign the gradients with the block across nine buckets, spaced twenty-degrees apart. The first will be at 10 degrees, the second at 30 and they'll go all the way up to 170.
 
 We're going to use "unsigned gradients", which means that if we have a gradient where intensity is changing only vertically, we don't really care if it's getting brighter as it goes down or brighter as it goes up, we only care that the line is precisely vertical. Similarly, imagine the intensity increasing up-and-right, at 45 degrees - we're happy to treat this the same as intensity going in precisely the opposite direction; down-and-left and 225 degrees (or -135 degrees since our current angleInDegrees values are in the -180 to +180 range). What this essentially means is that we want to tweak our angles so that they are all within 0-180 (instead of -180 to +180). To do, so we just add 180 degrees to any values less than zero.
 
@@ -305,7 +305,7 @@ If you get curious and want to try generating HOGs for your own images, there is
         }
     }
 
-.. which brings me neatly on to HOG normalisation (since there's a mysterious reference to a normaliser in the code above). When the gradient magnitudes are calculated, some images may have many pixels that vary wildly in intensity from their neighbours while other images may have smoother, gentler gradients. In both cases, it is the relative flow of intensity that is important, since that helps identify the shapes. If you took an image and produced HOG data for it and then increased the contrast of the image and re-processed it, you would get greater gradient magnitude values in the increased-constrast version of the image, even though they both - so far as we are interested (in the context of trying to detect faces) - contain exactly the same information.
+.. which brings me neatly on to HOG normalisation (since there's a mysterious reference to a normaliser in the code above). When the gradient magnitudes are calculated, some images may have many pixels that vary wildly in intensity from their neighbours while other images may have smoother, gentler gradients. In both cases, it is the relative flow of intensity that is important, since that helps identify the shapes. If you took an image and produced HOG data for it and then increased the contrast of the image and re-processed it, you would get greater gradient magnitude values in the increased-contrast version of the image, even though they both - so far as we are interested (in the context of trying to detect faces) - contain exactly the same information.
 
 What we want to do is to align all of the magnitudes to a common base line. A simple (and fairly effective) way to do this is to find the largest value of any of the buckets across all of the histograms generated for an image and to then divide *every* magnitude by this value. In the example above, the 128x128 input image is transformed into 16x16 blocks, each of which is a histogram that contains 9 values. So we get the largest value from each of those 16x16x9 values and then divide all of them by it. This means that the largest value is now precisely 1.0 and every other value is somewhere between zero and one. This is what the "GlobalNormaliser.Normalise" delegate in the code above does. All it essentially has to do is this:
 
@@ -503,7 +503,7 @@ However, there was a problem with the image shown here (the problem, btw, clearl
 
 *(Note that there are some faces in the background that were not identified by the skin tone pass, but I'm not worried about that - it is to be expected that they would be ignored because they are small, relative to the size of the image.. though it should be possible to tweak the skin tone filter parameters if you wanted to try to capture background faces).*
 
-Increasing the number of training images to 1,000 didn't address the problem with this particular image and, in fact, made another image worse (where a non-face region was correctly classifed as not-a-face before, with 1,000 training images the SVM thought that it *was* a face). Increasing to 1,500 training images corrected the classification of the dancing image regions but there were still false positives in other images. Such as this one of that same individual who appears to now be wearing a flag (which reminds me of a scene from *Fear and Loathing in Las Vegas*).
+Increasing the number of training images to 1,000 didn't address the problem with this particular image and, in fact, made another image worse (where a non-face region was correctly classified as not-a-face before, with 1,000 training images the SVM thought that it *was* a face). Increasing to 1,500 training images corrected the classification of the dancing image regions but there were still false positives in other images. Such as this one of that same individual who appears to now be wearing a flag (which reminds me of a scene from *Fear and Loathing in Las Vegas*).
 
 ![Another Classification Failure](/Content/Images/Posts/FlagWearer.jpg)
 
@@ -536,7 +536,7 @@ However, it gave poor results for my images. It seemed to do well with very smal
 
 ![TigerWoods - Sliding Window SVM Results](/Content/Images/Posts/TigerWoods-SlidingWindow.jpg)
 
-One approach that sounds very promising: if the SVM classifier is so fast and effective then maybe we should get rid of the skin tone processing altogether and just generate segments from all over the image, then filter them with the classifier. This is discussed and recommended by many people and is referred to as the "sliding window" approach (see [Sliding Windows for Object Detection with Python and OpenCV](http://www.pyimagesearch.com/2015/03/23/sliding-windows-for-object-detection-with-python-and-opencv/), for example). The idea is that you pick a window size (eg. 50px if limiting the source image to no more than 400px on a side) and then start at the top left of the image and take that top-left 50x50px as the first sub-image to pass to the classifer. Then you move the window over a bit (say, 10px) and then use that as the second sub-image. Keep going until you can't go any further and then go back to the left but go down 10px - moving across then back-and-down until you have covered the entire image. Then do the same with some other window sizes (maybe 75px and then 100px), since you don't know whether the faces on an image are going to be small (relative to the size of the image) or large. This will give you many, *many* regions to classify - but that's no problem because linear SVM classification is very fast. Unfortunately, I did try this but I got an enormous false positive rate (as you can see here with Tiger - if you can make him out from behind all the green "this is a face!" boxes). Surely this approach *can* be made to work since it's so commonly presented as a solution to this problem.. it may just be that I need to tweak how the SVM is trained, maybe it needs more than 2,000 training images (though I did also try it with 10,000 training images and the results were not much better).
+One approach that sounds very promising: if the SVM classifier is so fast and effective then maybe we should get rid of the skin tone processing altogether and just generate segments from all over the image, then filter them with the classifier. This is discussed and recommended by many people and is referred to as the "sliding window" approach (see [Sliding Windows for Object Detection with Python and OpenCV](http://www.pyimagesearch.com/2015/03/23/sliding-windows-for-object-detection-with-python-and-opencv/), for example). The idea is that you pick a window size (eg. 50px if limiting the source image to no more than 400px on a side) and then start at the top left of the image and take that top-left 50x50px as the first sub-image to pass to the classifier. Then you move the window over a bit (say, 10px) and then use that as the second sub-image. Keep going until you can't go any further and then go back to the left but go down 10px - moving across then back-and-down until you have covered the entire image. Then do the same with some other window sizes (maybe 75px and then 100px), since you don't know whether the faces on an image are going to be small (relative to the size of the image) or large. This will give you many, *many* regions to classify - but that's no problem because linear SVM classification is very fast. Unfortunately, I did try this but I got an enormous false positive rate (as you can see here with Tiger - if you can make him out from behind all the green "this is a face!" boxes). Surely this approach *can* be made to work since it's so commonly presented as a solution to this problem.. it may just be that I need to tweak how the SVM is trained, maybe it needs more than 2,000 training images (though I did also try it with 10,000 training images and the results were not much better).
 
 ![Black and White Face Detection Fail](/Content/Images/Posts/BlackAndWhiteFaceFails.jpg)
 

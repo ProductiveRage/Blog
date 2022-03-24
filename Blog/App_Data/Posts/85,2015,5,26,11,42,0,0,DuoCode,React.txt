@@ -172,7 +172,7 @@ On the whole, I've found this to be a really good system. But there are a couple
 
 Secondly, due to the way that the "createElement" function works in the React library, the Component class constructors may *only* take a single argument (the "props" data). This means that *all* configuration data must be included in the "props" type (but this is the standard arrangement for React component classes, so it's no biggie).
 
-The third and final compromise is that the "createElement" function does something a bit wonky with the "props" reference handed to it, it basically strips it down and rebuilds it, maintaning only properties declared on the object itself and *not* on a prototype of that object. So if your props object was a class with fields - eg.
+The third and final compromise is that the "createElement" function does something a bit wonky with the "props" reference handed to it, it basically strips it down and rebuilds it, maintaining only properties declared on the object itself and *not* on a prototype of that object. So if your props object was a class with fields - eg.
 
     public class Props
     {

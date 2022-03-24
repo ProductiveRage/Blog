@@ -10,7 +10,7 @@ The version of the clr on my computer doesn't match that loaded by the process r
 
 ### Retrieving C# struct values
 
-Another problem I run into each time is the manner in which struct values needs to be probed. With other types you can just "!do {addr}" (DumpObject) it and nine times out of ten see the properties and values you want, with the occassional "!da {addr}" (DumpArray) thrown in for good measure. But if you try to do this for a struct value you get the cryptic response:
+Another problem I run into each time is the manner in which struct values needs to be probed. With other types you can just "!do {addr}" (DumpObject) it and nine times out of ten see the properties and values you want, with the occasional "!da {addr}" (DumpArray) thrown in for good measure. But if you try to do this for a struct value you get the cryptic response:
 
 > &lt;Note: this object has an invalid CLASS field&gt; Invalid object
 

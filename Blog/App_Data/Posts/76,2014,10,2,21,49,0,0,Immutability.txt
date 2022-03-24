@@ -4,7 +4,7 @@ A couple of weeks ago, I was talking about a way to structure an "UpdateWith" me
 
 The really simple way to do something like this is to actually not have an "UpdateWith" method at all and for the calling code to call the constructor directly, but means that there will potentially be a lot places that need fixing if the constructor arguments are changed or re-ordered at any time. Another simple approach is for there to be multiple "Update" methods, one for each property (so you might have an "UpdateName" method, an "UpdateStartDate"; a distinct "Update{whatever}" for each individual property).
 
-I was feeling oh so proud of myself for thinking to combine a multiple-parameter "Update" method with an "**Optional**" struct so that the best of every world could be had - a single call could update one or more properties without having to specify values for properties that are *not* to be updated. Unlike with the "Update{whatever}" methods, if two properties need to be updated, only a single new instance will be required - there will not be new instances for *each separate* property update - so there would be no added GC pressure from unnecessary "intemediate" instances.
+I was feeling oh so proud of myself for thinking to combine a multiple-parameter "Update" method with an "**Optional**" struct so that the best of every world could be had - a single call could update one or more properties without having to specify values for properties that are *not* to be updated. Unlike with the "Update{whatever}" methods, if two properties need to be updated, only a single new instance will be required - there will not be new instances for *each separate* property update - so there would be no added GC pressure from unnecessary "intermediate" instances.
 
 To illustrate -
 
@@ -175,7 +175,7 @@ I'm chalking up these two recommendations as even more evidence that code review
 
 Having addressed the above improvements, the question about how the code actually performs still remains.
 
-There are three candidates to conside when weighing up the automagical **DefaultUpdateWithHelper**. The first two appear above. One is the hand-written version shown in the **RoleDetails** class right at the top of the post. The other is the one-liner "GetGenerator" call. There is a third option, however, that allows multiple calls to avoid the cache-check and so avoid reflection entirely on all but the first request; that is to call "GetGenerator" once and record it in a static reference -
+There are three candidates to consider when weighing up the automagical **DefaultUpdateWithHelper**. The first two appear above. One is the hand-written version shown in the **RoleDetails** class right at the top of the post. The other is the one-liner "GetGenerator" call. There is a third option, however, that allows multiple calls to avoid the cache-check and so avoid reflection entirely on all but the first request; that is to call "GetGenerator" once and record it in a static reference -
 
     private static UpdateWithSignature<RoleDetails> updater
       = DefaultUpdateWithHelper.GetGenerator<RoleDetails>(typeof(RoleDetails).GetMethod("UpdateWith"));

@@ -113,7 +113,7 @@ To update two properties on a given instance, you would need to call
 
 If either of the new values is the same as the property value that it should be replacing, then no new instance is required for that property update - since the Update*{Whatever}* method will return back the same instance. But if both properties are changed then *two* new instances are required even though the first, intermediate value is immediately discarded and so is "wasted".
 
-There could be an Update method that takes multiple parameters for the different properties but then you're basically just mirroing the constructor. Or there could be various Update methods that took combinations of properties to try to cover either the most common cases or *all* combinations of cases, but neither of these are particularly elegant and they would all result in quite a lot of code duplication.
+There could be an Update method that takes multiple parameters for the different properties but then you're basically just mirroring the constructor. Or there could be various Update methods that took combinations of properties to try to cover either the most common cases or *all* combinations of cases, but neither of these are particularly elegant and they would all result in quite a lot of code duplication.
 
 ### A better way
 
@@ -210,7 +210,7 @@ This type allows us to write an UpdateWith method
       );
     }
 
-The **Optional** type *could* have exposed properties for has-a-value-been-set and get-value-if-any but since each property comparison (to detemine whether a new instance is actually required) would have to follow the pattern if-value-has-been-set-and-if-value-that-has-been-set-does-not-equal-current-value, it made sense to me to hide the properties and to instead expose only the access methods "IndicatesChangeFromValue" and "GetValue". The "IndicatesChangeFromValue" method returns true if the **Optional** describes a value that is different to that passed in and "GetValue" returns the wrapped value if there is one, and returns the input argument if not. This enables the relatively succinct "UpdateWith" method format shown above.
+The **Optional** type *could* have exposed properties for has-a-value-been-set and get-value-if-any but since each property comparison (to determine whether a new instance is actually required) would have to follow the pattern if-value-has-been-set-and-if-value-that-has-been-set-does-not-equal-current-value, it made sense to me to hide the properties and to instead expose only the access methods "IndicatesChangeFromValue" and "GetValue". The "IndicatesChangeFromValue" method returns true if the **Optional** describes a value that is different to that passed in and "GetValue" returns the wrapped value if there is one, and returns the input argument if not. This enables the relatively succinct "UpdateWith" method format shown above.
 
 The other method on the struct is an implicit operator for the wrapped type which makes the "UpdateWith" calling code simpler. Instead of having to do something like
 
@@ -226,7 +226,7 @@ because the **DateTime** will be implicitly converted into an **Optional&lt;Date
 
 ### Turning it up to eleven
 
-Now this is all well and good and I think it would be a solid leap forward simply to leave things as they are shown above. Unnecessary GC pressue is avoided since there are no "intermediary" instances when changing properties, while the use of structs means that we're not generating a load of property-update-value references that need to be collected either.
+Now this is all well and good and I think it would be a solid leap forward simply to leave things as they are shown above. Unnecessary GC pressure is avoided since there are no "intermediary" instances when changing properties, while the use of structs means that we're not generating a load of property-update-value references that need to be collected either.
 
 But I just couldn't resist trying to push it a bit further since there's *still* quite a lot of boring code that needs to be written for every immutable type - the UpdateWith method needs to check all of the properties to ensure that they haven't changed and then it needs to pass values into a constructor. If a class has quite a lot of properties (which is not especially unusual if the types are representing complex data) then this UpdateWith method could grow quite large. Wouldn't it be nice if we could just write something like:
 
@@ -275,7 +275,7 @@ This "GetGenerator" method, then, has access to the argument names and argument 
 
 This delegate is what takes the property update values and creates a new instance (or returns the source instance if no changes are required). It does this by considering every public constructor that T has and determining what constructor arguments it can satisfy with update arguments. It does this by matching the update argument names to the constructor argument names and ensuring that the types are compatible. If a constructor is encountered with arguments that don't match any update arguments but T has a property whose name and type matches the constructor argument, then *that* will be used. If a constructor argument is encountered that can't be matched to an update argument *or* a property on T but the constructor argument has a default value, then the default value may be used if the constructor.
 
-If a constructor does not have at least one argument that can be matched to each update argument name, then that constructor is ignored (otherwise an update argument would be ignored, which would make the UpdateWith somewhat impotent!). If there are multiple constructors that meet all of these conditions, they are sorted by the number of arguments they have that are fulfilled by update arguments and then sorted by the number of arguments that are satisfed by other properties on T - the best match from this sorted set it used.
+If a constructor does not have at least one argument that can be matched to each update argument name, then that constructor is ignored (otherwise an update argument would be ignored, which would make the UpdateWith somewhat impotent!). If there are multiple constructors that meet all of these conditions, they are sorted by the number of arguments they have that are fulfilled by update arguments and then sorted by the number of arguments that are satisfied by other properties on T - the best match from this sorted set it used.
 
 The return **UpdateWithSignature&lt;T&gt;** delegate itself is a compiled LINQ expression so, once the cost of generating it has been paid the first time that it's required, the calls to this delegate are very fast. The "GetGenerator" method caches these compiled expressions, so the method
 

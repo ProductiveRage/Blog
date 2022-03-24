@@ -48,7 +48,7 @@ So now we can start writing TypeScript in Brackets! But we are far from done..
 
 ### Teaching TypeScript about Brackets
 
-The next problem is that there don't appear to be any TypeScript defintions available for writing Brackets extensions.
+The next problem is that there don't appear to be any TypeScript definitions available for writing Brackets extensions.
 
 What I particularly want to do with my extension is write a linter for [less stylesheets](http://lesscss.org/). In order to do this, I need to do something such as:
 

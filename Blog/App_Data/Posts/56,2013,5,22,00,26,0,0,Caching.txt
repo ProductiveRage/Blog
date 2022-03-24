@@ -1,6 +1,6 @@
 ## More Caching Mechanisms
 
-This is something I'd meant to cover in the last post ([Caching Mechanisms](Post55)) before I realised how long the last one was getting! And it's a bite-sized post before I segue into more about alternate approches to expiring cache entries.
+This is something I'd meant to cover in the last post ([Caching Mechanisms](Post55)) before I realised how long the last one was getting! And it's a bite-sized post before I segue into more about alternate approaches to expiring cache entries.
 
 Last time I had the catchily-named **StaleResultDeliveringLastModifiedBasedCachingConfigLoader** which implemented this simple interface
 
@@ -46,7 +46,7 @@ into
 
 I've used the Monitor.TryEnter method that takes a timeout argument. If the lock couldn't be taken then a timeout occurred and so I throw an exception.
 
-This lock-unrolling information is taken from Eric Lippert's [Locks and exceptions do not mix](http://blogs.msdn.com/b/ericlippert/archive/2009/03/06/locks-and-exceptions-do-not-mix.aspx) which is quite short and absolutely worth a read (as per usual!). He mentions that "the body of a lock should do as little as possible" not only "so that anyone waiting on the lock does not have to wait long" but more importantly that "small, simple lock bodies minimize the chance that the thing in there is going to throw an exception" which could leave the resources in a messed up state. Wwrapping work in a lock only guarantees that a single thread can process it at any given time, not that the work magically becomes atomic - it could half succeed and then fail, leaving these resources that must be protected in an unpredictable way. Thankfully, here all I'm doing inside the lock is trying to retrieve live data and then updating the cache - *hopefully* nothing that can leave things corrupt in any way.
+This lock-unrolling information is taken from Eric Lippert's [Locks and exceptions do not mix](http://blogs.msdn.com/b/ericlippert/archive/2009/03/06/locks-and-exceptions-do-not-mix.aspx) which is quite short and absolutely worth a read (as per usual!). He mentions that "the body of a lock should do as little as possible" not only "so that anyone waiting on the lock does not have to wait long" but more importantly that "small, simple lock bodies minimize the chance that the thing in there is going to throw an exception" which could leave the resources in a messed up state. Wrapping work in a lock only guarantees that a single thread can process it at any given time, not that the work magically becomes atomic - it could half succeed and then fail, leaving these resources that must be protected in an unpredictable way. Thankfully, here all I'm doing inside the lock is trying to retrieve live data and then updating the cache - *hopefully* nothing that can leave things corrupt in any way.
 
     namespace CachingExamples.ConfigLoaders
     {
@@ -229,4 +229,4 @@ The test for an empty cache has to implement the double-checked locking pattern 
 
 I think I've covered everything I wanted to about implementing caches for now*, I still need to do some more work before I can crack on with talking about all of the cache expiration methods I have in mind. Think it's going to be a little while before that's all ready but having to get everything completely straight in my head for a topic has been one of the benefit I've found to blogging about things!
 
-\* (I half contemplated writing *another* variation which would have a perioidic timer to pick up on an empty cache or trigger a background update if stale data is present and an update is not already in progress, but to be honest I think that might be labouring the point a bit and wouldn't add that much value to the post - hopefully it's obvious both how such a mechanism could be implemented and what some of the pros and cons would be).
+\* (I half contemplated writing *another* variation which would have a periodic timer to pick up on an empty cache or trigger a background update if stale data is present and an update is not already in progress, but to be honest I think that might be labouring the point a bit and wouldn't add that much value to the post - hopefully it's obvious both how such a mechanism could be implemented and what some of the pros and cons would be).

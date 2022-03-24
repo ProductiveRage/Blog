@@ -76,7 +76,7 @@ So I thought I'd have a look into some alternatives and see if I could whip up s
 
 ### The verbose approach
 
-The current approach chains together functions that take and return **Optional&lt;IReadStringContent&gt;** instances. If content is encountered that does not match the specified **Parser** then a "Missing" value will be returned from the "Then" call. If a "Then" call receives a "Missing" value then it passes that straight out. So, any time that a match is missed, all subsequent calls pass the "Missing" value straight throught.
+The current approach chains together functions that take and return **Optional&lt;IReadStringContent&gt;** instances. If content is encountered that does not match the specified **Parser** then a "Missing" value will be returned from the "Then" call. If a "Then" call receives a "Missing" value then it passes that straight out. So, any time that a match is missed, all subsequent calls pass the "Missing" value straight through.
 
 This is why the side effect callbacks are required to pass out the values, because each "Then" call only returns the next position for the reader (or "Missing" if content did not meet requirements).
 
@@ -117,7 +117,7 @@ This all sounds very abstract, so let's make it concrete. Continuing with the pa
       public Optional<ITypeDetails> Type { get; }
     }
 
-This has **Optional** values because we are going to start with them being null (since we don't have any real values until we've done the parsing). This is the reason that I've introduced this interm type, rather than using the final **PropertyDetails** type - that type is very similar but it has non-**Optional** properties because it doesn't make sense for a correctly-parsed TypeScript property to be absent either a name or a type.
+This has **Optional** values because we are going to start with them being null (since we don't have any real values until we've done the parsing). This is the reason that I've introduced this interim type, rather than using the final **PropertyDetails** type - that type is very similar but it has non-**Optional** properties because it doesn't make sense for a correctly-parsed TypeScript property to be absent either a name or a type.
 
 Now, the parsing method could be rewritten into this:
 
@@ -201,7 +201,7 @@ What if we could use anonymous types and some sort of magic for performing the c
 
 ### One way to write less code
 
-The problem with the **PartialPropertyDetails** is not only that it's quite a lot of code to write out (and that was only for two properties, it will quickly get bigger for more complicated structures) but also the fact that it's only useful in the context of the "Property" function. So this non-neligible chunk of code is not reusable and it clutters up the scope of whatever class or namespace has to contain it.
+The problem with the **PartialPropertyDetails** is not only that it's quite a lot of code to write out (and that was only for two properties, it will quickly get bigger for more complicated structures) but also the fact that it's only useful in the context of the "Property" function. So this non-negligible chunk of code is not reusable and it clutters up the scope of whatever class or namespace has to contain it.
 
 Anonymous types sound ideal, because they would just let us start writing objects to populate - eg.
 

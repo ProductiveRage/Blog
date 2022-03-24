@@ -27,7 +27,7 @@ I'll show three approaches, in decreasing order of ease of writing. They all dep
 
 ### Approach 1: Reflection (with some guesswork)
 
-C# 6 introduced read-only auto-properties. Before thoses were available, you had two options to do something similar. You could use a private setter -
+C# 6 introduced read-only auto-properties. Before those were available, you had two options to do something similar. You could use a private setter -
 
     public sealed class Example
     {
@@ -472,7 +472,7 @@ It's not currently possible to specify multiple projects using the VS GUI, so yo
 
 (Not only is there only a single framework specified but the node is called "TargetFramework" - without an "s" - as opposed to "TargetFrameworks" *with* an "s")
 
-After you've done this, you need to run the benchmark project from the command line (if you try to run it from within VS, even in Release configuation, you will get a warning that the results may be inaccurate as a debugger is attached). You do that with a command like this (it may vary if you're using a different version of .NET Core) -
+After you've done this, you need to run the benchmark project from the command line (if you try to run it from within VS, even in Release configuration, you will get a warning that the results may be inaccurate as a debugger is attached). You do that with a command like this (it may vary if you're using a different version of .NET Core) -
 
     dotnet run --framework netcoreapp2.0 --configuration release
 
@@ -527,7 +527,7 @@ This is not how I would expect mature tooling to behave. For now, I continue to 
 
 ### Summary
 
-I suspect that, to some, this may seem like one of my more pointless blog posts. I tried to do something that .NET really doesn't want you to do (and that whoever wrote the code containing the readonly auto-properties really doesn't expect you to do) and then tried to optimise that naughty behaviour - then spent a lot more time explaining how it wasn't posible to do so!
+I suspect that, to some, this may seem like one of my more pointless blog posts. I tried to do something that .NET really doesn't want you to do (and that whoever wrote the code containing the readonly auto-properties really doesn't expect you to do) and then tried to optimise that naughty behaviour - then spent a lot more time explaining how it wasn't possible to do so!
 
 However, along the way I discovered BenchmarkDotNet and I'm counting that as a win - I'll be keeping that in my arsenal for future endeavours. And I also enjoyed revisiting what is and isn't possible with reflection and reminding myself of the ways that .NET allows you to write code that could make *my* code appear to work in surprising ways.
 

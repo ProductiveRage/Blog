@@ -480,7 +480,7 @@ It also needs the following two classes for its internal initialisation and for 
 
 I don't think that there's a great deal that requires explaining in depth - the **PerformanceCounterLogger** will periodically capture values from all of the counters that I'm interested in, dealing with the special cases described earlier (garbage collection frequency, allocated bytes / sec, etc..) in a blocking manner. It continues to capture counter data until the cancellation token passed to it is set.
 
-That means that it makes sense to capture the performance counter data on a seperate thread. Something like the following (which is basically what I'm using in my test runs) -
+That means that it makes sense to capture the performance counter data on a separate thread. Something like the following (which is basically what I'm using in my test runs) -
 
     // Restart the service on the test server
     Restart("TestBox", "TestService");

@@ -9,9 +9,9 @@ This put me in mind of the "[Compilable Type Converter](http://bitbucket.org/Dan
 
 It then grew to generate conversion LINQ Expressions, which were compiled for performance. And from there it became a standalone component that could perform mappings without AutoMapper at all! It could still be used with AutoMapper since the converters it generated could be used in "ConvertUsing" calls but the property-to-constructor-argument mappings would be created automatically instead of manually. And if non-compilable type converters (not compiled to LINQ Expression and so functional but slower) were being generated with my project, there were classes to utilise AutoMapper to help perform the type conversions.
 
-The last thing I had done to it was add in support so that it could generate compiled converters that would populate the desination object using property setters (like AutoMapper does) instead of by-constructor.
+The last thing I had done to it was add in support so that it could generate compiled converters that would populate the destination object using property setters (like AutoMapper does) instead of by-constructor.
 
-I wrote a couple of posts about this a long time ago, but they were early posts and they weren't written all that well, so I'm embarassed to link to them here. :)
+I wrote a couple of posts about this a long time ago, but they were early posts and they weren't written all that well, so I'm embarrassed to link to them here. :)
 
 Anyway.. the point is, I was fairly confident that the Compilable Type Converter also did not support optional constructor arguments. And I didn't actually know how optional constructor arguments would look in the reflected information (the converter uses reflection to analyses the source and destination types and decide how to perform the conversion, but then generates a LINQ Expression to do the work which should have performance comparable to custom hand-written conversion code) so it seemed like a good opportunity to brush off an old project and have a bit of fun with it!
 
@@ -54,7 +54,7 @@ Property Getters are created by Property Getter Factories. When a conversion req
 
 Name Matchers simply answer the question "are these property/argument names equivalent?", the basic implementation in the project is the **CaseInsensitiveSkipUnderscoreNameMatcher**. This ignores underscores and case when comparing names, so "Title" and "title" and considered to be the same, as are "Person_Name" and "personName".
 
-Finally, when a by-constructor conversion is being generated, there may be multiple constructors which may be satisfied (ie. all of their constructor arguments may be provided with values from the source object's properties). In this case, a decision will need to be made as to which constructor to use. For this, there is a Constructor Prioritiser. Each may-be-satisifed-constructor is represented by the fully-generated converter that would use that constructor. The prioritiser must then pick one to be used as the converter that should be used for that translation.
+Finally, when a by-constructor conversion is being generated, there may be multiple constructors which may be satisfied (ie. all of their constructor arguments may be provided with values from the source object's properties). In this case, a decision will need to be made as to which constructor to use. For this, there is a Constructor Prioritiser. Each may-be-satisfied-constructor is represented by the fully-generated converter that would use that constructor. The prioritiser must then pick one to be used as the converter that should be used for that translation.
 
 The only Constructor Prioritiser implementation that I currently have is an **ArgsLengthTypeConverterPrioritiser**. This simply picks the constructor which has the most arguments, the thinking being that this must be the constructor that uses the most data from the source type and so will result in the best-populated destination instance possible.
 
@@ -111,13 +111,13 @@ So I changed it to
     ITypeConverter<TSource, TDest> Get<TSource, TDest>();
 
 
-I then changed the Type Converter Factories to throw custom exceptions indicating what property could not be set on the target type or what constructor arguments could not be mappped. Changing the contract so that it is considered an error condition when a mapping could not be created resulted in more information being availble to the caller, more *useful and important* information.
+I then changed the Type Converter Factories to throw custom exceptions indicating what property could not be set on the target type or what constructor arguments could not be mapped. Changing the contract so that it is considered an error condition when a mapping could not be created resulted in more information being available to the caller, more *useful and important* information.
 
 ### Static convenience wrapper
 
 Since I felt like I was cooking on gas at this point, I thought I'd address another problem with this project; trying to use this code for the first time (if you'd just cloned the project, for example) is difficult! I've got a ReadMe file in the project that tells you how to initialise a converter factory and then generate types but it's quite a lot of work to do so!
 
-In some of my other projects I've included "convenience wrappers" to do the fiddly work of initialising everything for the most common case so that the code is as easy as possible to get working with. For example, the [CSSParser](https://bitbucket.org/DanRoberts/cssparser) has the static **Parser** class, with its method "ParseCSS" and "ParseLESS" (with method signatures that will read from strings or from **TextReader**s). The [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier) has the **DefaultNonCachedLessCssLoaderFactory** and **EnhancedNonCachedLessCssLoaderFactory** which can be initialised with only an ASP.Net "Server" reference. And, of course, AutoMapper is phenonemally easy to get going with since there is a static **Mapper** class with CreateMap and Map methods (amongst many others). So I thought that *my* Type Converter library would benefit from something similar!
+In some of my other projects I've included "convenience wrappers" to do the fiddly work of initialising everything for the most common case so that the code is as easy as possible to get working with. For example, the [CSSParser](https://bitbucket.org/DanRoberts/cssparser) has the static **Parser** class, with its method "ParseCSS" and "ParseLESS" (with method signatures that will read from strings or from **TextReader**s). The [CSSMinifier](https://bitbucket.org/DanRoberts/cssminifier) has the **DefaultNonCachedLessCssLoaderFactory** and **EnhancedNonCachedLessCssLoaderFactory** which can be initialised with only an ASP.Net "Server" reference. And, of course, AutoMapper is phenomenally easy to get going with since there is a static **Mapper** class with CreateMap and Map methods (amongst many others). So I thought that *my* Type Converter library would benefit from something similar!
 
 It can't get much simpler than this:
 

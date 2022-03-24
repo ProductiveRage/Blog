@@ -28,7 +28,7 @@ The "*" means that this will be applied to any endpoint. The 65535 was what I fo
 
 ### Server Settings: Thread Counts
 
-So now I was able to overload the server with more concurrents requests than it could handle at once and they were getting queued up. The performance counters are just invaluable here; there are some available for the "Web Service" - which tells us about what's happening at the IIS level - and for "ASP.Net" - which tells us about what's getting into .Net framework. So there could theoretically be limits in IIS that need to be overcome and/or limits in ASP.Net, keeping an eye on these counters gives an insight into where the bottlenecks might be.
+So now I was able to overload the server with more concurrent requests than it could handle at once and they were getting queued up. The performance counters are just invaluable here; there are some available for the "Web Service" - which tells us about what's happening at the IIS level - and for "ASP.Net" - which tells us about what's getting into .Net framework. So there could theoretically be limits in IIS that need to be overcome and/or limits in ASP.Net, keeping an eye on these counters gives an insight into where the bottlenecks might be.
 
 I ramped up the request replay rate and it seemed like the maximum concurrent connections that I could achieve was around 250. The CPU load was low, around 15%, and the memory usage was fairly meagre. Most of the time in the requests was waiting for the data service to respond, so threads were just hanging around. Not enough threads for my liking! I wanted to use more of the resources on the box and be able to deal with more requests.
 

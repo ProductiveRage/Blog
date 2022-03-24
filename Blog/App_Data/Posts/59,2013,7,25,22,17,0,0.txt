@@ -56,7 +56,7 @@ Bear with me while we go briefly back to basics. A typical way to subscribe to a
     {
     };
 
-which defines an anoymous method that becomes somehow registered with the Click event and called when the Click event is raised (I'll be less vague about the "somehow" shortly). The anonymous method is passed as a delegate which matches the **EventHandler** signature. A delegate is essentially a **MethodInfo** and optionally a target object. If a named method had been used - eg
+which defines an anonymous method that becomes somehow registered with the Click event and called when the Click event is raised (I'll be less vague about the "somehow" shortly). The anonymous method is passed as a delegate which matches the **EventHandler** signature. A delegate is essentially a **MethodInfo** and optionally a target object. If a named method had been used - eg
 
     button.Click += ButtonClicked;
 
@@ -68,7 +68,7 @@ with
 
 then the target reference would be the instance of the class the contained that method or would be null if it was a static method. With the anonymous method it's potentially a bit more complicated since Visual Studio does clever things with closures to ensure that anything that exists outside of the closure that is referenced *inside* the closure is still available when the event callback is made. It's outside the scope of this post to go into too much detail on this so for now we'll just approximate by assuming that the target reference that gets passed is a reference to the instance of the class that contains the event-subscribing code.
 
-And in there lies the key! The event publisher keeps hold of these callback delegates and these callback delegates have (internally) a reference to the event subscriber. So the publisher has a possibly-less-than-obvious reference to the subscriber and so the subscriber can't be elligible for garbage collection while the publisher is still "alive" since the publisher has a reference to it!
+And in there lies the key! The event publisher keeps hold of these callback delegates and these callback delegates have (internally) a reference to the event subscriber. So the publisher has a possibly-less-than-obvious reference to the subscriber and so the subscriber can't be eligible for garbage collection while the publisher is still "alive" since the publisher has a reference to it!
 
 Many times this isn't a problem. If a button's Click event triggers some code in a Windows Form, for example, the Button and the Form will probably be disposed of at approximately the same time. The Form being referenced by the Button due to the event subscription is unlikely to be an issue since the Button is unlikely to exist after the Form has been closed and so this link won't be "keeping alive" the Form (ie. it won't be preventing it from being garbage collected).
 
@@ -131,7 +131,7 @@ I said above that delegates are essentially a pairing of a target and a method. 
 
     public delegate void EventHandler<TEventArgs>(object sender, TEventArgs e);
 
-this is compiled into a class that inherits **MulticastDelegate** which itelf inherits **Delegate**. These are both abstract classes. The latter is as I described above whereas the former expresses the intent to potentially have multiple targets and methods. Each method will have the same signature but a single call to the delegate -
+this is compiled into a class that inherits **MulticastDelegate** which itself inherits **Delegate**. These are both abstract classes. The latter is as I described above whereas the former expresses the intent to potentially have multiple targets and methods. Each method will have the same signature but a single call to the delegate -
 
     EventHandler<EventArgs> handler = GetExampleEventHandler();
     handler(this, EventArgs.Empty);
@@ -609,7 +609,7 @@ A static EventHandler may be a method that is explicitly marked as static -
       // Do whatever..
     }
 
-or an anoymous method that doesn't access any instance references -
+or an anonymous method that doesn't access any instance references -
 
     publisher.MyEvent += (sender, e) =>
     {

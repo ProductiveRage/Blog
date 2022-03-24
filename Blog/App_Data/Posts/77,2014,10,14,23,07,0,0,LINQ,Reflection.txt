@@ -103,9 +103,9 @@ Before going too wild, a simple example to illustrate this is a good start:
         ).Compile();
     }
 
-The "titlePropertyRetriever" is an expression that will return the value of the "Title" property from a **RoleDetails** instance that is represented by an expression passed into it. In this case, that expression is the "sourceParameter" which will be combined with the "titlePropertyRetriever" (which, here, represents the entirety of the "body" expression) to create a lambda expression. The "sourceParameter" is the single argument for this particlar lambda.
+The "titlePropertyRetriever" is an expression that will return the value of the "Title" property from a **RoleDetails** instance that is represented by an expression passed into it. In this case, that expression is the "sourceParameter" which will be combined with the "titlePropertyRetriever" (which, here, represents the entirety of the "body" expression) to create a lambda expression. The "sourceParameter" is the single argument for this particular lambda.
 
-A lamba expression can be used in conjuction with other expressions if you need to form a complicated construct. Here we have a very simple action and so we call the "Compile" method and return the result. The static method "Expression.Lambda" returns an **Expression&lt;Func&lt;RoleDetails, string&gt;&gt;**. Calling "Compile" on it returns a **Func&lt;RoleDetails, string&gt;**. This is a delegate that we can call directly in our code.
+A lamba expression can be used in conjunction with other expressions if you need to form a complicated construct. Here we have a very simple action and so we call the "Compile" method and return the result. The static method "Expression.Lambda" returns an **Expression&lt;Func&lt;RoleDetails, string&gt;&gt;**. Calling "Compile" on it returns a **Func&lt;RoleDetails, string&gt;**. This is a delegate that we can call directly in our code.
 
 This code could be used thusly -
 

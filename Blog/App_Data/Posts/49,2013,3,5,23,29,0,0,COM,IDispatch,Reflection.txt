@@ -75,7 +75,7 @@ Another new class is the **CombinedInterfaceApplierFactory** which is intended t
 
 I realised, going back to this project, that I'd got over-excited when I discovered the Lazy&lt;T&gt; class in .Net 4 and used it when there was some work in the code that I wanted to defer until it was definitely required. But this, of course, meant that the code had a dependency on .Net 4! Since I imagine that this could be useful in place of the "dynamic" keyword in some cases, I figured it would make sense to try to remove this dependency. (My over-excitement is probably visible when I wrote about it at [Check, check it out](Post6)).
 
-I was using it with the "threadSafe" option set to true so that the work would only be executed once (at most). This is a fairly straight forward implemenation of the double-checked locking pattern (if there *is* such a thing! :) with a twist that if the work threw an exception then that exception should be thrown for not only the call on the thread that actually performed the work but also subsequent calls:
+I was using it with the "threadSafe" option set to true so that the work would only be executed once (at most). This is a fairly straight forward implementation of the double-checked locking pattern (if there *is* such a thing! :) with a twist that if the work threw an exception then that exception should be thrown for not only the call on the thread that actually performed the work but also subsequent calls:
 
     using System;
 

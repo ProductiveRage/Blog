@@ -10,7 +10,7 @@ The good news is that now that the project is being used in work, I can use some
 
 ### March of the ANTS
 
-The ANTS Performance Profile is a great bit of kit for this sort of thing. I prepared an executable to test that would compile stylesheets from the new site in its current state. This executable had a depedency on the processor code - the idea is I choose something to optimise, rebuild the processor, rebuild the test executable and re-run the profiler.
+The ANTS Performance Profile is a great bit of kit for this sort of thing. I prepared an executable to test that would compile stylesheets from the new site in its current state. This executable had a dependency on the processor code - the idea is I choose something to optimise, rebuild the processor, rebuild the test executable and re-run the profiler.
 
 Things take much longer to run in the profiler than they would otherwise (which is to be expected, the profiler will be tracking all sorts of metrics as the code runs) but performance improvements should mean that the execution time decreases on subsequent runs. And, correspondingly, the component will run more quickly when *not* in the profiler, which is the whole point of the exercise!
 
@@ -175,7 +175,7 @@ Result: The test content is fully processed about 1.2x faster after the above op
 
 ### Conclusion
 
-With the ANTS-identified optimistations and the two changes to the algorithm that processes the content, a total speed-up of about 7.9x has been achieved. This is almost an order of magnitude for not much effort!
+With the ANTS-identified optimisations and the two changes to the algorithm that processes the content, a total speed-up of about 7.9x has been achieved. This is almost an order of magnitude for not much effort!
 
 In real-world terms, the site style content that I was using as the basis of this test can be fully rebuilt from source in just under 2 seconds, rather than the almost 15 seconds it was taking before. When in the tweak / refresh / tweak / refresh cycle, this makes a huge difference.
 

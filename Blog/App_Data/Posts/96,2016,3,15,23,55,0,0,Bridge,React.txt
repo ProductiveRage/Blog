@@ -208,7 +208,7 @@ When you created the class library project, a Class1.cs file will have been adde
 
 Build the solution and then right-click on the "demo.html" file in the project and click on "View in Browser". You should see a happy little "Hi!" welcome message, rendered using React by JavaScript that was translated from C# - an excellent start!
 
-There are some subtle touches here, such as the "JavaScript is required" message that is displayed if the browser has JavaScript disabled (just in case you ever turn it off and forget!) and a "loading" message that is displayed while the JavaScript sorts itself out (usually this will be a barely-perceptibe amount of time but if the CDN host that the React library is coming from is being slow then it may not be instantaneous). The "main" div initially has a "loading" class on it, which is removed when the code above executes. Note that the [Ready] attribute on the "Main" function is a Bridge attribute, indicating code that should be called when the page has loaded (similar in principle to on-DOM-ready, frequently used by jQuery code).
+There are some subtle touches here, such as the "JavaScript is required" message that is displayed if the browser has JavaScript disabled (just in case you ever turn it off and forget!) and a "loading" message that is displayed while the JavaScript sorts itself out (usually this will be a barely-perceptible amount of time but if the CDN host that the React library is coming from is being slow then it may not be instantaneous). The "main" div initially has a "loading" class on it, which is removed when the code above executes. Note that the [Ready] attribute on the "Main" function is a Bridge attribute, indicating code that should be called when the page has loaded (similar in principle to on-DOM-ready, frequently used by jQuery code).
 
 To take advantage of the "loading" class' presence / absence, it would be a nice touch to have the "loading" text quite pale initially (it's reassuring to know that the app is, in fact, loading, but it doesn't need to be right in your face). To do so, add a file "styles.css" alongside the "demo.html" file. It's already referenced by the markup we've pasted into "demo.html", so it will be picked up when you refresh the page. Since we're creating a stylesheet, it makes sense to include some style resets (my go-to for this is by Eric Meyer) -
 
@@ -445,7 +445,7 @@ I'm far from finished for today, though - I want to add a way to persist message
 
 ### Message persistence
 
-While I want to simulate a server-based API, where read / write requests aren't instantaneous and we need to think about how to deal with async calls, I don't want the overhead of needing an endpoint to be configured somewhere. So we'll go with a simple interface that will be implemented in an entirely client-side class, that introduces artifical delays to mimic server-calling time.
+While I want to simulate a server-based API, where read / write requests aren't instantaneous and we need to think about how to deal with async calls, I don't want the overhead of needing an endpoint to be configured somewhere. So we'll go with a simple interface that will be implemented in an entirely client-side class, that introduces artificial delays to mimic server-calling time.
 
 Create a new folder in the project root called "API" and add a new .cs file "IReadAndWriteMessages.cs", the contents of which should be:
 
@@ -496,7 +496,7 @@ Bridge supports the C# "async" keyword and provides its own implementation of Ta
 
 In order to enable saving, the **MessageEditor** needs a "Save" button and it needs an "on-save" callback to be specified on its props. While saving, the form should be disabled, so the **MessageEditor** props need a "Disabled" flag as well.
 
-*When designing an SPA like this, you need to think about whether you will support "optimistic updates", where clicking Save clears the form and acts as if the save action was instanteously accepted - but brings it to the user's attention somehow if the save failed or was rejected. I'm going to go for a simpler "pessimistic update" flow, where the form is disabled until the save is acknowledged, at which point the form will be cleared and re-enabled so that a further entry may be written and then saved.*
+*When designing an SPA like this, you need to think about whether you will support "optimistic updates", where clicking Save clears the form and acts as if the save action was instantaneously accepted - but brings it to the user's attention somehow if the save failed or was rejected. I'm going to go for a simpler "pessimistic update" flow, where the form is disabled until the save is acknowledged, at which point the form will be cleared and re-enabled so that a further entry may be written and then saved.*
 
 The **MessageEditor** should now looks like this:
 

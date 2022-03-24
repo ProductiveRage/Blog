@@ -75,7 +75,7 @@ I was almost in two minds about this because it feels like it _is_ inserting a l
 
 #### No bare selectors may occur in the non-reset-or-theme rules (a bare selector may occur _within_ a nested selector so long as child selectors are strictly used)
 
-Bare selectors (eg. "div" rather than "div.AboutMe", or even "div.AboutMe div") are too generic and will almostly certainly end up polluting another element's style cascade, which we're trying to avoid.
+Bare selectors (eg. "div" rather than "div.AboutMe", or even "div.AboutMe div") are too generic and will almost certainly end up polluting another element's style cascade, which we're trying to avoid.
 
 The reason for the exception around child selectors is that this may be used in places where classes don't exist on all of the elements to be targeted. Or if the bullet point type for a particular list is to be altered, we wouldn't expect to have to rely upon classes - eg.
 
@@ -203,7 +203,7 @@ is used instead of
 
     div.ListContainer > ul > li { list-style-type: square; }
 
-and where previously class names might have been repeated in a CSS stylehset because similar properties were being set for multiple elements, this should now be done with mixins - eg. instead of
+and where previously class names might have been repeated in a CSS stylesheet because similar properties were being set for multiple elements, this should now be done with mixins - eg. instead of
 
     div.Outer, div.Inner
     {

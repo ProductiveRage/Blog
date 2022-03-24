@@ -36,7 +36,7 @@ And maybe I could experiment with optimising for cases where keys are *not* pres
 
 Well.. I'll not ramble on too much more about this. The .Net Dictionary still beat me.
 
-(Just in case you have a morbid curiousity to the myriad ways in which I failed - and in which I succeeded - there will be a link to a Bitbucket repository further down with example code).
+(Just in case you have a morbid curiosity to the myriad ways in which I failed - and in which I succeeded - there will be a link to a Bitbucket repository further down with example code).
 
 ### Some algorithm research!
 
@@ -239,7 +239,7 @@ Running the test app I saw a performance improvement over the .Net Dictionary by
 
 However.. due to the manner in which the TST performs its lookups, this is really the ideal case for it and so further investigation is required before it can be considered a complete success.
 
-So to look further into it I took the same randomly-selected keys and reversed half of them so that only have of them should match (there will be a few single character keys and some pallindromes - I ran a quick a quick check and there were 275 in the set 86,728 keys so they're fairly negligible). This time the TST was over 1.9 times as fast as the .Net Dictionary - still definitely an improvement but not as dramatic. If I reverse _all_ of the keys then it turns out the TST is _just_ slower than the .Net Dictionary (over 97% the speed, but not quite as fast nonetheless).
+So to look further into it I took the same randomly-selected keys and reversed half of them so that only have of them should match (there will be a few single character keys and some palindromes - I ran a quick a quick check and there were 275 in the set 86,728 keys so they're fairly negligible). This time the TST was over 1.9 times as fast as the .Net Dictionary - still definitely an improvement but not as dramatic. If I reverse _all_ of the keys then it turns out the TST is _just_ slower than the .Net Dictionary (over 97% the speed, but not quite as fast nonetheless).
 
 Before I go too far down this path, though, there's something else that's bugging me. The order in which the keys are inserted while the tree is being constructed is going to alter the internal structure of the completed tree. It seems very unlikely that every order will have identical retrieval performance. Which brings on to thinking hard about..
 

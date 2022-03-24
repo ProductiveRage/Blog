@@ -32,7 +32,7 @@ This is different from explicitly setting a variable to null. This is an intenti
 
 Why it decides to describe "null" as an "object" could be a discussion for another day, but it's sufficient to show that it has been given an actual value, it is not "undefined" any more.
 
-Now these are similar to VBScript's Empty and Null - in VBScript, Empty means that the variable has not been initialised while Null means that it has *explicitly* set to Null. There are occassions where it's useful to say "I have tried to access this item and have found it to be absent" - hence giving it a null value - as opposed to "I haven't even attempted to populate this value".
+Now these are similar to VBScript's Empty and Null - in VBScript, Empty means that the variable has not been initialised while Null means that it has *explicitly* set to Null. There are occasions where it's useful to say "I have tried to access this item and have found it to be absent" - hence giving it a null value - as opposed to "I haven't even attempted to populate this value".
 
 But Nothing is a different beast. VBScript has different assignment semantics for what it considers to be object references versus primitive types. If you want to set a value to be an "object" type (a VBScript class instance, for example) then you have to use the "SET" keyword -
 
@@ -70,7 +70,7 @@ So VBScript needs a way to represent an object type that effectively means "no v
 
 For a long time I'd thought that Nothing must somehow be an internal VBScript concept. There were three things that had me half-convinced of this:
 
-1. There was no carryover into VB.Net, there is "Nothing" there but it is equivalent to null in C# - there aren't two values that can be accessed (Null vs Nothing), not even for some sort of backward compability
+1. There was no carryover into VB.Net, there is "Nothing" there but it is equivalent to null in C# - there aren't two values that can be accessed (Null vs Nothing), not even for some sort of backward compatibility
 2. If you pass Nothing over the COM boundary to a .net COM component, you get a null reference (not some magic other object type)
 3. Multiple web searches failed; "How do I represent Nothing in a COM component to interact with VBScript?" [Crickets..](http://www.youtube.com/watch?v=e2KVj2vVxUs)
 

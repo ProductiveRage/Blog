@@ -160,7 +160,7 @@ I'm sure that I've read somewhere* that on some devices, having many such sectio
 
 Note that this will move all of the media query sections to the end of the style content. If your styles rely on them appearing in the final output in the same order as they appear in the source then this may pose a problem. But this is one of the issues addressed by the [Non-cascading CSS](Post42) rules, so if they're followed then this manipulation will always be safe.
 
-\* **Update (4th June):** It finally found what I was thinking of but couldn't find - it was [this comment](http://alwaystwisted.com/post.php?s=2012-05-05-everyday-im-bubbling-with-media-queries-and-less#comment-537669505) on the artible [Everyday I'm Bubbling. With Media Queries and LESS](http://alwaystwisted.com/post.php?s=2012-05-05-everyday-im-bubbling-with-media-queries-and-less).
+\* **Update (4th June):** It finally found what I was thinking of but couldn't find - it was [this comment](http://alwaystwisted.com/post.php?s=2012-05-05-everyday-im-bubbling-with-media-queries-and-less#comment-537669505) on the article [Everyday I'm Bubbling. With Media Queries and LESS](http://alwaystwisted.com/post.php?s=2012-05-05-everyday-im-bubbling-with-media-queries-and-less).
 
 ### More to come!
 

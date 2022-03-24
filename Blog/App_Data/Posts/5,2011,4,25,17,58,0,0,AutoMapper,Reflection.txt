@@ -4,7 +4,7 @@ As I alluded to in an earlier post ([The joys of AutoMapper](Post3)), I've been 
 
 [https://github.com/ProductiveRage/AutoMapper-By-Constructor-1](https://github.com/ProductiveRage/AutoMapper-By-Constructor-1)
 
-There's an example in that download (and at the bottom of this post) if curiousity gets the better of you but I'm going to step through an outline of the solution here.
+There's an example in that download (and at the bottom of this post) if curiosity gets the better of you but I'm going to step through an outline of the solution here.
 
 Before we get going, it's worth noting that I'm hoping to expand on this solution and improve it in a number of areas - to make life easier if you're starting with this post, I've tagged the repository as "FirstImplementation" in its current state, so for the solution in its current form (as I'm about to describe), it may be best to download it from here:
 
@@ -16,7 +16,7 @@ Before we get going, it's worth noting that I'm hoping to expand on this solutio
 1. For each argument in the constructor, try to find a property in srcType that can be used as the value for that argument
   * That property must meet name-matching criteria
   * Its value must be mappable to the constructor argument's type
-1. If multiple destType constructors can be callled using srcType's data, the most appropriate one must be selected
+1. If multiple destType constructors can be called using srcType's data, the most appropriate one must be selected
 1. The ConstructorInfo reference and a list of "Property Getters" are handed off to a "Type Converter" class that now has all of the necessary information to create a new instance of destType given a srcType reference
   * A "Property Getter" is an object that can retrieve the value of a specified PropertyInfo from a srcType instance and cast that value to a particular type (ie. the type that the destType constructor argument requires)
 1. This "Type Converter" will expose a Convert method that accepts a srcType reference and returns a new destType instance - we can pass this as a Func&lt;srcType, destType&gt; to an AutoMapper ConstructUsing method call and we're all done!

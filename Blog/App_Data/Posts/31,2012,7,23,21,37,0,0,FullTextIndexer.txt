@@ -2,7 +2,7 @@
 
 The [Full Text Indexer](Post30) that I talked about last time took a definition for an Index Generator for a specific TSource type and produced an IndexData instance, using that generator, for a TSource set.
 
-In the example shown there, it created an IndexGenerator for IArticle and then generated an Index for an IArticle list. The IIndexData&lt;int&gt; (TKey is an int in this case as the key on IArticle is its Id field, which is an int). This IIndexData&lt;int&gt; is an immututable data structure and so it may not be immediately obvious how to update it when the source data has changed.
+In the example shown there, it created an IndexGenerator for IArticle and then generated an Index for an IArticle list. The IIndexData&lt;int&gt; (TKey is an int in this case as the key on IArticle is its Id field, which is an int). This IIndexData&lt;int&gt; is an immutable data structure and so it may not be immediately obvious how to update it when the source data has changed.
 
 Last time I mentioned that IIndexData&lt;TKey&gt; has this method:
 
@@ -68,7 +68,7 @@ but the full interface is:
         IEqualityComparer<TKey> KeyComparer { get; }
     }
 
-The TokenComparer and KeyComparer are the instances passed into the IndexGenerator's constructor (a DefaultStringNormaliser and an IntEqualityComparer in last time's example). The GetAllTokens method returns a set of tokens that have matches in the IndexData (where multiple tokens are present in the data that are considered equivalent, only one will be in the set returned by GetAllTokens - the example used the DefaultStringNormaliser which ignores case, so if data for the tokens "Token" and "TOKEN" is present, and encountered in that order, then only "Token" would be in the GetAllTokens set, "TOKEN" wouldn't have been added as a distint value as it is equivalent to "Token").
+The TokenComparer and KeyComparer are the instances passed into the IndexGenerator's constructor (a DefaultStringNormaliser and an IntEqualityComparer in last time's example). The GetAllTokens method returns a set of tokens that have matches in the IndexData (where multiple tokens are present in the data that are considered equivalent, only one will be in the set returned by GetAllTokens - the example used the DefaultStringNormaliser which ignores case, so if data for the tokens "Token" and "TOKEN" is present, and encountered in that order, then only "Token" would be in the GetAllTokens set, "TOKEN" wouldn't have been added as a distinct value as it is equivalent to "Token").
 
 The interesting methods in this context are Combine and Remove.
 

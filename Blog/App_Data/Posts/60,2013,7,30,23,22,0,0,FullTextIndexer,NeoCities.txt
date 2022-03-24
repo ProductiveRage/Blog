@@ -70,7 +70,7 @@ Now, I'm not going to be using it with localStorage but it's gratifying to see t
 
 Preliminary tests went well; I was compressing this, decompressing that, testing this, testing that. It was all going swimmingly! The only problem now was that this was a clearly a custom (and clever) implementation of the algorithm so I wouldn't be able to use anything standard on the C# side to compress the data if I wanted the javascript to be able to decompress it again. And the whole point of all of this is to "flatten" my primary blog and serialise the search index in one process, such that it can be hosted on [NeoCities](http://necities.org).
 
-The javscript code is fairly concise, so I translated it into C#. When I'd translated C# classes from my Full Text Indexer into javascript equivalents, it had gone surprisingly painlessly. I'd basically just copied the C# code into an empty file and then removed types and tweaked things to work as javascript. So I thought I'd take a punt and try the opposite - just copy the javascript into an empty C# class and then try to fix it up. Adding appropriate types and replacing javascript methods with C# equivalents. This too seemed to go well, I was compressing some strings to text files, pulling them with ajax requests in javascript, decompressing them and viewing them. Success!
+The javascript code is fairly concise, so I translated it into C#. When I'd translated C# classes from my Full Text Indexer into javascript equivalents, it had gone surprisingly painlessly. I'd basically just copied the C# code into an empty file and then removed types and tweaked things to work as javascript. So I thought I'd take a punt and try the opposite - just copy the javascript into an empty C# class and then try to fix it up. Adding appropriate types and replacing javascript methods with C# equivalents. This too seemed to go well, I was compressing some strings to text files, pulling them with ajax requests in javascript, decompressing them and viewing them. Success!
 
 Until..
 
@@ -98,7 +98,7 @@ And there was a discrepancy! The character codes received were not the same that
 
 Thinking still that this must *somehow* be encoding-related, I started playing around with the encoding options when writing the data to disk. And noticed, innocently hidden away in an alternate constructor signature, the **System.Text.UTF8Encoding** class has an option to "throwOnInvalidBytes". What *is* this?
 
-I knew how UTF8 worked, that it uses a variable number of bytes and uses the most-signicant-bits to describe how many bytes are required for the current character (the [Wikipedia](http://en.wikipedia.org/wiki/Utf8) article explains it nicely) and thought that that was pretty much all there was to it. So how could a byte be invalid?? Well, with this constructor argument set to true, I was getting the error
+I knew how UTF8 worked, that it uses a variable number of bytes and uses the most-signficant-bits to describe how many bytes are required for the current character (the [Wikipedia](http://en.wikipedia.org/wiki/Utf8) article explains it nicely) and thought that that was pretty much all there was to it. So how could a byte be invalid?? Well, with this constructor argument set to true, I was getting the error
 
 > Unable to translate Unicode character \uD900 at index 6 to specified code page.
 
@@ -106,7 +106,7 @@ so clearly particular bytes *can* be invalid somehow..
 
 ### UTF Limitations
 
-With this error, it didn't actually take much searching. There's a link on www.unicode.com; [Are there any 16-bit valuese that are invalid?](http://www.unicode.org/faq/utf_bom.html#utf16-7) that states that
+With this error, it didn't actually take much searching. There's a link on www.unicode.com; [Are there any 16-bit values that are invalid?](http://www.unicode.org/faq/utf_bom.html#utf16-7) that states that
 
 > Unpaired surrogates are invalid in UTF8. These include any value in the range D80016 to DBFF16 not followed by a value in the range DC0016 to DFFF16, or any value in the range DC0016 to DFFF16 not preceded by a value in the range D80016 to DBFF16
 

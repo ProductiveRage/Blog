@@ -59,7 +59,7 @@ That's the detail about the source locations data that enabled the GetConsecutiv
 
     var results = index.GetConsecutiveMatches("penguins are the best");
 
-The default token breaker is a **WhiteSpaceExtendingTokenBreaker** that treats common puncuation characters as whitespace (such as square, round, curly or triangular brackets, commas, full stops, colons and some others). This is the same token breaker that the **AutomatedIndexGeneratorFactory** will use unless a token break override is specified.
+The default token breaker is a **WhiteSpaceExtendingTokenBreaker** that treats common punctuation characters as whitespace (such as square, round, curly or triangular brackets, commas, full stops, colons and some others). This is the same token breaker that the **AutomatedIndexGeneratorFactory** will use unless a token break override is specified.
 
 The default weight-combiner-for-consecutive-runs will sum the weights of tokens in the consecutive run and then multiply by two to the power number-of-tokens-minus-one (so x2 if there are two tokens that make up the run, x4 if there are three, x8 if there are four, etc..). The default weight-combiner-for-all-of-a-results-consecutive-runs will sum the weights of the tokens (which is the default weight combiner used by the **AutomatedIndexGeneratorFactoryBuilder**).
 
@@ -75,7 +75,7 @@ For my blog, I persist the search index data to disk so that it doesn't need to 
 
 I was concerned that this additional source location data would make a significant difference to the size of this stored data, which could be inconvenient because I tend to build it before uploading changes to the web server (so smaller is better). And, to be honest, I had already been somewhat surprised that the data I persist to disk was several megabytes. (Even though that also contains all of the raw Post contents, along with the AutoComplete content extracted from analysing the Posts, it was still larger than my gut instinct suspected it would be). So I didn't want to make it any worse!
 
-I've used the bog standard **BinaryFormatter** to serialise the data and **GZipStream** to compress it. To see how much overhead was added by this approach compared to writing a custom serialisation method for the **IndexData**, I wrote the **IndexDataSerialiser**. This only works with **IndexData** (the specific implemenation of **IIndexData** rather than _any_ **IIndexData** implementation) which means that there are assumptions that can be made (eg. that all of the source locations will be instances of the **SourceFieldLocation** class and not another class derived from it). And it's reduced the size of the data for the Index that my blog content generates to about 10% of what it was before. Win!
+I've used the bog standard **BinaryFormatter** to serialise the data and **GZipStream** to compress it. To see how much overhead was added by this approach compared to writing a custom serialisation method for the **IndexData**, I wrote the **IndexDataSerialiser**. This only works with **IndexData** (the specific implementation of **IIndexData** rather than _any_ **IIndexData** implementation) which means that there are assumptions that can be made (eg. that all of the source locations will be instances of the **SourceFieldLocation** class and not another class derived from it). And it's reduced the size of the data for the Index that my blog content generates to about 10% of what it was before. Win!
 
 The **IndexDataSerialiser** is a static class with two methods:
 

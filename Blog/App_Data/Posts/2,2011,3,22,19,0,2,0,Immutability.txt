@@ -1,6 +1,6 @@
 ## Problems in Immutability-land
 
-Having sung the praises of immutability last time, there *are* a couple of flies in the ointment. The first is a bit of a non-issue I think, but bears mentioning; if I have a class with half a dozen properties it feels like a *lot* of monotonous typing hammering out those private properties, those arguments-not-whitespace-or-null checks, those property assigments, those public properties, those comments about the class contract - it's boring! Now I know that developers should all be superfast, touch-typist maniacs ([http://www.codinghorror.com/blog/2008/11/we-are-typists-first-programmers-second.html](http://www.codinghorror.com/blog/2008/11/we-are-typists-first-programmers-second.html)) - and I am, that's not the problem - but it still makes me grimace when I know I have to throw down a big chunk of boilerplate-looking code like the Name class I used in an example last time.
+Having sung the praises of immutability last time, there *are* a couple of flies in the ointment. The first is a bit of a non-issue I think, but bears mentioning; if I have a class with half a dozen properties it feels like a *lot* of monotonous typing hammering out those private properties, those arguments-not-whitespace-or-null checks, those property assignments, those public properties, those comments about the class contract - it's boring! Now I know that developers should all be superfast, touch-typist maniacs ([http://www.codinghorror.com/blog/2008/11/we-are-typists-first-programmers-second.html](http://www.codinghorror.com/blog/2008/11/we-are-typists-first-programmers-second.html)) - and I am, that's not the problem - but it still makes me grimace when I know I have to throw down a big chunk of boilerplate-looking code like the Name class I used in an example last time.
 
     public class Name
     {
@@ -42,7 +42,7 @@ Another issue I've come across a few times was highlighted quite nicely by somet
 
 To work around this I used an object that appear immutable to the element but which would not guarantee to be able to respond to requests for references to other element until the Init phase of the pagecycle (this was in ASP.Net and the process was to parse the config file, build a list of controls that the elements required and then add those controls to a Page all at once - so the Init event for each of those controls would be raised after all of the elements had been initialised and the controls created). This object would contain no data initially and be used just as a reference to pass to the elements during initialisation. When the initialisation of all of the elements was complete, a reference to the list of these elements was passed to this mystery object; our "deferred element store". And then the elements' controls were added to the Page. So when the element classes requested access to other elements during or after the Init phase, the data was available!
 
-Now, this clearly immutable data - it's more like some sort of single-setting, delayed-instantation object.. or something. I'm going to link to Eric Lippert again here since he's pretty much the guru on this sort of thing and since he describes this precise scenario in the following article:
+Now, this clearly immutable data - it's more like some sort of single-setting, delayed-instantiation object.. or something. I'm going to link to Eric Lippert again here since he's pretty much the guru on this sort of thing and since he describes this precise scenario in the following article:
 
 [http://blogs.msdn.com/b/ericlippert/archive/2007/11/13/immutability-in-c-part-one-kinds-of-immutability.aspx](http://blogs.msdn.com/b/ericlippert/archive/2007/11/13/immutability-in-c-part-one-kinds-of-immutability.aspx)
 
@@ -106,7 +106,7 @@ Now, this clearly immutable data - it's more like some sort of single-setting, d
 
 This could just as well be used if there are circular references between classes. I suppose then you'd have to have a container to handle both objects being instantiated and pass a read-only wrapper of this container to both classes, then push references to those instances into the container.
 
-This isn't quite the same as the "obervational immutability" described in that article, but I feel I've got an article about dynamic factory classes coming on which will touch on that!
+This isn't quite the same as the "observational immutability" described in that article, but I feel I've got an article about dynamic factory classes coming on which will touch on that!
 
 ### Still loving it
 

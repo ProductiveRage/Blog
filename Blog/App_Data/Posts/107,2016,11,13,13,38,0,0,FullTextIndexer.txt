@@ -150,7 +150,7 @@ This is another case of functionality that is in .NET 4.5.2 but that is an optio
 
 <img alt="NormalizationForm exists in the System.Globalization.Extensions package for .NET Core" src="/Content/Images/Posts/SystemGlobalizationExtensionsDependency.png" class="AlwaysFullWidth NoBorder" />
 
-*Note: Selecting the "Add package System.Globalization.Extensions 4.0.1" option will add the package as a dependecy for netstandard in the project.json file and it will add the required "using System.Globalization;" statement to the class - which is very helpful of it!*
+*Note: Selecting the "Add package System.Globalization.Extensions 4.0.1" option will add the package as a dependency for netstandard in the project.json file and it will add the required "using System.Globalization;" statement to the class - which is very helpful of it!*
 
 All that remained now was to use the workaround from before to add the .NET Core version of the "Core" project as a reference to the projects that required it.
 
@@ -182,7 +182,7 @@ to the project.json file.
 
 Having done all of this, the project should compile *and* the tests should appear in the Test Explorer window.
 
-*Note: I wanted to fully understand each step required to create an xUnit test project but you could also just follow the instructions at [Getting started with xUnit.net (.NET Core / ASP.NET Core)](https://xunit.github.io/docs/getting-started-dotnet-core.html) which provides you a complete project.json to paste in - one of the nice things about .NET Core projects is that changing (and saving) the project.json is all it takes to change from being a class library (and targeting netstandard) to being a console application (and targeting netcoreapp). Similarly, references to other projects and to NuGet packges are all specified there and saving changes to that project file results in those reference immediately being resolved and any specified packages being downloaded.*
+*Note: I wanted to fully understand each step required to create an xUnit test project but you could also just follow the instructions at [Getting started with xUnit.net (.NET Core / ASP.NET Core)](https://xunit.github.io/docs/getting-started-dotnet-core.html) which provides you a complete project.json to paste in - one of the nice things about .NET Core projects is that changing (and saving) the project.json is all it takes to change from being a class library (and targeting netstandard) to being a console application (and targeting netcoreapp). Similarly, references to other projects and to NuGet packages are all specified there and saving changes to that project file results in those reference immediately being resolved and any specified packages being downloaded.*
 
 In the class library projects, I made them all target both netstandard and net452. With the test suite project, if the project.json file is changed to target both .NET Core ("netcoreapp1.0", since it's a console app) and full fat .NET ("net452") then two different versions of the suite will be built. The clever thing about this is that if you use the command line to run the tests -
 

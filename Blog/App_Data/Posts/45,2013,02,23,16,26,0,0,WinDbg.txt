@@ -44,7 +44,7 @@ Of these, one reports an exception. It's a bit vague-sounding, a "System.Reflect
 
 Not *that* helpful-looking yet, but there's a hint to dig deeper and look at the InnerException:
 
-![WinDbg PrintException InnterException](/Content/Images/Posts/WinDbgASPError4.png "WinDbg PrintException InnerException")
+![WinDbg PrintException InnerException](/Content/Images/Posts/WinDbgASPError4.png "WinDbg PrintException InnerException")
 
 Well *now* we're getting somewhere! When the component tries to access the System.Web.HttpRuntime.Cache an exception is being raised. This message is a little cryptic and I have no idea why it would only be happening on first access but at least I have something to search for and it's not directly *my* code that's causing it!
 
@@ -62,7 +62,7 @@ There are a couple of caveats:
 1. It must be a debug build, release builds won't work
 1. This doesn't appear to be supported by Visual Studio Express
 
-**Side note:** Because I'm curious, I wanted to know what specifically about a release build it was that prevented it from working. From playing around with the settings, there are two things that appear to make the difference - in the project properties, under the Build tab, "Optimize code" must be unchecked and "Debug Info" must be set to "full" (rather than the default "pdb-only" in the "Advanced Build Settings" (accessed by cliking the "Advanced" button). Obviously, disabling optimisations means you're disabling the benefits of generating a release build..
+**Side note:** Because I'm curious, I wanted to know what specifically about a release build it was that prevented it from working. From playing around with the settings, there are two things that appear to make the difference - in the project properties, under the Build tab, "Optimize code" must be unchecked and "Debug Info" must be set to "full" (rather than the default "pdb-only" in the "Advanced Build Settings" (accessed by clicking the "Advanced" button). Obviously, disabling optimisations means you're disabling the benefits of generating a release build..
 
 To try this out, I created the simplest program I could think of investigating:
 
@@ -91,7 +91,7 @@ which will "dump complete memory image" (according to the very useful [WinDbg / 
 
 ### Loading the dump file
 
-As described in that post ([First look at debugging .NET 4.0 dumps in Visual Studio 2010](http://blogs.msdn.com/b/tess/archive/2009/06/16/first-look-at-debugging-net-4-0-dumps-in-visual-studio-2010.aspx)), the default symbol server can be enabled by going to Tools / Options / Debgging / Symbols and enabling the microsoft symbol server location.
+As described in that post ([First look at debugging .NET 4.0 dumps in Visual Studio 2010](http://blogs.msdn.com/b/tess/archive/2009/06/16/first-look-at-debugging-net-4-0-dumps-in-visual-studio-2010.aspx)), the default symbol server can be enabled by going to Tools / Options / Debugging / Symbols and enabling the microsoft symbol server location.
 
 Then open the dump file in Visual Studio (nothing more complicated than going to File / Open and selecting the file).
 

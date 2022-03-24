@@ -84,7 +84,7 @@ For more complicated type graphs this could quickly get tiring! What I *really* 
 
 ### The ExtendableCompilableTypeConverterFactory
 
-This class basically wraps up the duplication seen above and returns a new ExtendableCompilableTypeConverterFactory instance each time that CreateMap is successfully called, the new instance having a Compilable Property Getter than can support that mapping. If the CreateMap calls was *not* successful then an exception will be raised - this will be case if there is no constructor on the destination type whose arguments can all be satisified by properties on the source type (this also covers cases where additional mappings are required for referenced types). This exception is equivalent to the AutoMapperMappingException that AutoMapper throws in similar circumstances.
+This class basically wraps up the duplication seen above and returns a new ExtendableCompilableTypeConverterFactory instance each time that CreateMap is successfully called, the new instance having a Compilable Property Getter than can support that mapping. If the CreateMap calls was *not* successful then an exception will be raised - this will be case if there is no constructor on the destination type whose arguments can all be satisfied by properties on the source type (this also covers cases where additional mappings are required for referenced types). This exception is equivalent to the AutoMapperMappingException that AutoMapper throws in similar circumstances.
 
 I'm just going to jump right in with this - if you've been reading this far then this will hold no challenges or surprises.
 

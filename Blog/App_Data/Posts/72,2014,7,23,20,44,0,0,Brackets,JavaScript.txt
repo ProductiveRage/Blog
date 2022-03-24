@@ -73,7 +73,7 @@ The ".call(this)" at the bottom ensures that the "this" reference is maintained 
 
 It's also worth noting on that page, that "Node implements [CommonJS Modules 1.0](http://www.commonjs.org/specs/modules/1.0)", which is helpful information when trying to compare all of the different mechanism that different solutions use.
 
-At this point, I did't know the difference between RequireJS, CommonJS, AMD; I had just heard the names. And didn't really know what else could be out there that I *hadn't* heard of!
+At this point, I didn't know the difference between RequireJS, CommonJS, AMD; I had just heard the names. And didn't really know what else could be out there that I *hadn't* heard of!
 
 ### What does Brackets use?
 
@@ -263,11 +263,11 @@ So these requirements lead to
 
     });
 
-A "require" argument is passed to the factory method now. For the Brackets case, this is fine since a "requires" argument is passed when "define" calls the factory method anyway. When "define" does not exist but the environment has a "require" method available, then this will be passed to the factory method (for Node). If there *isn't* a "require" method available then the dependency is retrieved from the original "this" reference - this is for the browser case (where "this" would have been the global window reference when the dependency code was evaulated).
+A "require" argument is passed to the factory method now. For the Brackets case, this is fine since a "requires" argument is passed when "define" calls the factory method anyway. When "define" does not exist but the environment has a "require" method available, then this will be passed to the factory method (for Node). If there *isn't* a "require" method available then the dependency is retrieved from the original "this" reference - this is for the browser case (where "this" would have been the global window reference when the dependency code was evaluated).
 
 the "require" passed will be an empty function; this is for the browser case.
 
-***Correction (19th August 2014):** I originally used an empty function if there was no "require" method available, for the browser case. But this was obviously wrong, since it would mean that nested depedencies would not have been  supported, when it was my intention that they should be.*
+***Correction (19th August 2014):** I originally used an empty function if there was no "require" method available, for the browser case. But this was obviously wrong, since it would mean that nested dependencies would not have been  supported, when it was my intention that they should be.*
 
 The only other important change is a string to specify the dependency name, right at the start of the content - so it's easy to see straight away what needs changing if this template is copy-pasted for other modules.
 

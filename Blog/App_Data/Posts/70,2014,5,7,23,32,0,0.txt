@@ -18,7 +18,7 @@ Although it seems obvious at a first glance what a logger should do (log message
 
 1. Convenience methods should exist for the most common logging calls, including calls that will ignore any logging errors (if a call to log a warning failed, what am I going to do with a warning about logging the warning.. try to log it?!)
 
-1. The framework should be simple-to-use, without any magic (I had to integrate with a library that used log4net once, I didn't like the static references or how incredibly difficult it seemed to be to configure it programatically)
+1. The framework should be simple-to-use, without any magic (I had to integrate with a library that used log4net once, I didn't like the static references or how incredibly difficult it seemed to be to configure it programmatically)
 
 A follow-on from points 3 (about batching) and 4 (about error handling) is that it should to try to log as much as possible if things go wrong. For example, if a batch of six log messages are to be written and it turns out that one of those messages throws an exception when its message content is evaluated, then that one message should be ignored and the others written. This is a bit different to how I would normally like to write code (fail as fast as possible and identify what failed) but for logging it feels like it makes sense.
 
@@ -87,7 +87,7 @@ The core interface itself is very simple, a logger implementation needs to be ab
       Error
     }
 
-I considered documenting this interface with stricter expected behaviour regarding null entries in the set but logger implementations have more to worry aboun that just null messages. Since the messages' *ContentGenerator* delegates aren't executed until the messages actually need to be logged, there's no way to know if they're going to throw an exception or not until that time. So it seemed to me that it was best to leave it up to the logger implementation to deal with "dodgy messages" (null references or messages whose *ContentGenerators* blow up). This way it is an explicit expectation that the logger will have to do so, and something that the implementation writer should be aware of (since it's expressed in the interface's doc comment!).
+I considered documenting this interface with stricter expected behaviour regarding null entries in the set but logger implementations have more to worry about that just null messages. Since the messages' *ContentGenerator* delegates aren't executed until the messages actually need to be logged, there's no way to know if they're going to throw an exception or not until that time. So it seemed to me that it was best to leave it up to the logger implementation to deal with "dodgy messages" (null references or messages whose *ContentGenerators* blow up). This way it is an explicit expectation that the logger will have to do so, and something that the implementation writer should be aware of (since it's expressed in the interface's doc comment!).
 
 The thing to take away from all this talk about exception-handling is that it should be something for the implementation to worry about rather than the caller. The caller should just be able to hand off some information and go about its day!
 
@@ -200,9 +200,9 @@ Many of the loggers in the solution have alternate "shorthand" constructors, whe
 
     public ThrottlingLogger(ILogEvents logger)
 
-where *mimimumFrequency* is provided with a default value of 2 seconds, *maximumNumberOfBufferedItems* a default of 50 and *individualLogEntryErrorBehaviour* a default of "Ignore".
+where *minimumFrequency* is provided with a default value of 2 seconds, *maximumNumberOfBufferedItems* a default of 50 and *individualLogEntryErrorBehaviour* a default of "Ignore".
 
-For a long-running service that logs its information to disk (which is one of the most comon cases that I need this sort of thing for), these seem like appropriate starting values.
+For a long-running service that logs its information to disk (which is one of the most common cases that I need this sort of thing for), these seem like appropriate starting values.
 
 It should be noted that, for such a service, it would make most sense for a single logger reference to be used by all request threads, otherwise there could still be contention when flushing the messages to disk. The **ThrottlingLogger** uses a **ConcurrentQueue** internally and so is thread-safe for pushing messages to. If a single **ThrottlingLogger** is used by all threads then it will mean that only one thread will ever be writing the disk log at a time, which will avoid any "file in use" IO errors that more naive disk-writing log mechanisms may risk.
 

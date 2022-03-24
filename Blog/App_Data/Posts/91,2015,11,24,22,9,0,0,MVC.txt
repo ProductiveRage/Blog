@@ -41,7 +41,7 @@ It turns out that you can't use RedirectToAction unless you have a route configu
         new { controller = "Default", action = "Force404" }
     );
 
-Even if I don't want any URL to match to this Controller / Action, I still need a route to be specified. Although the "RedirectToAction" function takes arguments for "actionName" and "controllerName", just specifying these is not enough - that route must exist. And the order in which the routes are specified is still important here - if there is a catch-all route before this route is specified then this route will not be hit. Maybe there's a good reason for all this, but I really can't see it. If there's a function called "RedirectToAction" and I give it an unambigous name of a Controller and an Action, then I expect it to redirect.. to.. that.. action.
+Even if I don't want any URL to match to this Controller / Action, I still need a route to be specified. Although the "RedirectToAction" function takes arguments for "actionName" and "controllerName", just specifying these is not enough - that route must exist. And the order in which the routes are specified is still important here - if there is a catch-all route before this route is specified then this route will not be hit. Maybe there's a good reason for all this, but I really can't see it. If there's a function called "RedirectToAction" and I give it an unambiguous name of a Controller and an Action, then I expect it to redirect.. to.. that.. action.
 
 ### Transferring control the correct way
 

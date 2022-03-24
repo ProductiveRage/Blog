@@ -1,6 +1,6 @@
 ## Persistent Immutable Lists
 
-I've written before about immutable data structures (I'm all for them; see [I love Immutable Data](Post1) and [Problems in Immutability-land](Post2)) but watching a talk recently by Clojure-creator Rich Hickey made me think about one particular area again recently. In that first post I put up some example cost for an Immutable List that wrapped the .Net List&lt;T&gt; class - this was very simple to implement and understand, and in many cases I was using the immutable class as a return type or a method argument which meant that the instance would be built once and futher manipulations would be limited. This meant that I wasn't too concerned with internally creating a new list instance each time a new immutable instance was required and copying the references over.
+I've written before about immutable data structures (I'm all for them; see [I love Immutable Data](Post1) and [Problems in Immutability-land](Post2)) but watching a talk recently by Clojure-creator Rich Hickey made me think about one particular area again recently. In that first post I put up some example cost for an Immutable List that wrapped the .Net List&lt;T&gt; class - this was very simple to implement and understand, and in many cases I was using the immutable class as a return type or a method argument which meant that the instance would be built once and further manipulations would be limited. This meant that I wasn't too concerned with internally creating a new list instance each time a new immutable instance was required and copying the references over.
 
 However, in this talk it was reiterated that all of the core data structures in Clojure were intended to be immutable and that considerable work was done to ensure that the performance of these structures was sufficient that it could compete with Java and C#. A persistent linked list structure was used so that operations could be performed without having to recreate the entire dataset.
 
@@ -139,7 +139,7 @@ And most of that code is the implementation of IEnumerable!
 
 ### Limitations
 
-This example *only* exposes an InsertAtStart method as a manner in which to alter the list. An obvious counterpart would be to add a RemoveFromStart method, since all that need do is create a new list whose head node is the "next" node of the head node of the current list (if the head node of the intial list was null then there are no items, and so RemoveFromStart would be invalid).
+This example *only* exposes an InsertAtStart method as a manner in which to alter the list. An obvious counterpart would be to add a RemoveFromStart method, since all that need do is create a new list whose head node is the "next" node of the head node of the current list (if the head node of the initial list was null then there are no items, and so RemoveFromStart would be invalid).
 
     public SimplePersistentImmutableList<T> RemoveFirstItem()
     {

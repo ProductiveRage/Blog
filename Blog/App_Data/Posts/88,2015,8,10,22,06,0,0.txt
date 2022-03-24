@@ -384,7 +384,7 @@ But now that our parser functions take a consistent form, we can wrap them up in
       return Optional.For(result.Value.Reader);
     }
 
-This is an extension for **Optional&lt;IReadStringContent&gt;** that also *returns* an **Optional&lt;IReadStringContent&gt;**. So multiple calls to this extension method could be chained together. It takes a **Parser&lt;T&gt;** which dicates what sort of parsing it's going to attempt. If it succeeds then it passes the matched value out through an **Action&lt;T&gt;** and then returns a reader for the position in the content immediately after that match. If the parser fails to match the content then it returns a "Missing" optional reader.
+This is an extension for **Optional&lt;IReadStringContent&gt;** that also *returns* an **Optional&lt;IReadStringContent&gt;**. So multiple calls to this extension method could be chained together. It takes a **Parser&lt;T&gt;** which dictates what sort of parsing it's going to attempt. If it succeeds then it passes the matched value out through an **Action&lt;T&gt;** and then returns a reader for the position in the content immediately after that match. If the parser fails to match the content then it returns a "Missing" optional reader.
 
 Any time that "Then" is called, if it is given a "Missing" reader then it returns a "Missing" response immediately. That means that we could string these together and when one of them fails to match, any subsequent "Then" calls will effectively be skipped over and the "Missing" value will pop out the bottom.
 
@@ -443,7 +443,7 @@ Before, it looked like this method was going to run away with itself. And I said
 
 This is a lovely example of C#'s type inference - each call to "Then" or "ThenOptionally" has a generic type, but those types did not need to be explicitly specified in the code above. When "Then" is provided "GetIdentifier" as an argument, it knows that the "T" in "Then&lt;T&gt;" is an **IdentifierDetails** because the return type of "GetIdentifier" is an **Optional&lt;MatchResult&lt;IdentifierDetails&gt;&gt;**.
 
-It's also an example of.. if I've got this right.. the Monad Pattern. That concept that seems impossibly theoretical in 99% of articles you read (or maybe that's just me). Even this highly-upvoted answer on Stack Overflow by the ever-readable Eric Lipperts starts off sounding very dense and full of abstract terms: [Monad in plain English](http://stackoverflow.com/a/2704795).
+It's also an example of.. if I've got this right.. the Monad Pattern. That concept that seems impossibly theoretical in 99% of articles you read (or maybe that's just me). Even this highly-upvoted answer on Stack Overflow by the ever-readable Eric Lippert starts off sounding very dense and full of abstract terms: [Monad in plain English](http://stackoverflow.com/a/2704795).
 
 I don't want to get too hung up on all that, though, I just thought it was interesting to highlight the concept in use in some practical code. Plus, if I try to make myself out as some functional programming guru then someone might pick on me for writing "Then" in such a way that it requires a side effect to report the value it matches - side effects are so commonly (and fairly, imho) seen as an evil that must be minimised that it seems strange to write a function that will be used in many places that *relies* upon them. However, with C#, I think it would be complicated to come up with a structure that is passed through the "Then" calls, along with the **Optional&lt;IReadStringContent&gt;**, and since the side effects are so localised here, it's not something I'm going to lose sleep over. Maybe it will be easier if "[record types](https://github.com/dotnet/roslyn/issues/206)" get implemented in C# 7, or maybe it's just an exercise for the reader to come up with an elegant solution and let me know! :)
 
@@ -552,7 +552,7 @@ The "If" function allows us to say "if this interface has a pointy bracket that 
       return Then(Optional.For(readerAfterCondition.Value.Reader), parser, report);
     }
 
-However, that function takes three arguments in one continous list: 1. the condition, 2. the parser-if-condition-is-met, 3. callback-if-condition-is-met-and-then-subsequent-parser-matches-content. So it would be called like:
+However, that function takes three arguments in one continuous list: 1. the condition, 2. the parser-if-condition-is-met, 3. callback-if-condition-is-met-and-then-subsequent-parser-matches-content. So it would be called like:
 
     .If(Match('<'), GenericTypeParameters, value => genericTypeParameters = value)
 

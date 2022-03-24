@@ -114,7 +114,7 @@ fdecampredon is the author of this "React TypeScript" repo.. which hasn't been u
 
 In addition to this, the README states that
 
-> In react, methods are automatically bound to a component, this is not the case when using ReactTypeScript, to activate this behavious you can use the autoBindMethods function of ReactTypeScript
+> In react, methods are automatically bound to a component, this is not the case when using ReactTypeScript, to activate this behaviour you can use the autoBindMethods function of ReactTypeScript
 
 This refers to what I talked about earlier; the "auto-binding" convenience to make writing components more natural. There are two examples of ways around this. You can use the ReactTypeScript library's "autoBindMethods" function -
 

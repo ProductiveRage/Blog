@@ -330,7 +330,7 @@ One of the applicable lines in the library is in the [TFIDF](https://en.wikipedi
     
 *(As you can see in the source file [TF-IDF.cs](https://github.com/curiosity-ai/catalyst/blob/70df89be7b725f6c7786187bd75b2032f287141b/Catalyst/src/Models/Special/TF-IDF.cs#L110); along with the rest of the implementation for if you're curious)*
 
-However, I could also imagine that there might be a web server that is serving requests from many people each day but *ocassionally* there is a request that requires some more intense computation and it might take too long to calculate this while feeling responsive to the User if it tried to do the work on a single thread - *but* if it used *every* core available on the server then it would impact all of the other requests being handled. In this case it may be appropriate to say "parallelise this work but don't allow more than four cores to be utilised". There is a method "WithDegreeOfParallelism" available for just this purpose!
+However, I could also imagine that there might be a web server that is serving requests from many people each day but *occasionally* there is a request that requires some more intense computation and it might take too long to calculate this while feeling responsive to the User if it tried to do the work on a single thread - *but* if it used *every* core available on the server then it would impact all of the other requests being handled. In this case it may be appropriate to say "parallelise this work but don't allow more than four cores to be utilised". There is a method "WithDegreeOfParallelism" available for just this purpose!
 
     var items = Enumerable
         .Range(0, 50)
@@ -398,7 +398,7 @@ To override the default ("AutoBuffering") behaviour, you may use the "WithMergeO
 
 #### Cancellation
 
-Say you have many work items distributed over multiple cores in order to calculate something very expensive and parallelisable. Part way through, you might decide that actually you don't want the result any more - maybe some of the data that it relies on has changed and a "stale" result will not be of any use. In this case, you will want to cancel the parallised work.
+Say you have many work items distributed over multiple cores in order to calculate something very expensive and parallelisable. Part way through, you might decide that actually you don't want the result any more - maybe some of the data that it relies on has changed and a "stale" result will not be of any use. In this case, you will want to cancel the parallelised work.
 
 To enable this, there is a "WithCancellation" method that takes a **CancellationToken** and will stop allocating work items to threads if the token is marked as cancelled - instead, it will throw an **OperationCanceledException**. To imitate this, the code below has a token that will be set to be cancelled after 3s and the exception will be thrown during the enumeration:
 
@@ -427,7 +427,7 @@ To enable this, there is a "WithCancellation" method that takes a **Cancellation
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message} " + 
                           $"(Thread {Thread.CurrentThread.ManagedThreadId})");
 
-It's worth noting that "WithCancellation" can only cancel the "AsParallel" work of allocating items to threads, it doesn't have any ability to cancel the individual work items themselves. If you want to do this - such that *all* work is halted immediately as soon as the token is set to cancelled, then you would have to add cancelletion-checking code to the work performed in each step - ie.
+It's worth noting that "WithCancellation" can only cancel the "AsParallel" work of allocating items to threads, it doesn't have any ability to cancel the individual work items themselves. If you want to do this - such that *all* work is halted immediately as soon as the token is set to cancelled, then you would have to add cancellation-checking code to the work performed in each step - ie.
 
     var cts = new CancellationTokenSource();
     cts.CancelAfter(TimeSpan.FromSeconds(3));
