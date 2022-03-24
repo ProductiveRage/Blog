@@ -353,7 +353,7 @@ This isn't *all* that the **Component** class allows, though, it has support for
 
 Now, in the cases where the input's value doesn't *really* change, the component's "update" will be bypassed.
 
-Clearly, this is a trival example, but it demonstrates how you could do something more complicated along these lines. All of the other functions "ComponentDidMount", "ComponentDidUpdate", "ComponentWillMount", "ComponentWillReceiveProps", "ComponentWillUnmount" and "ComponentWillUpdate" are also supported.
+Clearly, this is a trivial example, but it demonstrates how you could do something more complicated along these lines. All of the other functions "ComponentDidMount", "ComponentDidUpdate", "ComponentWillMount", "ComponentWillReceiveProps", "ComponentWillUnmount" and "ComponentWillUpdate" are also supported.
 
 And, of course, the **Component** base class has the same "Children" integration that **StatelessComponent** has and the same support for specifying a "Key" props value.
 

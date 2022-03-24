@@ -153,7 +153,7 @@ and "TProps" will be inferred to be whatever the type of "props" is. Then the ca
 
     Ele.Props(props).As<TComponent>()
 
-will know that "TProps" in the type constaint "TComponent : ComponentWrapper&lt;TProps&gt;" is whatever the type of "props" was.
+will know that "TProps" in the type constraint "TComponent : ComponentWrapper&lt;TProps&gt;" is whatever the type of "props" was.
 
 It's a bit back-to-front, specifying the "props" before declaring the type of the Component class, but it's succinct at least! And it's what allows the Component classes' static "New" factory methods to be declared thusly:
 

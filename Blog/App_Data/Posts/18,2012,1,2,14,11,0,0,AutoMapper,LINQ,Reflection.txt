@@ -424,7 +424,7 @@ More importantly is the ICompilableTypeConverter GetTypeConverterExpression meth
         }
     }
 
-A corresponding CompilableTypeConverterPropertyGetterFactory is straight-forward to write. Like the other Property Getter Factories, it doesn't do a huge amount - it will determine whether a named property can be retreived from a specified type and converted *into* a specified type based upon name match rules and what kind of Property Getter that Factory can generate)
+A corresponding CompilableTypeConverterPropertyGetterFactory is straight-forward to write. Like the other Property Getter Factories, it doesn't do a huge amount - it will determine whether a named property can be retrieved from a specified type and converted *into* a specified type based upon name match rules and what kind of Property Getter that Factory can generate)
 
     public class CompilableTypeConverterPropertyGetterFactory<TPropertyOnSource, TPropertyAsRetrieved>
         : ICompilablePropertyGetterFactory

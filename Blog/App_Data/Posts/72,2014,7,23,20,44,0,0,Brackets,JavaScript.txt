@@ -127,7 +127,7 @@ Now I had my npm module that I wanted to use as a Brackets dependency, but the t
 
 There has been a lot written about this, particularly there is the "[UMD (Universal Module Definition)](https://github.com/umdjs/umd)" code on GitHub with lots of patterns of ways to have modules that combine support for a variety of dependency managers, but when I looked at some of the examples I wasn't sure exactly what each was doing and I couldn't tell immediately which example (if any) would address the combination I was interested in; to work with Node *and* with Brackets *and* as a browser script.
 
-After some more stumbling around, I encounted [A Simplified Universal Module Definition](http://webreflection.blogspot.co.uk/2013/01/a-simplified-universal-module-definition.html) which had this pattern to work with "define" if it was present -
+After some more stumbling around, I encountered [A Simplified Universal Module Definition](http://webreflection.blogspot.co.uk/2013/01/a-simplified-universal-module-definition.html) which had this pattern to work with "define" if it was present -
 
     (this.define || function(){})(
     this.what = function(){

@@ -4,7 +4,7 @@ A slight amendment to a previous post ([An English-language Plurality-handling S
 
 However.. since the normalised values are maintained as strings in a dictionary they may be returned *as* normalised values. And *then* compared to a string that would be normalised to that value; so "cat" may be transformed through GetNormalisedString and then compared again to "cat" - and this is where things go awry. "cat" and "cats" are found to match as they are both normalised to "cat|s|es|ses" (as covered the [earlier post I linked to](Post26)) and the problem is that "cat|s|es|ses" does *not* get matched to "cat" (or "cats" for that matter) as it incorrectly gets transformed *again* to "cat|s|es|se|s|es|ses" as the final "s" gets matched as a potential suffix and the value gets altered.
 
-Thankfully, the fix is none too difficult; before tring to perform transformations based upon value endings, we need to check for whether a suffix group has already been appended to the value. So before checking whether a value ends with "s", "es" or "ses" we need to check whether it ends with "|s|es|ses" and if so then return it as pre-transformed.
+Thankfully, the fix is none too difficult; before trying to perform transformations based upon value endings, we need to check for whether a suffix group has already been appended to the value. So before checking whether a value ends with "s", "es" or "ses" we need to check whether it ends with "|s|es|ses" and if so then return it as pre-transformed.
 
 The method that requires changing is that below:
 

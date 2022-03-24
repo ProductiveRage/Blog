@@ -124,7 +124,7 @@ It can't get much simpler than this:
     Converter.CreateMap<MutablePersonDetails.RoleDetails, ImmutablePersonDetails.RoleDetails>();
     var dest = Converter.Convert<MutablePersonDetails, ImmutablePersonDetails>(source);
 
-The "source" objectin this example is initialised with
+The "source" object in this example is initialised with
 
     var source = new MutablePersonDetails
     {

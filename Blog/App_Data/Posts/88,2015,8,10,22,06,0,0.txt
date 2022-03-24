@@ -39,7 +39,7 @@ So I figured this seemed like a resonable place to start. But I also wanted to t
       IReadStringContent GetNext();
     }
 
-I think that, *really*, I want to give [Code Contracts](https://msdn.microsoft.com/en-us/library/dd264808%28v=vs.110%29.aspx?f=255&MSPPError=-2147217396) another try (so that I could describe in source code where nulls are not acceptable and then have the compiler verify that every call to such functions matches those constaints). But every time I try contracts again I find it daunting. And for this little project, I wanted to have fun with coding and not get bogged down again with something that I've struggled with in the past\*.
+I think that, *really*, I want to give [Code Contracts](https://msdn.microsoft.com/en-us/library/dd264808%28v=vs.110%29.aspx?f=255&MSPPError=-2147217396) another try (so that I could describe in source code where nulls are not acceptable and then have the compiler verify that every call to such functions matches those constraints). But every time I try contracts again I find it daunting. And for this little project, I wanted to have fun with coding and not get bogged down again with something that I've struggled with in the past\*.
 
 \* *(Even typing that, it sounds like a poor excuse.. which it is; one day I'll give them a proper go!)*
 

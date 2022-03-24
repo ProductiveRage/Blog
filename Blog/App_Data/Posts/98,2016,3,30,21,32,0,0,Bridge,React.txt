@@ -239,7 +239,7 @@ So, maybe most properties should *have* to be specified in order to get a new **
       public Action<string> OnChange { get; }
     }
 
-Two nice benefits arise from this. Firstly, the comments may be tighted up - so "OnChange" is no longer described as
+Two nice benefits arise from this. Firstly, the comments may be tightened up - so "OnChange" is no longer described as
 
 > This is mandatory and should never be null
 
