@@ -16,6 +16,7 @@ namespace AutomatedSimilarPostGenerator
     {
         public static async Task<IEnumerable<(Post Post, IEnumerable<(Post Post, float SimilarityDistance, float ProximityByTitleTFIDF)> Similar)>> GetSimilarPosts(
             IEnumerable<Post> posts,
+            Func<Post, bool> excludeFromSimilarSuggestions,
             int epoch = 50,
             int dimensions = 512,
             int minimumCount = 1,
@@ -123,6 +124,7 @@ namespace AutomatedSimilarPostGenerator
                     return (
                         result.Post,
                         similarResults
+                            .Where(similarResult => !excludeFromSimilarSuggestions(similarResult.Item.Post))
                             .Select(similarResult => (
                                 similarResult.Item.Post,
                                 similarResult.Distance,

@@ -31,7 +31,8 @@ namespace AutomatedSimilarPostGenerator
                     .Select(f => new WebFileInfoFromDisk(f)));
             var posts = await postRetriever.Get();
             var suggestedRelatedContent = new StringBuilder();
-            foreach (var (post, similar) in (await Recommender.GetSimilarPosts(posts)).Where(result => !postIdsToNotRecommend.Contains(result.Post.Id)).OrderBy(result => result.Post.Id))
+            var recommendations = await Recommender.GetSimilarPosts(posts, excludeFromSimilarSuggestions: post => postIdsToNotRecommend.Contains(post.Id));
+            foreach (var (post, similar) in recommendations.OrderBy(result => result.Post.Id))
             {
                 Console.WriteLine();
                 Console.WriteLine(post.Title);
