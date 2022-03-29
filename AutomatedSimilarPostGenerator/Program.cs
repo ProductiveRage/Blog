@@ -5,7 +5,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Blog.Misc;
 using Blog.Models;
-using Microsoft.Extensions.FileProviders;
 
 namespace AutomatedSimilarPostGenerator
 {
@@ -20,13 +19,19 @@ namespace AutomatedSimilarPostGenerator
             if (!Directory.Exists(postFolderPath))
                 throw new Exception("Specified folder path does not exist: " + postFolderPath);
 
+            var postIdsToNotRecommend = (await File.ReadAllLinesAsync(Path.Combine(postFolderPath, "AutoSuggestedRelatedPosts-DoNotRecommend.txt")))
+                .Select(line => line.Trim())
+                .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith('#'))
+                .Select(int.Parse)
+                .ToHashSet();
+
             var postRetriever = new SingleFolderPostRetriever(
                 new DirectoryInfo(postFolderPath)
                     .EnumerateFiles()
                     .Select(f => new WebFileInfoFromDisk(f)));
             var posts = await postRetriever.Get();
             var suggestedRelatedContent = new StringBuilder();
-            foreach (var (post, similar) in (await Recommender.GetSimilarPosts(posts)).OrderBy(result => result.Post.Id))
+            foreach (var (post, similar) in (await Recommender.GetSimilarPosts(posts)).Where(result => !postIdsToNotRecommend.Contains(result.Post.Id)).OrderBy(result => result.Post.Id))
             {
                 Console.WriteLine();
                 Console.WriteLine(post.Title);
