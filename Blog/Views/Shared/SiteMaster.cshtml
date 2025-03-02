@@ -26,14 +26,12 @@
 	<link rel="alternate" type="application/rss+xml" title="RSS" href="@Url.Action("Feed", "RSS", null, Context.Request.Scheme)" />
 @if ((Model != null) && (Model.OptionalGoogleAnalyticsId != null))
 {
-	<script type="text/javascript">
-		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
-
-		ga('create', @(new HtmlString(JsonSerializer.Serialize(Model.OptionalGoogleAnalyticsId))), { 'storage': 'none' });
-		ga('send', 'pageview');
+	<script async src="https://www.googletagmanager.com/gtag/js?id=@(new HtmlString(System.Web.HttpUtility.UrlEncode(Model.OptionalGoogleAnalyticsId)))"></script>
+	<script>
+		window.dataLayer = window.dataLayer || [];
+		function gtag(){dataLayer.push(arguments);}
+		gtag("js", new Date());
+		gtag("config", @(new HtmlString(JsonSerializer.Serialize(Model.OptionalGoogleAnalyticsId))));
 	</script>
 }
 	<script type="text/javascript">
