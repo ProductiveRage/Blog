@@ -294,7 +294,7 @@ That we'll change the reading of properties:
 And that we'll change the calling of methods:
 
     // .. skipped out the first half of the method-generating code
-    // - see http://www.productiverage.com/Read/15
+    // - see https://www.productiverage.com/Read/15
 
     // Generate either:
     //  _src.GetType().InvokeMember(method.Name, BindingFlags.InvokeMethod, null, _src, args);

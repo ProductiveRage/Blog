@@ -354,4 +354,4 @@ Finally, I'm sure I read an issue around analysers being included in NuGet packa
 
 I think that things are *close* (and I like that Microsoft is making this all available early on and accepting feedback on it) but I don't think that it's quite ready enough for me to switch to it full time yet.
 
-Finally, should you be curious at all about the Full Text Indexer project that I've been talking about, the source code is available here: [bitbucket.org/DanRoberts/full-text-indexer](https://bitbucket.org/DanRoberts/full-text-indexer) and there are a range of old posts that I wrote about how it works (see "[The Full Text Indexer Post Round-up](http://www.productiverage.com/the-full-text-indexer-post-roundup)").
+Finally, should you be curious at all about the Full Text Indexer project that I've been talking about, the source code is available here: [bitbucket.org/DanRoberts/full-text-indexer](https://bitbucket.org/DanRoberts/full-text-indexer) and there are a range of old posts that I wrote about how it works (see "[The Full Text Indexer Post Round-up](https://www.productiverage.com/the-full-text-indexer-post-roundup)").

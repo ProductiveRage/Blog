@@ -245,7 +245,7 @@ So far there have been no real surprises but I came across a problem for which I
 
 Successful requests (for example, where the cache is either empty or the file has been modified since the cache entry was recorded), the request and response headers would be of the form:
 
-    GET http://www.productiverage.com/Content/Default.css HTTP/1.1
+    GET https://www.productiverage.com/Content/Default.css HTTP/1.1
     Host: www.productiverage.com
     User-Agent: Mozilla/5.0 (Windows NT 5.1; rv:6.0.2) Gecko/20100101 Firefox/6.0.2
     Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
@@ -270,7 +270,7 @@ Successful requests (for example, where the cache is either empty or the file ha
 
 while the failing requests would be such:
 
-    GET http://www.productiverage.com/Content/Default.css HTTP/1.1
+    GET https://www.productiverage.com/Content/Default.css HTTP/1.1
     Host: www.productiverage.com
     User-Agent: Mozilla/5.0 (Windows NT 5.1; rv:6.0.2) Gecko/20100101 Firefox/6.0.2
     Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
