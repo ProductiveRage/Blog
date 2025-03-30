@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31019.35
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35728.132 d17.12
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Blog", "Blog\Blog.csproj", "{188C102D-6D0F-4A0C-AA0D-CF68516EDE88}"
 EndProject
@@ -10,6 +10,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AutomatedSimilarPostGenerator", "AutomatedSimilarPostGenerator\AutomatedSimilarPostGenerator.csproj", "{90F95466-729B-462B-834D-D5DC57B4BD4D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProofReader", "ProofReader\ProofReader.csproj", "{709A15C8-12A7-40C0-9C5D-A7977DB64AFD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateSimilarityEmbeddings", "GenerateSimilarityEmbeddings\GenerateSimilarityEmbeddings.csproj", "{07D3486B-4057-49DF-9200-21469B8F3868}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{709A15C8-12A7-40C0-9C5D-A7977DB64AFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{709A15C8-12A7-40C0-9C5D-A7977DB64AFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{709A15C8-12A7-40C0-9C5D-A7977DB64AFD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{07D3486B-4057-49DF-9200-21469B8F3868}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{07D3486B-4057-49DF-9200-21469B8F3868}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{07D3486B-4057-49DF-9200-21469B8F3868}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{07D3486B-4057-49DF-9200-21469B8F3868}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
