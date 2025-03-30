@@ -46,7 +46,12 @@ body
                     &.HasSideBar { width: 100%; }
                 }
 
-                p.SearchResultContent > strong { color: #121212; } // Undo the softening of bold for main content when highlighted search term matches
+                p.SearchResultContent > strong
+                {
+                    color: #121212; // Undo the softening of bold for main content when highlighted search term matches..
+
+                    .DarkMode & { color: inherit; } // .. except then in dark mode
+                }
             }
 
             div.SideBar
