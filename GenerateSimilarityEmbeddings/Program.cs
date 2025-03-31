@@ -9,19 +9,18 @@ using Microsoft.SemanticKernel.Text;
 #pragma warning disable SKEXP0050 // TextChunker "is for evaluation purposes only and is subject to change or removal in future updates"
 #pragma warning disable SKEXP0070 // BertOnnxTextEmbeddingGenerationService "is for evaluation purposes only and is subject to change or removal in future updates"
 
-const string modelFilePath = "embedding model.onnx";
-const string vocabFilePath = "embedding model vocab.txt";
+const string embeddingModelFilePath = "embedding model.onnx";
+const string embeddingModelVocabFilePath = "embedding model vocab.txt";
+const string vectorisedChunksCacheFilePath = "embeddings.bin";
 
-const string embeddingsCacheFilePath = "embeddings.bin";
-
-if (!File.Exists(modelFilePath))
+if (!File.Exists(embeddingModelFilePath))
 {
     Console.WriteLine($"{DateTime.Now:HH:mm:ss} Downloading embedding model (this may take minute or two)..");
 
     using var httpClient = new HttpClient();
     await Task.WhenAll(
-        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/model.onnx", modelFilePath),
-        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/vocab.txt", vocabFilePath));
+        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/model.onnx", embeddingModelFilePath),
+        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/vocab.txt", embeddingModelVocabFilePath));
 
     async Task Download(string uri, string filePath)
     {
@@ -30,14 +29,16 @@ if (!File.Exists(modelFilePath))
     }
 }
 
-var embeddingGenerationService = await BertOnnxTextEmbeddingGenerationService.CreateAsync(modelFilePath, vocabFilePath);
+var embeddingGenerationService = await BertOnnxTextEmbeddingGenerationService.CreateAsync(
+    embeddingModelFilePath,
+    embeddingModelVocabFilePath);
 
 IReadOnlyCollection<IndexablePostChunk> chunks;
-if (File.Exists(embeddingsCacheFilePath))
+if (File.Exists(vectorisedChunksCacheFilePath))
 {
     Console.WriteLine("Reading embeddings cache file..");
 
-    using var readEmbeddingsFromDiskStream = new FileStream(embeddingsCacheFilePath, FileMode.Open);
+    using var readEmbeddingsFromDiskStream = new FileStream(vectorisedChunksCacheFilePath, FileMode.Open);
     chunks = await MessagePackSerializer.DeserializeAsync<IReadOnlyCollection<IndexablePostChunk>>(readEmbeddingsFromDiskStream);
 }
 else
@@ -72,15 +73,15 @@ else
         .ToArray();
 
     Console.WriteLine("Writing embeddings cache file..");
-    using var writeEmbeddingsToDiskStream = new FileStream(embeddingsCacheFilePath, FileMode.Create);
+    using var writeEmbeddingsToDiskStream = new FileStream(vectorisedChunksCacheFilePath, FileMode.Create);
     await MessagePackSerializer.SerializeAsync(writeEmbeddingsToDiskStream, chunks);
 }
 
-var collection = new InMemoryVectorStoreRecordCollection<int, IndexablePostChunk>("posts");
-await collection.CreateCollectionAsync();
+var vectorStoreCollectionForPosts = new InMemoryVectorStoreRecordCollection<int, IndexablePostChunk>("posts");
+await vectorStoreCollectionForPosts.CreateCollectionAsync();
 
 // We need to enumerate the UpsertBatchAsync return value to confirm that they were all inserted
-await collection.UpsertBatchAsync(chunks).ToArrayAsync();
+await vectorStoreCollectionForPosts.UpsertBatchAsync(chunks).ToArrayAsync();
 
 Console.WriteLine();
 
@@ -103,8 +104,13 @@ while (true)
     const int maxNumberOfPosts = 3;
     const int maxNumberOfChunksToConsider = maxNumberOfPosts * 5;
 
-    var resultsEnumerator = await collection.VectorizedSearchAsync(queryVector, new VectorSearchOptions { Top = maxNumberOfChunksToConsider });
+    // This KINDA works with e5-base-v2 (it's not ideal, something like a subsequent rereanker step would be better for removing
+    // least-bad results that are still poor enough matches that they shouldn't be returned)
+    const double similarityThreshold = 0.8d;
+
+    var resultsEnumerator = await vectorStoreCollectionForPosts.VectorizedSearchAsync(queryVector, new VectorSearchOptions { Top = maxNumberOfChunksToConsider });
     var resultsForPosts = (await resultsEnumerator.Results.ToArrayAsync())
+        .Where(result => result.Score >= similarityThreshold)
         .GroupBy(result => result.Record.PostId)
         .Select(group => group.OrderByDescending(result => result.Score).First())
         .OrderByDescending(result => result.Score)

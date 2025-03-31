@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.12.35728.132 d17.12
+VisualStudioVersion = 17.12.35728.132
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Blog", "Blog\Blog.csproj", "{188C102D-6D0F-4A0C-AA0D-CF68516EDE88}"
 EndProject
@@ -16,6 +16,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "PostWritingAids", "PostWritingAids", "{4FD9FF74-2B59-4215-8626-23E99A853B6B}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SemanticSearch", "SemanticSearch", "{2958E197-31F3-46B7-87B8-7D1353720447}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticSearchDemo", "SemanticSearchDemo\SemanticSearchDemo.csproj", "{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -43,6 +45,10 @@ Global
 		{07D3486B-4057-49DF-9200-21469B8F3868}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{07D3486B-4057-49DF-9200-21469B8F3868}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{07D3486B-4057-49DF-9200-21469B8F3868}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -51,6 +57,7 @@ Global
 		{90F95466-729B-462B-834D-D5DC57B4BD4D} = {4FD9FF74-2B59-4215-8626-23E99A853B6B}
 		{709A15C8-12A7-40C0-9C5D-A7977DB64AFD} = {4FD9FF74-2B59-4215-8626-23E99A853B6B}
 		{07D3486B-4057-49DF-9200-21469B8F3868} = {2958E197-31F3-46B7-87B8-7D1353720447}
+		{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36} = {2958E197-31F3-46B7-87B8-7D1353720447}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {20F896C1-6817-4438-BD57-06823CDB32DD}
