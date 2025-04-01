@@ -3,7 +3,7 @@ using System.Reflection;
 using SemanticSearchDemo;
 
 var outputFolderPath = new FileInfo(Assembly.GetExecutingAssembly().Location).DirectoryName!;
-var modelFilePath = Path.Combine(outputFolderPath, "embedding  model.onnx");
+var modelFilePath = Path.Combine(outputFolderPath, "embedding model.onnx");
 var vocabFilePath = Path.Combine(outputFolderPath, "embedding model vocab.txt");
 var vectorisedChunksCacheFilePath = Path.Combine(outputFolderPath, "embeddings.bin");
 
