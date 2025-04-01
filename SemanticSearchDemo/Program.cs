@@ -27,10 +27,21 @@ app.MapGet("/", async (HttpContext context) =>
     var query = context.Request.Query["q"].FirstOrDefault();
     if (string.IsNullOrWhiteSpace(query))
     {
-        return Results.Content("<form><input name=q autofocus><input type=submit value=Search></form>", MediaTypeNames.Text.Html);
+        return context.Request.HasJsonContentType()
+            ? Results.BadRequest("No 'q' query string value to search for")
+            : Results.Content("<form><input name=q autofocus><input type=submit value=Search></form>", MediaTypeNames.Text.Html);
     }
 
     var results = await searchIndex.Search(query);
+
+    if (context.Request.HasJsonContentType())
+    {
+        // Note: The JsonSerializer is bad with tuples, so transform the results array items to anonymous types
+        return Results.Json(new {
+            query,
+            results = results.Select(result => new { result.PostId, result.Score, result.Excerpt }) });
+    }
+
     var resultsContent = results.Count == 0
         ? "No results."
         : string.Join("\n\n", results.Select(result => $"Post {result.PostId} (semantic similarity score {result.Score:N5})\n{result.Excerpt}"));
