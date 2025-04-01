@@ -17,6 +17,8 @@ if (startupError is not null)
 
 var app = WebApplication.CreateBuilder(args).Build();
 
+app.UseStaticFiles(); // Allow  favicon!
+
 app.MapGet("/", async (HttpContext context) =>
 {
     if (searchIndex is null)
