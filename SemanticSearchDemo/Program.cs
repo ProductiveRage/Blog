@@ -51,4 +51,14 @@ app.MapGet("/", async (HttpContext context) =>
     return Results.Content($"Searching for: {query}\n\n{resultsContent}");
 });
 
+app.Use(async (context, next) =>
+{
+    await next();
+
+    if (context.Response.StatusCode == 404 && !context.Response.HasStarted)
+    {
+        await context.Response.WriteAsync("Page not found.");
+    }
+});
+
 app.Run();
