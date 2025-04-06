@@ -1,0 +1,105 @@
+## Hosting a DigitalOcean App Platform app on a custom subdomain (with CORS)
+
+### TL;DR
+
+I host my blog using GitHub Pages ([repo here](https://github.com/ProductiveRage/productiverage.github.io)), and have the domain registered through GoDaddy. I wanted to experiment with adding some additional functionality to my static content, using DigitalOcean App Platform (where I can essentially throw a Docker container and have it appear on the internet).
+
+I wanted this DigitalOcean-hosted app to be available through a productiverage.com subdomain, and I wanted it to be accessible as an API from JavaScript on the page. SSL* has long been a given, and I hoped that I would hit few (if any) snags with that.
+
+There *are* instructions out there for doing what I wanted, but I still encountered so many confusions and gotchas, that I figured I'd try to document the process (along with a few ways to reassure yourself when things look bleak).. even if it's only for future-me!
+
+\* *(Insert pedantic comment about how TLS has replaced SSL, and so we shouldn't refer to "SSL" or "SSL certificates" - for the rest of the post, I'll be saying "SSL" and hopefully that doesn't upset anyone too much despite it not being technically correct!)*
+
+### DigitalOcean App Platform
+
+So you have something deployed using DigitalOcean's App Platform solution. It will have an automatically generated unique url that you can access it on, that is a subdomain of "ondigitalocean.app" (something like. [https://productiverage-search-58yr4.ondigitalocean.app](https://productiverage-search-58yr4.ondigitalocean.app)). This will not change (unless you delete your app), and you can always use it to test your application.
+
+You want to host the application on a subdomain of a domain that you own (hosted by GoDaddy, in my case).
+
+To start the process, go into the application's details in DigitalOcean (the initial tab you should see if called "Overview") and click into the "Settings" tab.
+
+**Note: Do _not_ click into the "Networking" section through the link in the left hand navigation bar (under "Manage), and then into "Domains"** (some guides that I found online suggested this, and it only resulted in me getting lost and confused - see the section below as to why).
+
+This tab has the heading "App Settings" and the second section should be "Domains", click "Edit" and then the "**+Add Domain**" button.
+
+Here, enter the subdomain that you want to use for your application. Again, the auto-assigned ondigitalocean.app subdomain will never go away, and you can add _multiple_ custom domains if you want (though I only needed a single one).
+
+You don't actually have to own the domain at this point; DigitalOcean won't do any checks other than ensuring that you don't enter a domain that is registered by something else within DigitalOcean (either one of your own resources, or a resource owned by another DigitalOcean customer). If you really wanted to, you could enter a subdomain of a domain that you know that you _can't_ own, like "myawesomeexperiment.google.com" - but it wouldn't make a lot of sense to do this, since you would never be able to connect that subdomain to your app!
+
+In my case, I wanted to use "search.productiverage.com".
+
+**Note:** It's _only_ the domain or subdomain that you have to enter here, _not_ the protocol ("http" or "https") because (thankfully) it's not really an option to operate without https these days. Back in the dim and distant past, SSL certificates were frustrating to purchase, and register, and renew - and they weren't free! Today, life is a lot easier, and DigitalOcean handles it for you automatically when you use a custom subdomain on your application; they register the certificate, and automatically renew it. When you have everything working, you can look up the SSL certificate of the subdomain to confirm this - eg. when I use [sslshopper.com to look up productiverage.com](https://www.sslshopper.com/ssl-checker.html#hostname=productiverage.com) then I see that the details include "Server Type: GitHub.com" (same if I look up "www.productiverage.com") because I have my domain configured to point at GitHub Pages, and they look after that SSL certificate. But if I use [sslshopper.com to look up search.productiverage.com](https://www.sslshopper.com/ssl-checker.html#hostname=search.productiverage.com) then I see "Server Type: cloudflare" (although it doesn't mention DigitalOcean, it's clearly a different certificate).
+
+With your sub/domain entered (and with DigitalOcean having checked that it's of a valid form, and not already in use by another resource), you will be asked to select some DNS management options. Click "You manage your domain" and then the "Add Domain" button at the bottom of the page.
+
+This will redeploy your app. After which, you should see the new domain listed in the table that opened after clicked "Edit" alongside "Domains" in the "Settings" tab of your app. It will _probably_ show the status as "Pending". It _might_ show the status as "Configuring" at this point - if it doesn't, then refreshing the page and clicking "Edit" again alongside the "Domains" section should result in it now showing "Configuring".#
+
+There will be a "?" icon alongside the "Configuring" status - if you hover over it you will see the message "**Your domain is not yet active because the CNAME record was not found**". Once we do some work on the domain registrar side (eg. GoDaddy), this status will change!
+
+### DigitalOcean App Platform - Avoiding "Networking" / "Domains"
+
+I read some explanations of this process that said that you should configure your custom domain _not_ by starting with the app settings, but by clicking the "Networking" link in the left hand nav (under "Manage") and then clicking into "Domains". I spent an embarrassing amount of time going down this route, and getting frustrated when I reached a step that would say something like "using the dropdown in the 'Directs to' column, select where the custom domain should be used" - I never had a dropdown, and couldn't find an explanation why!
+
+When you configure a custom sub/domain this way, it can only be connected to (iirc) Load Balancers (which "let you distribute traffic between multiple Droplets either regionally or globally") or, _I think,_ Reserved IPs (which you can associate with any individual Droplet, or with a DigitalOcean's managed Kubernetes service - referred to as "DOKS"). **You can not select an App Platform instance in a 'Directs To' dropdown in the "Networking" / "Domains" section**, and that is what was causing me to stumble since I only have my single App Platform instance right now (I don't have a load balancer or any other, more complicated infrastructure).
+
+Final note on this; if you configure a custom domain as I'm describing, you won't see that custom domain shown in the "Networking" / "Domains" list. That is nothing to worry about - everything will still work!
+
+### My use of GoDaddy (in short; I configure DNS to serve GitHub Pages content)
+
+Long ago, I registered my domain with GoDaddy and hosted my blog with them as an ASP.NET site. I wasn't happy with the performance of it - it was fast much of the time, but would intermittently serve requests very slowly. I had a friend who had purchased a load of hosting capacity somewhere, so I shifted my site over to that (where it was still hosted as an ASP.NET site) and configured GoDaddy to send requests that way.
+
+Back in 2016, I shifted over to serving the blog through GitHub Pages as static content. The biggest stumbling block to this would have been the site search functionality, which I had written for my ASP.NET app in C# - but [I had put together a way to push that all to JS in the client](Post58) in 2013 when I got excited about [Neocities](https://neocities.org/) being released (I'm of an age where I remember the often-hideous, but easy-to-build-and-experiment-with, Geocities pages.. back before the default approaches to publishing content seemed to within walled gardens or on pay-to-access platforms).
+
+As my blog is on GitHub Page, I have `A` records configured in the DNS settings for my domain within GoDaddy that point to GitHub servers, and a `CNAME` record that points "www" to my GitHub subdomain "productiverage.github.io".
+
+The GitHub documentation page "[Managing a custom domain for your GitHub Pages site](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)" describes the steps that I followed to end up in this position - see the section "**Configuring an apex domain and the www subdomain variant**". The redirect from "productiverage.com" to "www.productiverage.com" is managed by GitHub, as is the SSL certificate, _and_ the redirection from "http" to "https".
+
+Until I created my DigitalOcean app, GoDaddy's only role was to ensure that when someone tried to visit my blog that the DNS lookup resulted in them going to GitHub, who would pick up the request and serve my content.
+
+### Configuring the subdomain for DigitalOcean in GoDaddy
+
+Within the GoDaddy "cPanel" (ie. their control panel), click into your domain, then into the "DNS" tab, and then click the "Add New Record" button. Select `CNAME` in the "Type" dropdown, type the subdomain segment into the "Name" text (in my case, I want DigitalOcean to use the subdomain "search.productiverage.com" so I entered "search" into that textbox, since I was managing my domain "productiverage.com"), paste the DigitalOcean-generated domain into the "Value" textbox ("productiverage-search-58yr4.ondigitalocean.app" for my app), and click "Save".
+
+You should see a message informing you that DNS changes may take up to 48 hours to propagate, but that it usually all happens in less than an hour.
+
+In my experience, it often only takes a few minutes for everything to work.
+
+If you want to get an idea about how things are progressing, there are a couple of things you can do -
+
+1. If you open a command prompt and ping the DigitalOcean-generated subdomain (eg. "productiverage-search-58yr4.ondigitalocean.app") and then ping your new subdomain (eg. "search.productiverage.com") they should resolve to the same IP address
+1. With the IP address resolving correctly, you can try visiting the subdomain in a browser - if you get an error message like "Can't Establish a Secure Connection" then DigitalOcean hasn't finished configuring the SSL certificate, but this error is still an indicator that the DNS change has been applied (which is good news!)
+1. If you go back to your app in the DigitalOcean control panel, and refresh the "Settings" tab, and click "Edit" alongside the "Domains" section, the status will have changed from "Configuring" to "Active" when it's ready (you may have to refresh a couple of times, depending upon how patient you're being, how slow the internet is being, and whether DigitalOcean's UI automatically updates itself or not)
+
+If you don't want to mess about with these steps, you are free to go and make a cup of tea, and everything should sort itself out on its own!
+
+I had gone round and round so many times trying to make it work that I was desperate to have some additional insight into whether it was working or not, but now that I'm confident in the process I would probably just wait five minutes if I did this again, and jump straight to the final step..
+
+**At this point, you should be able to hit your DigitalOcean app in the browser!** Hurrah!
+
+* If it fails, then it's worth checking that the app is still running and working when you access it via the DigitalOcean-generated address
+* If the app works at the DigitalOcean-generated address but _still_ doesn't work on your custom subdomain, hopefully running again through those three steps above will help you identify where the blocker is, or maybe you'll find clues in the app logs in DigitalOcean
+
+### **Bonus material:** Enabling CORS access for the app (in DigitalOcean)
+
+Depending upon your needs, you may be done by this point.
+
+After I'd finished whooping triumphantly, however, I realised that *I* wasn't done..
+
+My app exposes a html form that will perform a semantic search across my blog content (it's essentially my blog's [Semantic Search Demo](https://github.com/ProductiveRage/Blog/tree/master/SemanticSearchDemo) project, except that - depending upon when you read this post and when I update that code - it uses a smaller embedding model and it adds a call to a Cohere Reranker to better remove poor matches from the result set). That html form works fine in isolation.
+
+However, the app also supports `application/json` requests, because I wanted to improve my blog's search by incorporating semantic search results into my existing lexical search. This meant that I would be calling the app from JS on my blog. And _that_ would be a problem, because trying to call [https://search.productiverage.com](https://search.productiverage.com) from JS code executed within the context of [https://www.productiverage.com](https://www.productiverage.com) would be rejected due to the **"Cross-Origin Resource Sharing" (CORS) mechanism, which exists for security purposes - essentially, to ensure that potentially-malicious JS can't send content from a site to another domain** (even if the sites are on subdomains of the same domain).
+
+To make a request through JS within the context of one domain (eg. "www.productiverage.com") to another (eg. "search.productiverage.com"), the second domain must be explicitly configured to allow access from the first. This configuration is done against the DigitalOcean app -
+
+1. In the DigitalOcean control panel, navigate back to the "Settings" tab for your app
+1. The first line (under the tab navigation and above the title "App Settings") should display "App" on the left and "Components" on the right - **you need to click into the component** (I only have a single component in my case)
+
+![DigitalOcean 'component' selection within an app](/Content/Images/Posts/DigitalOceanComponentSelection.png)
+
+3. Click "Edit" in the "HTTP Request Routes" section and click "Configure CORS" by the route that you will need to request from another domain (again, I only have a single route, which is for the root of my application)
+1. I want to provide access to my app *only* from my blog, so I set a value for the `Access-Control-Allow-Origins` header, that has a "Match Type" of "Exact" and an "Origin" of "https://www.productiverage.com"
+1. Click "Apply CORS" - and you should be done!
+
+Now, you should be able to access your DigitalOcean app on the custom subdomain from *another* domain through JS code, without the browser giving you an error about CORS restrictions denying your attempt!
+
+To see an example of this in action, you can go to [www.productiverage.com](https://www.productiverage.com/), open the dev tools in your browser, go to the "Network" tab and filter requests to "Fetch/XHR", type something into the "Site Search" text box on the site and click "Search", and you _should_ see requests for content `SearchIndex-{something}.lz.txt` (which is used for lexical searching) _and_ a single request that looks like `?q={what you searched for}` which (if you view the Headers for) you should see comes from [search.productiverage.com](https://search.productiverage.com/). Woo, success!!

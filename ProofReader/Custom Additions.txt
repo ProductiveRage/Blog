@@ -316,3 +316,12 @@ work/flow/spaces
 wtfs
 xamarin
 xsd
+
+cloudflare
+iirc
+IPs
+Kubernetes
+myawesomeexperiment
+ondigitalocean
+sslshopper
+textbox 
