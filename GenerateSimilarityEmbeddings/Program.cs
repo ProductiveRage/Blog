@@ -17,6 +17,7 @@ if (!File.Exists(embeddingModelFilePath))
 {
     Console.WriteLine($"{DateTime.Now:HH:mm:ss} Downloading embedding model (this may take minute or two)..");
 
+    // Note: If a different model is used, the vector dimensions in IndexablePostChunk may need to be changed
     using var httpClient = new HttpClient();
     await Task.WhenAll(
         Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/model.onnx", embeddingModelFilePath),
