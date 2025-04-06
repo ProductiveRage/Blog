@@ -95,7 +95,22 @@ namespace BlogBackEnd.Models
 				html = doc.DocumentNode.OuterHtml;
 			}
 
-			return html;
-		}
-	}
+            // Add a class to the "foot note" paragraphs, to allow them to be softened a little (ones who text is all italics, and that
+            // starts with an asterisk before the <em> tag)
+            var potentialFootnotes = doc.DocumentNode.SelectNodes("//p/em");
+            if (potentialFootnotes is not null)
+            {
+                foreach (var potentialFootnote in potentialFootnotes)
+                {
+                    if (potentialFootnote.ParentNode.InnerText == "* " + potentialFootnote.InnerText)
+                    {
+                        potentialFootnote.ParentNode.AddClass("footnote");
+                    }
+                }
+                html = doc.DocumentNode.OuterHtml;
+            }
+
+            return html;
+        }
+    }
 }

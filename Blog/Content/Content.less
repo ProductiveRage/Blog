@@ -35,6 +35,11 @@ body {
 
             > code, > em > code { .InlineCodeSection(); }
 
+            &.footnote {
+                color: #777;
+                .DarkMode & { color: #e8e8e8; }
+            }
+
             @media screen and (max-width: 35em) { line-height: 28px; }
         }
 
