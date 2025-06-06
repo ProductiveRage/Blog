@@ -8,16 +8,17 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 		
-  <ItemGroup>
-    <Compile Include="..\GenerateSimilarityEmbeddings\IndexablePostChunk.cs" />
-  </ItemGroup>
-		
   <!--
     Janky way to pull in files built by the GenerateSimilarityEmbeddings, while leaving it to fail at runtime if they don't exist 
     (rather than failing to build the first time you get hold of the code, before you've even had a chance to run that other project)
   -->
   <ItemGroup>
     <None Include="..\GenerateSimilarityEmbeddings\bin\$(Configuration)\**\embedding*.*" Link="%(FileName)%(Extension)" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+		
+  <!-- We need the original blog post content to feed through the reranker, as well as the pre-calculated embeddings -->
+  <ItemGroup>
+    <Content Include="..\Blog\App_Data\Posts\*.txt" Link="Posts\%(Filename)%(Extension)" CopyToOutputDirectory="Always" />
   </ItemGroup>
 		
   <ItemGroup>
@@ -32,6 +33,10 @@
     <None Include="wwwroot\favicon.ico">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+		
+  <ItemGroup>
+    <ProjectReference Include="..\SemanticSearch\Shared\Shared.csproj" />
   </ItemGroup>
 
 </Project>

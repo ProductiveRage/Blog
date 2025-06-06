@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel.Connectors.InMemory;
 using Microsoft.SemanticKernel.Connectors.Onnx;
 using Microsoft.SemanticKernel.Embeddings;
 using Microsoft.SemanticKernel.Text;
+using SemanticSearchDemoShared;
 
 #pragma warning disable SKEXP0050 // TextChunker "is for evaluation purposes only and is subject to change or removal in future updates"
 #pragma warning disable SKEXP0070 // BertOnnxTextEmbeddingGenerationService "is for evaluation purposes only and is subject to change or removal in future updates"

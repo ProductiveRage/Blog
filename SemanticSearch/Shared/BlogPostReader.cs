@@ -2,7 +2,7 @@
 using HtmlAgilityPack;
 using Markdig;
 
-namespace GenerateSimilarityEmbeddings;
+namespace SemanticSearchDemoShared;
 
 public static class BlogPostReader
 {
@@ -11,7 +11,7 @@ public static class BlogPostReader
         .UsePipeTables()
         .Build();
 
-    public static async IAsyncEnumerable<(int Id, string Title, string Text)> Read(IEnumerable<FileInfo> files, bool removeCodeBlocks = true)
+    public static async IAsyncEnumerable<BlogPost> Read(IEnumerable<FileInfo> files, bool removeCodeBlocks = true)
     {
         foreach (var file in files)
         {
