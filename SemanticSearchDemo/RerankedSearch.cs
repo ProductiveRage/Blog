@@ -1,5 +1,5 @@
 ﻿using SemanticSearchDemo.Reranking;
-using SemanticSearchDemo.Search;
+using SemanticSearchDemo.VectorSearch;
 using SemanticSearchDemoShared;
 
 namespace SemanticSearchDemo;
@@ -25,10 +25,9 @@ public sealed class RerankedSearch(SearchIndex searchIndex, IReranker reranker, 
             .Where(document => document != default)
             .ToArray();
 
-        var rerankerScores = await reranker.Rerank(
-            searchFor,
-            annotatedSearchResults.Select(entry => entry.RerankerDocument).ToArray(),
-            cancellationToken);
+        var rerankerScores = annotatedSearchResults.Length > 0
+            ? await reranker.Rerank(searchFor, [.. annotatedSearchResults.Select(entry => entry.RerankerDocument)], cancellationToken)
+            : [];
 
         log("Completed reranking");
 

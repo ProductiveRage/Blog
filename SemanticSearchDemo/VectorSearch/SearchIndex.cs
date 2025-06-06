@@ -5,8 +5,9 @@ using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Connectors.InMemory;
 using Microsoft.SemanticKernel.Connectors.Onnx;
 using Microsoft.SemanticKernel.Embeddings;
+using SemanticSearchDemo.Fun;
 
-namespace SemanticSearchDemo.Search;
+namespace SemanticSearchDemo.VectorSearch;
 
 #pragma warning disable SKEXP0070 // BertOnnxTextEmbeddingGenerationService "is for evaluation purposes only and is subject to change or removal in future updates"
 
@@ -31,7 +32,7 @@ public sealed class SearchIndex
         _similarityThreshold = similarityThreshold;
     }
 
-    public static async Task<(SearchIndex? SearchIndex, string? Error)> Load(
+    public static async Task<ResultOrError<SearchIndex>> Load(
         string modelFilePath,
         string vocabFilePath,
         string vectorisedChunksCacheFilePath,
@@ -41,7 +42,7 @@ public sealed class SearchIndex
     {
         if (!File.Exists(modelFilePath) || !File.Exists(vocabFilePath) || !File.Exists(vectorisedChunksCacheFilePath))
         {
-            return (null, "Missing cache file(s)");
+            return Error("Missing cache file(s)");
         }
 
         try
@@ -54,14 +55,14 @@ public sealed class SearchIndex
             await vectorStoreCollectionForPosts.UpsertBatchAsync(chunks).ToArrayAsync(); // ToArrayAsync evalutes result to confirm they were all inserted
 
             var embeddingGenerationService = await BertOnnxTextEmbeddingGenerationService.CreateAsync(modelFilePath, vocabFilePath);
-            return (
-                SearchIndex: new SearchIndex(vectorStoreCollectionForPosts, embeddingGenerationService, queryPrefix, passagePrefix, defaultSimilarityThreshold),
-                Error: null);
+            return new SearchIndex(vectorStoreCollectionForPosts, embeddingGenerationService, queryPrefix, passagePrefix, defaultSimilarityThreshold);
         }
         catch (Exception e)
         {
-            return (null, "Invalid cache files: " + e.Message);
+            return Error("Invalid cache files: " + e.Message);
         }
+
+        static ResultOrError<SearchIndex> Error(string error) => ResultOrError<SearchIndex>.FromError(error);
     }
 
     public async Task<IReadOnlyCollection<(int ChunkId, int PostId, string Text, double Score)>> Search(
@@ -84,6 +85,8 @@ public sealed class SearchIndex
         log("Executed semantic search");
 
         var similarityThreshold = customScoreThreshold.GetValueOrDefault(_similarityThreshold);
+
+#pragma warning disable IDE0305 // Simplify collection initialization (2025-06-01 DWR: I prefer the explicit ToArray call)
         return vectorSearchResults
             .Where(result => result.Score >= similarityThreshold)
             .GroupBy(result => result.Record.PostId)
