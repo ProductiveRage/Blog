@@ -2,7 +2,7 @@
 
 namespace SemanticSearchDemo;
 
-public sealed class TimingConsoleLogger
+internal sealed class TimingConsoleLogger
 {
     private readonly Stopwatch _timer;
     

@@ -1,10 +1,11 @@
 ﻿using Microsoft.SemanticKernel.Text;
+using SemanticSearchDemo.Fun;
 
 namespace SemanticSearchDemo.Reranking;
 
 #pragma warning disable SKEXP0050 // TextChunker "is for evaluation purposes only and is subject to change or removal in future updates"
 
-public sealed class CohereReranker(string apiKey, HttpClient httpClient) : IReranker
+internal sealed class CohereReranker(string apiKey, HttpClient httpClient) : IReranker
 {
     public string Model => "rerank-v3.5";
 
@@ -23,7 +24,7 @@ public sealed class CohereReranker(string apiKey, HttpClient httpClient) : IRera
         return 0.4f;
     }
 
-    public async Task<IReadOnlyCollection<float>> Rerank(string query, IReadOnlyList<RerankerDocument> documents, CancellationToken cancellationToken = default)
+    public async Task<ResultOrError<IReadOnlyCollection<float>>> Rerank(string query, IReadOnlyList<RerankerDocument> documents, CancellationToken cancellationToken = default)
     {
         var rerankerRequest = new
         {
@@ -47,17 +48,23 @@ public sealed class CohereReranker(string apiKey, HttpClient httpClient) : IRera
         requestMessage.Content = JsonContent.Create(rerankerRequest);
 
         var rerankerResponse = await httpClient.SendAsync(requestMessage, cancellationToken);
+        if (!rerankerResponse.IsSuccessStatusCode)
+        {
+            return new Error($"{GetType().Name} received {rerankerResponse.StatusCode} failure status from http call");
+        }
 
-        // TODO: Error handling
-        rerankerResponse.EnsureSuccessStatusCode();
-
-#pragma warning disable IDE0305 // Simplify collection initialization (2025-06-06 DWR: I prefer the explicit ToArray call)
-        return (await rerankerResponse.Content.ReadFromJsonAsync<RerankerResponse>(cancellationToken))!
-            .Results
-            .OrderBy(result => result.Index)
-            .Select(result => result.Relevance_Score)
-            .ToArray();
-#pragma warning restore IDE0305 // Simplify collection initialization
+        try
+        {
+            return (await rerankerResponse.Content.ReadFromJsonAsync<RerankerResponse>(cancellationToken))!
+                .Results
+                .OrderBy(result => result.Index)
+                .Select(result => result.Relevance_Score)
+                .ToArray();
+        }
+        catch (Exception e)
+        {
+            return new Error($"{GetType().Name} received to parse response: {e.Message}");
+        }
     }
 
     private static string Truncate(string content)

@@ -1,10 +1,12 @@
-﻿namespace SemanticSearchDemo.Reranking;
+﻿using SemanticSearchDemo.Fun;
 
-public interface IReranker
+namespace SemanticSearchDemo.Reranking;
+
+internal interface IReranker
 {
     string Model { get; }
 
     float GetRecommendedThreshold(string query);
 
-    Task<IReadOnlyCollection<float>> Rerank(string query, IReadOnlyList<RerankerDocument> documents, CancellationToken cancellationToken = default);
+    Task<ResultOrError<IReadOnlyCollection<float>>> Rerank(string query, IReadOnlyList<RerankerDocument> documents, CancellationToken cancellationToken = default);
 }

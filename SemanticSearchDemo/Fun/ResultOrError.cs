@@ -1,11 +1,19 @@
 ﻿namespace SemanticSearchDemo.Fun;
 
-public sealed class ResultOrError<T>
+internal static class ResultOrError
+{
+    /// <summary>
+    /// This static method allows type inference to save the calling code from specifying the type
+    /// </summary>
+    public static ResultOrError<T> FromResult<T>(T result) => ResultOrError<T>.FromResult(result);
+}
+
+internal sealed class ResultOrError<T>
 {
     private readonly T? _result;
-    private readonly string? _error;
+    private readonly Error? _error;
 
-    private ResultOrError(T? result, string? error)
+    private ResultOrError(T? result, Error? error)
     {
         _result = result;
         _error = error;
@@ -13,35 +21,35 @@ public sealed class ResultOrError<T>
 
     public ResultOrError<T2> Map<T2>(Func<T, T2> map) =>
         _error is null
-            ? new(result: map(_result!), error: null)
-            : FromError<T2>(_error);
+            ? new ResultOrError<T2>(result: map(_result!), error: null)
+            : _error;
 
-    public async Task<ResultOrError<T2>> Map<T2>(Func<T, Task<T2>> map) =>
-        _error is null
-            ? new(result: await map(_result!), error: null)
-            : FromError<T2>(_error);
-
-    public ResultOrError<T> MapError(Func<string, string> map) =>
+    public ResultOrError<T> MapError(Func<Error, Error> map) =>
         _error is null
             ? this
-            : FromError(map(_error));
+            : map(_error);
 
     public ResultOrError<T2> Bind<T2>(Func<T, ResultOrError<T2>> map) =>
         _error is null
             ? map(_result!)
-            : FromError<T2>(_error);
+            : _error;
 
     public async Task<ResultOrError<T2>> Bind<T2>(Func<T, Task<ResultOrError<T2>>> map) =>
         _error is null
             ? await map(_result!)
-            : FromError<T2>(_error);
+            : _error;
 
-    public async Task<T2> Match<T2>(Func<T, Task<T2>> result, Func<string, T2> error) =>
+    public async Task<ResultOrError<T2>> Bind<T2>(Func<T, Task<T2>> map) =>
         _error is null
-            ? await result(_result!)
+            ? new ResultOrError<T2>(result: await map(_result!), error: null)
+            : _error;
+
+    public T2 Match<T2>(Func<T, T2> result, Func<Error, T2> error) =>
+        _error is null
+            ? result(_result!)
             : error(_error);
 
-    public ResultOrError<T> IfError(Action<string> callback)
+    public ResultOrError<T> IfError(Action<Error> callback)
     {
         if (_error is not null)
         {
@@ -50,9 +58,13 @@ public sealed class ResultOrError<T>
         return this;
     }
 
-    public static ResultOrError<T> FromError(string error) => new(result: default, error);
+    /// <summary>
+    /// If the result type is an interface then you can't use the implicit operator, and a method is needed to create an instance for a result
+    /// ('user-defined conversions to or from an interface are not allowed`)
+    /// </summary>
+    public static ResultOrError<T> FromResult(T result) => new(result, error: null);
 
     public static implicit operator ResultOrError<T>(T value) => new(value, error: null);
 
-    private static ResultOrError<T2> FromError<T2>(string error) => new(result: default, error);
+    public static implicit operator ResultOrError<T>(Error error) => new(result: default, error);
 }

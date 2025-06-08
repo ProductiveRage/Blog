@@ -1,8 +1,8 @@
 ﻿namespace SemanticSearchDemo.Fun;
 
-public static class ResultOrErrorHelpers
+internal static class ResultOrErrorHelpers
 {
-    public static async ValueTask<ResultOrError<T>> Try<T>(Func<ValueTask<T>> work)
+    public static async Task<ResultOrError<T>> Try<T>(Func<Task<T>> work)
     {
         try
         {
@@ -10,7 +10,7 @@ public static class ResultOrErrorHelpers
         }
         catch (Exception e)
         {
-            return ResultOrError<T>.FromError(e.Message);
+            return new Error(e.Message);
         }
     }
 }
