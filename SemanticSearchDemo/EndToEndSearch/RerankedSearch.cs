@@ -1,7 +1,7 @@
-﻿using SemanticSearchDemo.Fun;
+﻿using GenerateSimilarityEmbeddings;
+using SemanticSearchDemo.Fun;
 using SemanticSearchDemo.Reranking;
 using SemanticSearchDemo.VectorSearch;
-using SemanticSearchDemoShared;
 
 namespace SemanticSearchDemo.EndToEndSearch;
 

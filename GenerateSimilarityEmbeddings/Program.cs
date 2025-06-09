@@ -1,46 +1,51 @@
-﻿using GenerateSimilarityEmbeddings;
+﻿using System.Runtime.CompilerServices;
+using GenerateSimilarityEmbeddings;
 using MessagePack;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Connectors.InMemory;
 using Microsoft.SemanticKernel.Connectors.Onnx;
 using Microsoft.SemanticKernel.Embeddings;
 using Microsoft.SemanticKernel.Text;
-using SemanticSearchDemoShared;
 
 #pragma warning disable SKEXP0050 // TextChunker "is for evaluation purposes only and is subject to change or removal in future updates"
 #pragma warning disable SKEXP0070 // BertOnnxTextEmbeddingGenerationService "is for evaluation purposes only and is subject to change or removal in future updates"
 
-const string embeddingModelFilePath = "embedding model.onnx";
-const string embeddingModelVocabFilePath = "embedding model vocab.txt";
-const string vectorisedChunksCacheFilePath = "embeddings.bin";
+// Write the embeddings files into a folder that is a sibling of this and the SemanticSearchDemo project, so that it's
+// easier to pull them into the SemanticSearchDemo (but in such a way that it's not a compile error if you try to
+// build that project before this project has run successfully)
+var embeddingsFolderPath = Path.Combine(GetProjectFolderPath(), "..\\Embeddings");
+var embeddingModelFile = new FileInfo(Path.Combine(embeddingsFolderPath, "embedding model.onnx"));
+var embeddingModelVocabFile = new FileInfo(Path.Combine(embeddingsFolderPath, "embedding model vocab.txt"));
+var vectorisedChunksCacheFile = new FileInfo(Path.Combine(embeddingsFolderPath, "embeddings.bin"));
 
-if (!File.Exists(embeddingModelFilePath))
+if (!embeddingModelFile.Exists)
 {
     Console.WriteLine($"{DateTime.Now:HH:mm:ss} Downloading embedding model (this may take minute or two)..");
 
     // Note: If a different model is used, the vector dimensions in IndexablePostChunk may need to be changed
     using var httpClient = new HttpClient();
     await Task.WhenAll(
-        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/model.onnx", embeddingModelFilePath),
-        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/vocab.txt", embeddingModelVocabFilePath));
+        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/model.onnx", embeddingModelFile),
+        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/vocab.txt", embeddingModelVocabFile));
 
-    async Task Download(string uri, string filePath)
+    async Task Download(string uri, FileInfo destination)
     {
-        using var saveToDiskStream = new FileStream(filePath, FileMode.Create);
+        EnsureFolderExistsForFile(destination);
+        using var saveToDiskStream = new FileStream(destination.FullName, FileMode.Create);
         await (await httpClient.GetStreamAsync(uri)).CopyToAsync(saveToDiskStream);
     }
 }
 
 var embeddingGenerationService = await BertOnnxTextEmbeddingGenerationService.CreateAsync(
-    embeddingModelFilePath,
-    embeddingModelVocabFilePath);
+    embeddingModelFile.FullName,
+    embeddingModelVocabFile.FullName);
 
 IReadOnlyCollection<IndexablePostChunk> chunks;
-if (File.Exists(vectorisedChunksCacheFilePath))
+if (vectorisedChunksCacheFile.Exists)
 {
     Console.WriteLine("Reading embeddings cache file..");
 
-    using var readEmbeddingsFromDiskStream = new FileStream(vectorisedChunksCacheFilePath, FileMode.Open);
+    using var readEmbeddingsFromDiskStream = new FileStream(vectorisedChunksCacheFile.FullName, FileMode.Open);
     chunks = await MessagePackSerializer.DeserializeAsync<IReadOnlyCollection<IndexablePostChunk>>(readEmbeddingsFromDiskStream);
 }
 else
@@ -72,10 +77,12 @@ else
     chunks = textChunks
         .Zip(embeddings)
         .Select((combined, index) => new IndexablePostChunk(Id: index, combined.First.PostId, combined.First.Text, combined.Second))
-        .ToArray();
+        .ToArray()
+        .AsReadOnly();
 
     Console.WriteLine("Writing embeddings cache file..");
-    using var writeEmbeddingsToDiskStream = new FileStream(vectorisedChunksCacheFilePath, FileMode.Create);
+    EnsureFolderExistsForFile(vectorisedChunksCacheFile);
+    using var writeEmbeddingsToDiskStream = new FileStream(vectorisedChunksCacheFile.FullName, FileMode.Create);
     await MessagePackSerializer.SerializeAsync(writeEmbeddingsToDiskStream, chunks);
 }
 
@@ -130,5 +137,22 @@ while (true)
         Console.WriteLine($"Post {result.Record.PostId} (Chunk {result.Record.Id}, Score {result.Score:0.000})");
         Console.WriteLine(result.Record.Text.Replace("\r\n", "\n").Replace('\r', '\n').Replace('\n', ' '));
         Console.WriteLine();
+    }
+}
+
+static string GetProjectFolderPath()
+{
+    var folder = new FileInfo(GetFullPathOfCurentFile()).Directory ?? throw new Exception("Unable to extract folder from [CallerFilePath] value");
+    return folder.FullName;
+
+    static string GetFullPathOfCurentFile([CallerFilePath] string? path = null) =>
+        path ?? throw new Exception("Unable to resolve current file path using [CallerFilePath]");
+}
+
+static void EnsureFolderExistsForFile(FileInfo destination)
+{
+    if ((destination.Directory is not null) && !destination.Directory.Exists)
+    {
+        destination.Directory.Create();
     }
 }

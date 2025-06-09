@@ -1,6 +1,5 @@
 ﻿using SemanticSearchDemo;
 using SemanticSearchDemo.EndToEndSearch;
-using SemanticSearchDemo.Fun;
 
 var rerankedSearch = await Initialisation.LoadRerankedSearch(new TimingConsoleLogger().Log);
 

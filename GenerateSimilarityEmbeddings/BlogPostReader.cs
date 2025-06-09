@@ -2,7 +2,7 @@
 using HtmlAgilityPack;
 using Markdig;
 
-namespace SemanticSearchDemoShared;
+namespace GenerateSimilarityEmbeddings;
 
 public static class BlogPostReader
 {

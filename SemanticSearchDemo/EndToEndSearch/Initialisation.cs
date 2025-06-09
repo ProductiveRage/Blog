@@ -6,7 +6,6 @@ using Microsoft.SemanticKernel.Connectors.Onnx;
 using SemanticSearchDemo.Fun;
 using SemanticSearchDemo.Reranking;
 using SemanticSearchDemo.VectorSearch;
-using SemanticSearchDemoShared;
 using static SemanticSearchDemo.Fun.ResultOrErrorHelpers;
 
 namespace SemanticSearchDemo.EndToEndSearch;
@@ -20,11 +19,18 @@ internal static class Initialisation
     /// </summary>
     public static async Task<ResultOrError<RerankedSearch>> LoadRerankedSearch(Action<string> log)
     {
+        // This will be of the form "/app/bin/Debug/net8.0" in a Debug configuation, since VS does some helpful things to make it
+        // easier to iterate quickly with containers when in Debug.. but it can lead to surprises when Release configuration
+        // builds will have this path as "/app" and there may be limited permissions available to read files from there, if
+        // you stick with the default `USER $APP_UID` line added to Dockerfile since .NET 8.0
         var outputFolderPath = new FileInfo(Assembly.GetExecutingAssembly().Location).DirectoryName!;
-        var modelFilePath = Path.Combine(outputFolderPath, "embedding model.onnx");
-        var vocabFilePath = Path.Combine(outputFolderPath, "embedding model vocab.txt");
-        var vectorisedChunksCacheFilePath = Path.Combine(outputFolderPath, "embeddings.bin");
+
+        var embeddingsFolderPath = Path.Combine(outputFolderPath, "Embeddings");
         var blogPostsFolderPath = Path.Combine(outputFolderPath, "Posts");
+
+        var modelFilePath = Path.Combine(embeddingsFolderPath, "embedding model.onnx");
+        var vocabFilePath = Path.Combine(embeddingsFolderPath, "embedding model vocab.txt");
+        var vectorisedChunksCacheFilePath = Path.Combine(embeddingsFolderPath, "embeddings.bin");
 
         var configuration = new ConfigurationBuilder()
             .AddJsonFile("appsettings.debug.json", optional: true)
@@ -42,14 +48,18 @@ internal static class Initialisation
         const float defaultSimilarityThreshold = 0;
 
         return await LoadSearchIndex(modelFilePath, vocabFilePath, vectorisedChunksCacheFilePath, queryPrefix, passagePrefix, defaultSimilarityThreshold, log)
-            .MapError(error => new Error($"Failure.. have you run the {nameof(GenerateSimilarityEmbeddings)} project first, to build the embeddings data?\n\n{error.Message}"))
+            .MapError(error => new Error($"Failure.. have you run the {nameof(GenerateSimilarityEmbeddings)} project first, to build the embeddings data? {error.Message}"))
             .Bind(searchIndex =>
             {
                 var reranker = configuration["COHERE_API_KEY"]
                     .ToResultOrError(ifNull: () => "Reranker configuration missing")
-                    .Map(cohereApiKey => new CohereReranker(
-                        cohereApiKey,
-                        new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) })));
+                    .Map(cohereApiKey =>
+                    {
+                        log("Successfully retrieved Cohere API key");
+                        return new CohereReranker(
+                            cohereApiKey,
+                            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) }));
+                    });
 
                 return reranker.Map(reranker => (SearchIndex: searchIndex, Reranker: reranker));
             })
@@ -88,8 +98,9 @@ internal static class Initialisation
             await Try(
                 async () =>
                 {
-                    if (!File.Exists(modelFilePath) || !File.Exists(vocabFilePath) || !File.Exists(vectorisedChunksCacheFilePath))
+                    if (DoAnyFilesNotExist([modelFilePath, vocabFilePath, vectorisedChunksCacheFilePath], log))
                     {
+                        // We'll log the paths that we couldn't resolve, but just return a single exception to say that at least one could not be found
                         throw new Exception("Missing cache file(s)");
                     }
 
@@ -113,4 +124,23 @@ internal static class Initialisation
                     queryPrefix,
                     passagePrefix,
                     defaultSimilarityThreshold));
+
+    private static bool DoAnyFilesNotExist(IEnumerable<string> filePaths, Action<string> log)
+    {
+        var encounteredMissingFile = false;
+        foreach (var filePath in filePaths)
+        {
+            if (!File.Exists(filePath))
+            {
+                log($"Could not find file {filePath}");
+                encounteredMissingFile = true;
+            }
+            else
+            {
+                // TODO: Get rid of this
+                log($"Successfully located file {filePath}");
+            }
+        }
+        return encounteredMissingFile;
+    }
 }

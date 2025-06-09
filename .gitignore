@@ -41,4 +41,6 @@ Cache/
 Blog/Properties/PublishProfiles/
 Deploy/
 .vs/
+
 SemanticSearchDemo/appsettings.debug.json
+Embeddings/
