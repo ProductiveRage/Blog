@@ -44,7 +44,7 @@ internal static class RerankedSearchExtensions
             $"Searching for: {query}\n\n" +
             (source.Count == 0
                 ? "No results."
-                : string.Join("\n\n", source.Select(result => $"Post {result.Post.Id} (semantic similarity score {result.Score:N5})\n{result.Excerpt}"))));
+                : string.Join("\n\n", source.Select(result => $"Chunk {result.ChunkId} of Post {result.Post.Id} (reranker score {result.Score:N5})\n{result.Excerpt}"))));
 
     // Note: The JsonSerializer is bad with tuples, so transform the results array items to anonymous types
     private static IResult ToJson(this IReadOnlyCollection<RerankedSearch.Result> source, string query) =>
