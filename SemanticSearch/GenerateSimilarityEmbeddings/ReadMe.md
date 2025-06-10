@@ -2,7 +2,7 @@
 
 The code in this project will build an in-memory semantic search index for the contents of the blog posts in this repo.
 
-If you run the code, it will read the blog post markdown files, chunk up the content, vectorise it (using the [e5-base-v2](https://huggingface.co/intfloat/e5-base-v2) model, which it will download) and allow you to enter queries to execute against the content.
+If you run the code, it will read the blog post markdown files, chunk up the content, vectorise it (using the [bge-micro-v2](https://huggingface.co/TaylorAI/bge-micro-v2) model, which it will download) and allow you to enter queries to execute against the content.
 
 It will only download the model the first time that you run it (and will write the data to the project output folder, for use on subsequent runs) and only generate the embeddings the first time (again, persisting the embeddings data to disk in the project output folder).
 

@@ -14,8 +14,6 @@ namespace SemanticSearchDemo.VectorSearch;
 internal sealed class SearchIndex(
     InMemoryVectorStoreRecordCollection<int, IndexablePostChunk> vectorStoreCollectionForPosts,
     BertOnnxTextEmbeddingGenerationService embeddingGenerationService,
-    string queryPrefix,
-    string passagePrefix,
     float similarityThreshold)
 {
     public sealed record Result(int ChunkId, int PostId, string Text, double Score);
@@ -32,7 +30,7 @@ internal sealed class SearchIndex(
     {
         var queryVector = await Try(async () =>
         {
-            var queryVector = await embeddingGenerationService.GenerateEmbeddingAsync(queryPrefix + query, cancellationToken: cancellationToken);
+            var queryVector = await embeddingGenerationService.GenerateEmbeddingAsync(query, cancellationToken: cancellationToken);
             log("Generated query embedding");
             return queryVector;
         });
@@ -69,10 +67,5 @@ internal sealed class SearchIndex(
             });
     }
 
-    private string TidyUpExcerpt(string text) => RemovePassagePrefix(text).Replace('\n', ' ');
-
-    private string RemovePassagePrefix(string text) =>
-        text.StartsWith(passagePrefix)
-            ? text[passagePrefix.Length..].TrimStart()
-            : text;
+    private string TidyUpExcerpt(string text) => text.Replace('\n', ' ');
 }

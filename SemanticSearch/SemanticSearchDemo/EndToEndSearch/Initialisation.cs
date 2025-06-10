@@ -39,15 +39,11 @@ internal static class Initialisation
 
         log($"Starting SemanticSearchDemo {DateTime.UtcNow:d MMM yyyy HH:mm:ss}");
 
-        // Note: e5-base-v2 requires query strings to be prefixed with "query:" and indexed chunks to be prefixed with "passage"
-        const string queryPrefix = "query:";
-        const string passagePrefix = "passage:";
-
         // Specify a zero similarity score threshold, because it's not reliable with these embedding models and the reranker
         // will do a much job jobof separating the wheat from the chaff
         const float defaultSimilarityThreshold = 0;
 
-        return await LoadSearchIndex(modelFilePath, vocabFilePath, vectorisedChunksCacheFilePath, queryPrefix, passagePrefix, defaultSimilarityThreshold, log)
+        return await LoadSearchIndex(modelFilePath, vocabFilePath, vectorisedChunksCacheFilePath, defaultSimilarityThreshold, log)
             .MapError(error => new Error($"Failure.. have you run the {nameof(GenerateSimilarityEmbeddings)} project first, to build the embeddings data? {error.Message}"))
             .Bind(searchIndex =>
             {
@@ -91,8 +87,6 @@ internal static class Initialisation
         string modelFilePath,
         string vocabFilePath,
         string vectorisedChunksCacheFilePath,
-        string queryPrefix,
-        string passagePrefix,
         float defaultSimilarityThreshold,
         Action<string> log) =>
             await Try(
@@ -121,8 +115,6 @@ internal static class Initialisation
                 .Map(vectorStoreAndEmbeddingGenerator => new SearchIndex(
                     vectorStoreAndEmbeddingGenerator.VectorStoreCollectionForPosts,
                     vectorStoreAndEmbeddingGenerator.EmbeddingGenerationService,
-                    queryPrefix,
-                    passagePrefix,
                     defaultSimilarityThreshold));
 
     private static bool DoAnyFilesNotExist(IEnumerable<string> filePaths, Action<string> log)

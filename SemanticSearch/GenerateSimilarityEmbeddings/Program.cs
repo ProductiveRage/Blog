@@ -25,11 +25,11 @@ if (!embeddingModelFile.Exists)
     // Note: If a different model is used, the vector dimensions in IndexablePostChunk may need to be changed
     using var httpClient = new HttpClient();
     await Task.WhenAll(
-        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/model.onnx", embeddingModelFile),
-        Download("https://huggingface.co/intfloat/e5-base-v2/resolve/main/onnx/vocab.txt", embeddingModelVocabFile));
+        Download("https://huggingface.co/TaylorAI/bge-micro-v2/resolve/main/onnx/model.onnx?download=true", embeddingModelFile),
+        Download("https://huggingface.co/TaylorAI/bge-micro-v2/raw/main/vocab.txt", embeddingModelVocabFile));
 
     async Task Download(string uri, FileInfo destination)
-    {
+    {https://huggingface.co/TaylorAI/bge-micro-v2/resolve/main/onnx/model.onnx?download=true
         EnsureFolderExistsForFile(destination);
         using var saveToDiskStream = new FileStream(destination.FullName, FileMode.Create);
         await (await httpClient.GetStreamAsync(uri)).CopyToAsync(saveToDiskStream);
@@ -55,7 +55,7 @@ else
     var textChunks = new List<(int PostId, string Text)>();
     await foreach (var (postId, title, text) in BlogPostReader.Read(new DirectoryInfo("Posts").EnumerateFiles("*.txt")))
     {
-        // Note: e5-base-v2 supports vectorisation of content that is up to 512 tokens long (if a different model is used then a different
+        // Note: bge-micro-v2 supports vectorisation of content that is up to 512 tokens long (if a different model is used then a different
         // value here may be required)
         const int maxTokensForEmbeddingModel = 512;
 
@@ -70,9 +70,8 @@ else
                 .Select(textChunk => (postId, textChunk)));
     }
 
-    // Note: e5-base-v2 requires the strings that are to be searched over vectorised for the search index to be prefixed with "passage:"
     Console.WriteLine("Generating embeddings took.. (this may take up to five or ten minutes)");
-    var embeddings = await embeddingGenerationService.GenerateEmbeddingsAsync(textChunks.Select(chunk => "passage: " + chunk.Text).ToList());
+    var embeddings = await embeddingGenerationService.GenerateEmbeddingsAsync([.. textChunks.Select(chunk => chunk.Text)]);
 
     chunks = textChunks
         .Zip(embeddings)
@@ -107,19 +106,13 @@ while (true)
         continue;
     }
 
-    // Note: e5-base-v2 requires query strings to be prefixed with "query:"
-    var queryVector = await embeddingGenerationService.GenerateEmbeddingAsync("query: " + query);
+    var queryVector = await embeddingGenerationService.GenerateEmbeddingAsync(query);
 
     const int maxNumberOfPosts = 3;
     const int maxNumberOfChunksToConsider = maxNumberOfPosts * 5;
 
-    // This KINDA works with e5-base-v2 (it's not ideal, something like a subsequent rereanker step would be better for removing
-    // least-bad results that are still poor enough matches that they shouldn't be returned)
-    const double similarityThreshold = 0.8d;
-
     var resultsEnumerator = await vectorStoreCollectionForPosts.VectorizedSearchAsync(queryVector, new VectorSearchOptions { Top = maxNumberOfChunksToConsider });
     var resultsForPosts = (await resultsEnumerator.Results.ToArrayAsync())
-        .Where(result => result.Score >= similarityThreshold)
         .GroupBy(result => result.Record.PostId)
         .Select(group => group.OrderByDescending(result => result.Score).First())
         .OrderByDescending(result => result.Score)
