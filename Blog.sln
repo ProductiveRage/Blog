@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35728.132
@@ -7,17 +7,17 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Blog", "Blog\Blog.csproj", 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlogBackEnd", "BlogBackEnd\BlogBackEnd.csproj", "{47FFE630-1D9E-49F9-81D6-91AB7B1182D4}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AutomatedSimilarPostGenerator", "AutomatedSimilarPostGenerator\AutomatedSimilarPostGenerator.csproj", "{90F95466-729B-462B-834D-D5DC57B4BD4D}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProofReader", "ProofReader\ProofReader.csproj", "{709A15C8-12A7-40C0-9C5D-A7977DB64AFD}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateSimilarityEmbeddings", "GenerateSimilarityEmbeddings\GenerateSimilarityEmbeddings.csproj", "{07D3486B-4057-49DF-9200-21469B8F3868}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "PostWritingAids", "PostWritingAids", "{4FD9FF74-2B59-4215-8626-23E99A853B6B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AutomatedSimilarPostGenerator", "PostWritingAids\AutomatedSimilarPostGenerator\AutomatedSimilarPostGenerator.csproj", "{90F95466-729B-462B-834D-D5DC57B4BD4D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProofReader", "PostWritingAids\ProofReader\ProofReader.csproj", "{709A15C8-12A7-40C0-9C5D-A7977DB64AFD}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SemanticSearch", "SemanticSearch", "{2958E197-31F3-46B7-87B8-7D1353720447}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticSearchDemo", "SemanticSearchDemo\SemanticSearchDemo.csproj", "{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateSimilarityEmbeddings", "SemanticSearch\GenerateSimilarityEmbeddings\GenerateSimilarityEmbeddings.csproj", "{07D3486B-4057-49DF-9200-21469B8F3868}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticSearchDemo", "SemanticSearch\SemanticSearchDemo\SemanticSearchDemo.csproj", "{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

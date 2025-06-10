@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="..\Blog\App_Data\Posts\*.txt" Link="Posts\%(Filename)%(Extension)" CopyToOutputDirectory="Always" />
+    <Content Include="..\..\Blog\App_Data\Posts\*.txt" Link="Posts\%(Filename)%(Extension)" CopyToOutputDirectory="Always" />
   </ItemGroup>
 
   <ItemGroup>

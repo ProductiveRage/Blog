@@ -37,11 +37,11 @@
 		
   <!-- We need the original blog post content to feed through the reranker, as well as the pre-calculated embeddings -->
   <ItemGroup>
-    <Content Include="..\Blog\App_Data\Posts\*.txt" Link="Posts\%(Filename)%(Extension)" CopyToOutputDirectory="Always" />
+    <Content Include="..\..\Blog\App_Data\Posts\*.txt" Link="Posts\%(Filename)%(Extension)" CopyToOutputDirectory="Always" />
   </ItemGroup>
 		
   <!-- Add these as linked files, rather than having a project shared between this and GenerateSimilarityEmbeddings because
-	     it means that there is less copying around of other projects to worry about for the Dockerfile -->
+       it means that there is less copying around of other projects to worry about for the Dockerfile -->
   <ItemGroup>
     <Compile Include="..\GenerateSimilarityEmbeddings\BlogPost.cs" Link="Imported\BlogPost.cs" />
     <Compile Include="..\GenerateSimilarityEmbeddings\BlogPostReader.cs" Link="Imported\BlogPostReader.cs" />

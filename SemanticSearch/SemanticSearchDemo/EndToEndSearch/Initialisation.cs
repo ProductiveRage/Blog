@@ -137,7 +137,6 @@ internal static class Initialisation
             }
             else
             {
-                // TODO: Get rid of this
                 log($"Successfully located file {filePath}");
             }
         }

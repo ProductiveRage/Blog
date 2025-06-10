@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Blog\Blog.csproj" />
+    <ProjectReference Include="..\..\Blog\Blog.csproj" />
   </ItemGroup>
 
 </Project>
