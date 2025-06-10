@@ -37,7 +37,7 @@
 		
   <!-- We need the original blog post content to feed through the reranker, as well as the pre-calculated embeddings -->
   <ItemGroup>
-    <Content Include="..\..\Blog\App_Data\Posts\*.txt" Link="Posts\%(Filename)%(Extension)" CopyToOutputDirectory="Always" />
+    <Content Include="..\Blog\App_Data\Posts\*.txt" Link="Posts\%(Filename)%(Extension)" CopyToOutputDirectory="Always" />
   </ItemGroup>
 		
   <!-- Add these as linked files, rather than having a project shared between this and GenerateSimilarityEmbeddings because

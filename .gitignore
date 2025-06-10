@@ -42,5 +42,5 @@ Blog/Properties/PublishProfiles/
 Deploy/
 .vs/
 
-SemanticSearch/SemanticSearchDemo/appsettings.debug.json
-SemanticSearch/Embeddings/
+SemanticSearchDemo/appsettings.debug.json
+Embeddings/

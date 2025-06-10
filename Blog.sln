@@ -15,9 +15,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProofReader", "PostWritingA
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SemanticSearch", "SemanticSearch", "{2958E197-31F3-46B7-87B8-7D1353720447}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateSimilarityEmbeddings", "SemanticSearch\GenerateSimilarityEmbeddings\GenerateSimilarityEmbeddings.csproj", "{07D3486B-4057-49DF-9200-21469B8F3868}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateSimilarityEmbeddings", "GenerateSimilarityEmbeddings\GenerateSimilarityEmbeddings.csproj", "{07D3486B-4057-49DF-9200-21469B8F3868}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticSearchDemo", "SemanticSearch\SemanticSearchDemo\SemanticSearchDemo.csproj", "{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticSearchDemo", "SemanticSearchDemo\SemanticSearchDemo.csproj", "{3627FCF3-7B8A-4DF5-BF0F-122BF0937B36}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
