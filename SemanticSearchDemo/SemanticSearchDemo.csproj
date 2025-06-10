@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <DockerfileTag>productiverage/blog:2025-06-09-20-08</DockerfileTag>
+    <DockerfileTag>productiverage/blog:2025-06-10-18-50</DockerfileTag>
     <OutputType>Exe</OutputType>
 
     <!-- Set this to false so that we don't get an error about the explicit appsettings.debug.json inclusion-->
