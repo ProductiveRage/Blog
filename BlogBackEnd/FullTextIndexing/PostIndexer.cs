@@ -120,7 +120,26 @@ namespace BlogBackEnd.FullTextIndexing
 			var hashSetOfNormalisedStopWords = new HashSet<string>(
 				FullTextIndexer.Core.Constants.GetStopWords("en").Select(word => sourceStringComparer.GetNormalisedString(word))
 			);
-			return normalisedToken => multiplier * (hashSetOfNormalisedStopWords.Contains(normalisedToken) ? 0.01f : 1f);
+
+			// The `multiplier` values depends upon the (Title, Body, Tags) and then we'll either low-score it if it's a stop word, or look at the
+			// length of it if it's a "real" word (a word that is potentially interesting)
+			return normalisedToken =>
+				multiplier *
+					(hashSetOfNormalisedStopWords.Contains(normalisedToken)
+						? 0.01f
+						: GetWeightMultiplierFromToken(normalisedToken));
+
+			// Give longer words more weight, because they're PROBABLY more interesting (a clever / more-thorough way would be to use something
+			// like document frequency to determine whether a word is interesting - the more documents that it appears in, the less interesting
+			// that it is - but this will suffice for now, as a cheap approximation)
+			static float GetWeightMultiplierFromToken(string normalisedToken) =>
+				normalisedToken.Count(char.IsLetterOrDigit) switch
+				{
+					>= 8 => 3,
+					>= 6 => 2,
+					>= 4 => 1.5f,
+					_ => 1
+				};
 		}
 
 		[Serializable]
