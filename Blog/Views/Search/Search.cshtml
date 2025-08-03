@@ -31,7 +31,7 @@
                 @Html.Raw(Html.RenderedActionLink(result.Post.Title, "ArchiveBySlug", "ViewPost", new { Slug = result.Post.Slug }))
             </h3>
             <p class="SearchResultContent">
-                @PostHelper.RenderPostAsPlainTextWithSearchTermsHighlighted(result.Post, result.SourceLocations, 350, Model.PostContentCache)
+                @PostHelper.RenderPostAsPlainTextWithSearchTermsHighlighted(result.Post, result.SourceLocations, maxLength: 350, includePostedDate: true, Model.PostContentCache)
             </p>
         }
     }

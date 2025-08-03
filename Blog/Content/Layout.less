@@ -46,11 +46,20 @@ body
                     &.HasSideBar { width: 100%; }
                 }
 
-                p.SearchResultContent > strong
+                p.SearchResultContent
                 {
-                    color: #121212; // Undo the softening of bold for main content when highlighted search term matches..
+                    span.PostDate
+                    {
+                        padding: 8px 0 0 0;
+                        font-size: 15px;
+                    }
 
-                    .DarkMode & { color: inherit; } // .. except then in dark mode
+                    > strong
+                    {
+                        color: #121212; // Undo the softening of bold for main content when highlighted search term matches..
+
+                        .DarkMode & { color: inherit; } // .. except then in dark mode
+                    }
                 }
             }
 

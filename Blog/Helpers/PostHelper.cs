@@ -106,7 +106,7 @@ namespace Blog.Helpers
         }
 
         private static void AppendPostDate(StringBuilder content, DateTime postedAt) =>
-            content.AppendFormat("<p class=\"PostDate\">{0}</p>", postedAt.ToString("d MMMM yyyy"));
+            content.AppendFormat("<span class=\"PostDate\">{0}</span>", postedAt.ToString("d MMMM yyyy"));
 
         private static async Task<string> GetRenderableContent(
             IHtmlHelper helper,
@@ -332,6 +332,7 @@ namespace Blog.Helpers
 			Post post,
 			NonNullImmutableList<SourceFieldLocation> sourceLocations,
 			int maxLength,
+			bool includePostedDate,
 			ICache cache)
 		{
 			if (post == null)
@@ -425,6 +426,9 @@ namespace Blog.Helpers
 				highlightedContentBuilder.Insert(0, "..");
 			if ((startIndexOfContent + maxLength) < plainTextPostContent.Length)
 				highlightedContentBuilder.Append("..");
+
+			if (includePostedDate)
+				AppendPostDate(highlightedContentBuilder, post.Posted);
 
 			return new HtmlString(highlightedContentBuilder.ToString());
 		}
