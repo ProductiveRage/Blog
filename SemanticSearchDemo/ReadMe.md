@@ -51,7 +51,7 @@ One query that I see in Google Search Console, in the "what did people search fo
 
 > how to redirect to another controller action in mvc
 
-The lexical search fails to find any matches (which makes me fear that there is an error with my stemming logic, since replacing the word "redirect" with "redirecting" results in a lexical match) but the *semantic* search does return the result, and so now performing that query on my own blog works - yay, hybrid search! [Try it here](https://www.productiverage.com/Search?term=how+to+redirect+to+another+controller+action+in+mvc).
+The lexical search fails to find any matches, because the word "how" doesn't appear in the content. The *semantic* search, however, *does* return the result, and so now performing that query on my own blog works - yay, hybrid search! [Try it here](https://www.productiverage.com/Search?term=how+to+redirect+to+another+controller+action+in+mvc).
 
 ## Final question; what's this code style all about??
 
